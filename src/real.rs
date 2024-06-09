@@ -1,8 +1,6 @@
-use once_cell::sync::Lazy;
-
-use std::{fmt::{Debug, Display, Formatter}, ops::Add};
+use std::fmt::{Debug, Display, Formatter};
 use regex::Regex;
-use num::{bigint::Sign, BigInt, BigRational, FromPrimitive, One, Zero};
+use num::{bigint::Sign, BigInt, BigRational, One, Zero};
 
 
 pub enum Real<'a>{
@@ -14,8 +12,6 @@ pub enum Real<'a>{
     Exact(BigRational),
     Inexact{ memo: Option<(usize, BigInt)>, f: Box<dyn FnMut(usize) -> BigInt + 'a> }
 }
-
-static BI10: Lazy<BigInt> = Lazy::new(|| BigInt::from_u32(10).unwrap());
 
 impl<'a> Real<'a> {
 
@@ -75,7 +71,7 @@ fn bits_to_digits(b: usize, radix: u32) -> usize {
 
 fn inexact_to_display_string(bit: usize, value: &BigInt, radix: u32) -> String {
     let d = bits_to_digits(bit, radix);
-    let rad = BigInt::from_u32(radix).unwrap();
+    let rad = BigInt::from(radix);
     let r = BigRational::new(value * rad.pow(d as u32), BigInt::one() << bit);
     let m = round_up(r);
 
@@ -112,16 +108,16 @@ impl<'a> From<BigRational> for Real<'a> {
 }
 
 impl<'a> From<i64> for Real<'a> {
-    fn from(value: i64) -> Self { Real::Exact(BigRational::from_i64(value).unwrap()) }
+    fn from(value: i64) -> Self { Real::Exact(BigRational::from(BigInt::from(value))) }
 }
 
 impl<'a> From<BigInt> for Real<'a> {
-    fn from(value: BigInt) -> Self { Real::Exact(BigRational::from_integer(value)) }
+    fn from(value: BigInt) -> Self { Real::Exact(BigRational::from(value)) }
 }
 
 impl<'a> From<(i64, i64)> for Real<'a> {
     fn from(value: (i64, i64)) -> Self { 
-        Real::Exact(BigRational::new(BigInt::from_i64(value.0).unwrap(), BigInt::from_i64(value.1).unwrap())) 
+        Real::Exact(BigRational::new(BigInt::from(value.0), BigInt::from(value.1))) 
     }
 }
 
@@ -136,8 +132,8 @@ fn test_sizes_of_some_types(){
 #[test] #[allow(non_snake_case)]
 fn test_round_BigRational_to_BigInt(){
     fn test_fn(x: (i64, i64), expected: i64){
-        let x = BigRational::new(BigInt::from_i64(x.0).unwrap(), BigInt::from_i64(x.1).unwrap());
-        let ex = BigInt::from_i64(expected).unwrap();
+        let x = BigRational::new(BigInt::from(x.0), BigInt::from(x.1));
+        let ex = BigInt::from(expected);
         assert_eq!(round_up(x), ex);
     }
 
@@ -166,19 +162,19 @@ fn test_round_BigRational_to_BigInt(){
 #[test]
 fn test_eval(){
     let mut x: Real = 2.into();
-    assert_eq!(x.eval(3), BigInt::from_i64(2 << 3).unwrap());
-    assert_eq!(x.eval(5), BigInt::from_i64(2 << 5).unwrap());
-    assert_eq!(x.eval(10), BigInt::from_i64(2 << 10).unwrap());
+    assert_eq!(x.eval(3), BigInt::from(2 << 3));
+    assert_eq!(x.eval(5), BigInt::from(2 << 5));
+    assert_eq!(x.eval(10), BigInt::from(2 << 10));
 
     let mut y: Real = (1, 3).into();  // 1/3 == 0b0.010101010101...
-    assert_eq!(y.eval(3), BigInt::from_i64(0b11).unwrap());
-    assert_eq!(y.eval(5), BigInt::from_i64(0b1011).unwrap());
-    assert_eq!(y.eval(10), BigInt::from_i64(0b101010101).unwrap());
+    assert_eq!(y.eval(3), BigInt::from(0b11));
+    assert_eq!(y.eval(5), BigInt::from(0b1011));
+    assert_eq!(y.eval(10), BigInt::from(0b101010101));
 
     let mut z = x.sqrt();  // √2 == 0b1.0110101000001001
-    assert_eq!(z.eval(3), BigInt::from_i64(0b1011).unwrap());
-    assert_eq!(z.eval(5), BigInt::from_i64(0b101101).unwrap());
-    assert_eq!(z.eval(12), BigInt::from_i64(0b1011010100000).unwrap());
+    assert_eq!(z.eval(3), BigInt::from(0b1011));
+    assert_eq!(z.eval(5), BigInt::from(0b101101));
+    assert_eq!(z.eval(12), BigInt::from(0b1011010100000));
 }
 
 impl<'a> Display for Real<'a> {
