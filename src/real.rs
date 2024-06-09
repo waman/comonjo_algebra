@@ -69,19 +69,20 @@ fn round_up(r: BigRational) -> BigInt {
 //     ((d as f64) * 10_f64.ln() / 2_f64.ln()).ceil() as usize + 4
 // }
 
-fn bits_to_digits(b: usize) -> usize {
-    ((b as f64) * 2_f64.ln() / 10_f64.ln()).ceil() as usize + 10
+fn bits_to_digits(b: usize, radix: u32) -> usize {
+    ((b as f64) * 2_f64.ln() / (radix as f64).ln() + 0.001).floor() as usize
 }
 
-fn inexact_to_display_string(bit: usize, value: &BigInt) -> String {
-    let d = bits_to_digits(bit);
-    let r = BigRational::new(value * BI10.pow(d as u32), BigInt::one() << bit);
+fn inexact_to_display_string(bit: usize, value: &BigInt, radix: u32) -> String {
+    let d = bits_to_digits(bit, radix);
+    let rad = BigInt::from_u32(radix).unwrap();
+    let r = BigRational::new(value * rad.pow(d as u32), BigInt::one() << bit);
     let m = round_up(r);
 
     let (sign, abs) = match m.sign() {
-        Sign::Minus  => ("-", m.magnitude().to_string()),
+        Sign::Minus  => ("-", m.magnitude().to_str_radix(radix)),
         Sign::NoSign => ("", "0".to_string()),
-        Sign::Plus   => ("", m.to_string())
+        Sign::Plus   => ("", m.to_str_radix(radix))
     };
 
     let s = if abs.len() > d {
@@ -112,6 +113,10 @@ impl<'a> From<BigRational> for Real<'a> {
 
 impl<'a> From<i64> for Real<'a> {
     fn from(value: i64) -> Self { Real::Exact(BigRational::from_i64(value).unwrap()) }
+}
+
+impl<'a> From<BigInt> for Real<'a> {
+    fn from(value: BigInt) -> Self { Real::Exact(BigRational::from_integer(value)) }
 }
 
 impl<'a> From<(i64, i64)> for Real<'a> {
@@ -185,7 +190,7 @@ impl<'a> Display for Real<'a> {
             Real::Inexact { memo, f:_ } => {
                 match memo {
                     Some((bit, value)) => {
-                        let s = inexact_to_display_string(*bit, value);
+                        let s = inexact_to_display_string(*bit, value, 10);
                         f.write_str(&s)
                     },
                     _ => f.write_str("Real::Inexact(Unevaluated)")
@@ -205,7 +210,7 @@ impl<'a> Debug for Real<'a> {
             Real::Inexact { memo, f:_ } => {
                 match memo {
                     Some((bit, value)) => {
-                        let s = inexact_to_display_string(*bit, value);
+                        let s = inexact_to_display_string(*bit, value, 10);
                         f.write_str(&format!("Real::Inexact({}; bit={}, value={})", s, bit, value))
                     },
                     _ => f.write_str(&format!("Real::Inexact(Unevaluated)")),
@@ -229,8 +234,7 @@ fn test_display(){
 
     w.eval(27);  // 8 digits ~ 27 bits
     let s = format!("{}", w);
-    assert!(s.starts_with("1.41421356"));
-    assert_eq!(s, "1.4142135605216026306");
+    assert_eq!(s, "1.41421356");
 }
 
 #[test]
@@ -247,5 +251,5 @@ fn test_debug(){
 
     w.eval(27);  // 8 digits ~ 27 bits
     let s = format!("{:?}", w);
-    assert_eq!(s, "Real::Inexact(1.4142135605216026306; bit=27, value=189812531)");
+    assert_eq!(s, "Real::Inexact(1.41421356; bit=27, value=189812531)");
 }
