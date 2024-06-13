@@ -1,6 +1,6 @@
-use std::ops::{Add, Div, Mul, Rem, Sub};
+use std::{fmt::Display, ops::{Add, Div, Mul, Rem, Shl, Shr, Sub}};
 
-use num::{bigint::{ParseBigIntError, Sign}, BigInt, Integer, Num, One, Zero};
+use num::{bigint::{ParseBigIntError, Sign}, integer::Roots, pow::Pow, BigInt, Integer, Num, One, Zero};
 use once_cell::sync::Lazy;
 
 #[derive(Clone, PartialEq, Eq, Debug)]
@@ -11,11 +11,11 @@ pub enum SafeI64 {
 
 #[test]
 fn test_size(){
-    assert_eq!(std::mem::size_of::<i64>(), 8);
+    assert_eq!(std::mem::size_of::<i64>(), 8);  // <- use
     assert_eq!(std::mem::size_of::<i128>(), 16);
     assert_eq!(std::mem::size_of::<BigInt>(), 32);
     assert_eq!(std::mem::size_of::<&BigInt>(), 8);
-    assert_eq!(std::mem::size_of::<Box<BigInt>>(), 8);
+    assert_eq!(std::mem::size_of::<Box<BigInt>>(), 8);  // <- use
 }
 
 static I64_MAX: Lazy<BigInt> = Lazy::new(|| BigInt::from(i64::MAX));
@@ -39,6 +39,48 @@ impl SafeI64 {
             SafeI64::I64(_) => true,
             _ => false,
         }
+    }
+
+    pub fn sign(&self) -> Sign {
+        match self {
+            SafeI64::I64(x) => if *x > 0 {
+                Sign::Plus
+            } else if *x < 0 {
+                Sign::Minus
+            } else {
+                Sign::NoSign
+            },
+            SafeI64::BI(x) => x.sign(),
+        }
+    }
+
+    pub fn abs(&self) -> SafeI64 {
+        match self {
+            SafeI64::I64(x) => SafeI64::from(x.abs()),
+            SafeI64::BI(x) => match x.sign() {
+                Sign::Plus => self.clone(),
+                Sign::NoSign => SafeI64::zero(),
+                Sign::Minus => self.clone() * -1,
+            },
+        }
+    }
+
+    pub fn sqrt(&self) -> SafeI64 {
+        match self {
+            SafeI64::I64(x) => SafeI64::from(x.sqrt()),
+            SafeI64::BI(x) => SafeI64::from_integer(x.sqrt()),
+        }
+    }
+
+    pub fn to_bigint(&self) -> BigInt {
+        match self {
+            SafeI64::I64(x) => BigInt::from(*x),
+            SafeI64::BI(x) => (**x).clone(),
+        }
+    }
+
+    pub fn to_str_radix(&self, radix: u32) -> String {
+        self.to_bigint().to_str_radix(radix)
     }
 }
 
@@ -70,9 +112,9 @@ fn test_try_into_i64(){
 macro_rules! num_op_impl {
     ($typ:ident, $op:ident, $ch_op:ident) => {
 
-        impl $typ for SafeI64{
+        impl $typ for SafeI64 {
 
-            type Output = Self;
+            type Output = SafeI64;
         
             fn $op(self, rhs: Self) -> Self::Output {
                 match rhs {
@@ -82,34 +124,78 @@ macro_rules! num_op_impl {
             }
         }
         
-        impl $typ<i64> for SafeI64{
+        impl $typ<i64> for SafeI64 {
         
-            type Output = Self;
+            type Output = SafeI64;
         
-            fn $op(self, y: i64) -> Self::Output {
+            fn $op(self, rhs: i64) -> Self::Output {
                 match self {
                     SafeI64::I64(x) => {
-                        match x.$ch_op(y) {
+                        match x.$ch_op(rhs) {
                             Some(z) => SafeI64::from(z),
-                            _ => SafeI64::BI(Box::new(BigInt::from(x).$op(BigInt::from(y)))),
+                            _ => SafeI64::BI(Box::new(BigInt::from(x).$op(rhs))),
                         }
                     },
-                    SafeI64::BI(x) => SafeI64::from_integer((*x).$op(y)),
+                    SafeI64::BI(x) => SafeI64::from_integer((*x).$op(rhs)),
+                }
+        
+            }
+        }
+        
+        impl $typ<BigInt> for SafeI64 {
+        
+            type Output = SafeI64;
+        
+            fn $op(self, rhs: BigInt) -> Self::Output {
+                match self {
+                    SafeI64::I64(x) => SafeI64::from_integer(x.$op(rhs)),
+                    SafeI64::BI(x) => SafeI64::from_integer((*x).$op(rhs)),
+                }
+            }
+        }
+
+
+        impl $typ for &SafeI64 {
+
+            type Output = SafeI64;
+        
+            fn $op(self, rhs: Self) -> Self::Output {
+                match rhs {
+                    SafeI64::I64(y) => self.$op(y),
+                    SafeI64::BI(y) => self.$op(&**y),
                 }
             }
         }
         
-        impl $typ<BigInt> for SafeI64{
+        impl $typ<&i64> for &SafeI64 {
         
-            type Output = Self;
+            type Output = SafeI64;
         
-            fn $op(self, y: BigInt) -> Self::Output {
+            fn $op(self, rhs: &i64) -> Self::Output {
                 match self {
-                    SafeI64::I64(x) => SafeI64::from_integer(x.$op(y)),
-                    SafeI64::BI(x) => SafeI64::from_integer((*x).$op(y)),
+                    SafeI64::I64(x) => {
+                        match x.$ch_op(*rhs) {
+                            Some(z) => SafeI64::from(z),
+                            _ => SafeI64::BI(Box::new(BigInt::from(*x).$op(rhs))),
+                        }
+                    },
+                    SafeI64::BI(x) => SafeI64::from_integer((&**x).$op(rhs)),
+                }
+        
+            }
+        }
+        
+        impl $typ<&BigInt> for &SafeI64 {
+        
+            type Output = SafeI64;
+        
+            fn $op(self, rhs: &BigInt) -> Self::Output {
+                match self {
+                    SafeI64::I64(x) => SafeI64::from_integer(x.$op(rhs)),
+                    SafeI64::BI(x) => SafeI64::from_integer((&**x).$op(rhs)),
                 }
             }
-        } 
+        }
     };
 }
 
@@ -118,6 +204,46 @@ num_op_impl!(Sub, sub, checked_sub);
 num_op_impl!(Mul, mul, checked_mul);
 num_op_impl!(Div, div, checked_div);
 num_op_impl!(Rem, rem, checked_rem);
+
+impl Pow<u32> for SafeI64 {
+
+    type Output = Self;
+
+    fn pow(self, p: u32) -> Self::Output {
+        match self {
+            SafeI64::I64(x) => match x.checked_pow(p) {
+                Some(z) => SafeI64::from(z),
+                _ => SafeI64::from_integer(BigInt::from(x).pow(p)),
+            },
+            SafeI64::BI(x) => SafeI64::from_integer(x.pow(p)),
+        }
+    }
+}
+
+macro_rules! bit_op_impl {
+    ($typ:ident, $op:ident, $ch_op:ident) => {
+        impl $typ<u32> for SafeI64{
+
+            type Output = Self;
+            
+            fn $op(self, rhs: u32) -> Self::Output {
+                match self {
+                    SafeI64::I64(x) => {
+                        match x.$ch_op(rhs) {
+                            Some(z) => SafeI64::from(z),
+                            _ => SafeI64::from_integer(BigInt::from(x).$op(rhs)),
+                        }
+                    },
+                    SafeI64::BI(x) => SafeI64::from_integer((*x).$op(rhs)),
+                }
+            }
+        }
+    };
+}
+
+bit_op_impl!(Shl, shl, checked_shl);
+bit_op_impl!(Shr, shr, checked_shr);
+
 
 #[test]
 fn test_add(){
@@ -284,4 +410,33 @@ impl Integer for SafeI64{
             }
         }
     }
+}
+
+impl Display for SafeI64 {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            SafeI64::I64(x) => x.fmt(f),
+            SafeI64::BI(x) => x.fmt(f),
+        }
+    }
+}
+
+#[test]
+fn test_display(){
+    let x = SafeI64::from(123);
+    assert_eq!(format!("{}", x), "123");
+
+    let y = SafeI64::from(i64::MAX) + SafeI64::from(123);
+    println!("{}", i64::MAX);
+    assert_eq!(format!("{}", y), "9223372036854775930");  //9223372036854775807 + 123
+}
+
+#[test]
+fn test_debug(){
+    let x = SafeI64::from(123);
+    assert_eq!(format!("{:?}", x), "I64(123)");
+
+    let y = SafeI64::from(i64::MAX) + SafeI64::from(123);
+    assert_eq!(format!("{:?}", y), "BI(9223372036854775930)");  //9223372036854775807 + 123
 }
