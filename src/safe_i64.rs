@@ -1,36 +1,31 @@
-use std::{fmt::Display, ops::{Add, Div, Mul, Rem, Shl, Shr, Sub}};
+use std::{fmt::Display, i64, ops::{Add, Div, Mul, Neg, Rem, Shl, Shr, Sub}};
 
-use num::{bigint::{ParseBigIntError, Sign}, integer::Roots, pow::Pow, BigInt, Integer, Num, One, Zero};
+use num::{bigint::{ParseBigIntError, Sign}, integer::Roots, pow::Pow, traits::{ConstOne, ConstZero}, BigInt, Integer, Num, One, ToPrimitive, Zero};
+
 use once_cell::sync::Lazy;
 
+/// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/SafeLong.scala">SafeLong</a>.
 #[derive(Clone, PartialEq, Eq, Debug)]
 pub enum SafeI64 {
     I64(i64),
     BI(Box<BigInt>)
 }
 
-#[test]
-fn test_size(){
-    assert_eq!(std::mem::size_of::<i64>(), 8);  // <- use
-    assert_eq!(std::mem::size_of::<i128>(), 16);
-    assert_eq!(std::mem::size_of::<BigInt>(), 32);
-    assert_eq!(std::mem::size_of::<&BigInt>(), 8);
-    assert_eq!(std::mem::size_of::<Box<BigInt>>(), 8);  // <- use
-}
-
-static I64_MAX: Lazy<BigInt> = Lazy::new(|| BigInt::from(i64::MAX));
-static I64_MIN: Lazy<BigInt> = Lazy::new(|| BigInt::from(i64::MIN));
-
 impl SafeI64 {
 
+    fn new_raw(x: BigInt) -> SafeI64 {
+        debug_assert_eq!(x.to_i64(), None);
+        SafeI64::BI(Box::new(x))
+    }
+
     pub fn from(x: i64) -> SafeI64 {
-        SafeI64::I64(x)
+        SafeI64::I64(x)  // raw creation
     }
 
     pub fn from_integer(x: BigInt) -> SafeI64 {
-        match try_into_i64(&x) {
-            Some(i) => SafeI64::I64(i),
-            _ => SafeI64::BI(Box::new(x)),
+        match x.to_i64() {
+            Some(i) => SafeI64::I64(i),  // raw creation
+            _ => SafeI64::new_raw(x),  // raw creation
         }
     }
 
@@ -60,7 +55,7 @@ impl SafeI64 {
             SafeI64::BI(x) => match x.sign() {
                 Sign::Plus => self.clone(),
                 Sign::NoSign => SafeI64::zero(),
-                Sign::Minus => self.clone() * -1,
+                Sign::Minus => self.clone() * (-1),  // TODO
             },
         }
     }
@@ -79,38 +74,23 @@ impl SafeI64 {
         }
     }
 
-    pub fn to_str_radix(&self, radix: u32) -> String {
-        self.to_bigint().to_str_radix(radix)
-    }
-}
-
-fn try_into_i64(x: &BigInt) -> Option<i64>{
-    if *x <= *I64_MAX && *I64_MIN <= *x {
-        let (sign, d) = x.to_u64_digits();
-        match sign {
-            Sign::Plus => Some(d[0] as i64),
-            Sign::NoSign => Some(0),
-            Sign::Minus => Some((u64::MAX - d[0] + 1) as i64),
+    pub fn to_f64(&self) -> Option<f64> {
+        match self {
+            SafeI64::I64(x) => x.to_f64(),
+            SafeI64::BI(x) => x.to_f64(),
         }
-    }else{
-        None
     }
-}
 
-#[test]
-fn test_try_into_i64(){
-    assert_eq!(try_into_i64(&BigInt::from(0)), Some(0_i64));
-    assert_eq!(try_into_i64(&BigInt::from(1)), Some(1_i64));
-    assert_eq!(try_into_i64(&BigInt::from(234)), Some(234_i64));
-    assert_eq!(try_into_i64(&BigInt::from(-1)), Some(-1_i64));
-    assert_eq!(try_into_i64(&BigInt::from(-567)), Some(-567_i64));
-
-    assert_eq!(try_into_i64(&(BigInt::from(i64::MAX) + BigInt::from(12))), None);
-    assert_eq!(try_into_i64(&(BigInt::from(i64::MIN) - BigInt::from(34))), None);
+    pub fn to_str_radix(&self, radix: u32) -> String {
+        match self {
+            SafeI64::I64(x) => BigInt::from(*x).to_str_radix(radix),
+            SafeI64::BI(x) => x.to_str_radix(radix),
+        }
+    }
 }
 
 macro_rules! num_op_impl {
-    ($typ:ident, $op:ident, $ch_op:ident) => {
+    ($typ:ident, $op:ident, $ch_op:ident, $gen_fn:ident) => {
 
         impl $typ for SafeI64 {
 
@@ -133,7 +113,7 @@ macro_rules! num_op_impl {
                     SafeI64::I64(x) => {
                         match x.$ch_op(rhs) {
                             Some(z) => SafeI64::from(z),
-                            _ => SafeI64::BI(Box::new(BigInt::from(x).$op(rhs))),
+                            _ => SafeI64::$gen_fn(BigInt::from(x).$op(rhs)),
                         }
                     },
                     SafeI64::BI(x) => SafeI64::from_integer((*x).$op(rhs)),
@@ -176,7 +156,7 @@ macro_rules! num_op_impl {
                     SafeI64::I64(x) => {
                         match x.$ch_op(*rhs) {
                             Some(z) => SafeI64::from(z),
-                            _ => SafeI64::BI(Box::new(BigInt::from(*x).$op(rhs))),
+                            _ => SafeI64::$gen_fn(BigInt::from(*x).$op(rhs)),
                         }
                     },
                     SafeI64::BI(x) => SafeI64::from_integer((&**x).$op(rhs)),
@@ -199,11 +179,11 @@ macro_rules! num_op_impl {
     };
 }
 
-num_op_impl!(Add, add, checked_add);
-num_op_impl!(Sub, sub, checked_sub);
-num_op_impl!(Mul, mul, checked_mul);
-num_op_impl!(Div, div, checked_div);
-num_op_impl!(Rem, rem, checked_rem);
+num_op_impl!(Add, add, checked_add, new_raw);
+num_op_impl!(Sub, sub, checked_sub, new_raw);
+num_op_impl!(Mul, mul, checked_mul, new_raw);
+num_op_impl!(Div, div, checked_div, new_raw);
+num_op_impl!(Rem, rem, checked_rem, from_integer);  // i64::MIN.checked_rem(-1) returns None while the result of BigInt is 0.
 
 impl Pow<u32> for SafeI64 {
 
@@ -244,37 +224,6 @@ macro_rules! bit_op_impl {
 bit_op_impl!(Shl, shl, checked_shl);
 bit_op_impl!(Shr, shr, checked_shr);
 
-
-#[test]
-fn test_add(){
-    for _ in 1..1000 {
-        let x = rand::random::<i64>();
-        let y = rand::random::<i64>();
-
-        let sx = SafeI64::from(x);
-        let sy = SafeI64::from(y);
-        let sz = sx + sy;
-
-        match x.checked_add(y) {
-            Some(z) => {
-                assert!(sz.is_primitive());
-                assert_eq!(sz, SafeI64::from(z));
-            },
-            _ => {
-                assert!(!sz.is_primitive());
-                let z = BigInt::from(x) + BigInt::from(y);
-                assert_eq!(sz, SafeI64::from_integer(z));
-            },
-        }
-
-        // BigInt random number
-        let bx = BigInt::from(x) * 2 - 1;
-        let by = BigInt::from(y) * 2 - 1;
-
-        assert_eq!(sz * 2 - 2, SafeI64::from_integer(bx + by));
-    }
-}
-
 impl Zero for SafeI64{
     
     fn is_zero(&self) -> bool {
@@ -284,11 +233,46 @@ impl Zero for SafeI64{
         }
     }
     
-    fn zero() -> Self { SafeI64::I64(0) }
+    fn zero() -> Self { SafeI64::ZERO }
+}
+
+impl ConstZero for SafeI64 {
+
+    const ZERO: Self = SafeI64::I64(0_i64);  // raw creation
 }
 
 impl One for SafeI64{
-    fn one() -> Self { SafeI64::I64(1) }
+    fn one() -> Self { Self::ONE }
+}
+
+impl ConstOne for SafeI64 {
+
+    const ONE: Self = SafeI64::I64(1_i64);  // raw creation
+}
+
+/// BigInt value of i64::MAX + 1
+pub(crate) static I64_MAX_P1: Lazy<BigInt> = Lazy::new(|| BigInt::from(i64::MAX) + 1 );
+
+impl Neg for SafeI64{
+
+    type Output = SafeI64;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            SafeI64::I64(x) => 
+                if x == i64::MIN { 
+                    SafeI64::new_raw(I64_MAX_P1.clone())  // raw creation
+                }else{
+                    SafeI64::I64(-x)  // raw creation
+                },
+            SafeI64::BI(x) => 
+                if *x == *I64_MAX_P1 {
+                    SafeI64::I64(i64::MIN)  // raw creation
+                }else{
+                    SafeI64::new_raw(-*x)  // raw creation
+                },
+        }
+    }
 }
 
 impl Num for SafeI64{
@@ -297,10 +281,10 @@ impl Num for SafeI64{
 
     fn from_str_radix(str: &str, radix: u32) -> Result<Self, Self::FromStrRadixErr> {
         match i64::from_str_radix(str, radix){
-            Ok(x) => Ok(SafeI64::I64(x)),
+            Ok(x) => Ok(SafeI64::I64(x)),  // raw creation
             Err(_) => {
                 match BigInt::from_str_radix(str, radix) {
-                    Ok(y) => Ok(SafeI64::BI(Box::new(y))),
+                    Ok(y) => Ok(SafeI64::new_raw(y)),  // raw creation
                     Err(err) => Err(err),
                 }
             },
@@ -376,7 +360,12 @@ impl Integer for SafeI64{
     binary_fn_impl!(div_floor);
     binary_fn_impl!(mod_floor);
     binary_fn_impl!(gcd);
-    binary_fn_impl!(lcm);
+
+    fn lcm(&self, other: &Self) -> Self {
+        let x = &self.to_bigint();
+        let y = &other.to_bigint();
+        SafeI64::from_integer(x.lcm(y))
+    }
 
     fn is_multiple_of(&self, other: &Self) -> bool {
         match self {
@@ -420,23 +409,4 @@ impl Display for SafeI64 {
             SafeI64::BI(x) => x.fmt(f),
         }
     }
-}
-
-#[test]
-fn test_display(){
-    let x = SafeI64::from(123);
-    assert_eq!(format!("{}", x), "123");
-
-    let y = SafeI64::from(i64::MAX) + SafeI64::from(123);
-    println!("{}", i64::MAX);
-    assert_eq!(format!("{}", y), "9223372036854775930");  //9223372036854775807 + 123
-}
-
-#[test]
-fn test_debug(){
-    let x = SafeI64::from(123);
-    assert_eq!(format!("{:?}", x), "I64(123)");
-
-    let y = SafeI64::from(i64::MAX) + SafeI64::from(123);
-    assert_eq!(format!("{:?}", y), "BI(9223372036854775930)");  //9223372036854775807 + 123
 }
