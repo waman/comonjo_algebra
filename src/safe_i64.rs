@@ -1,11 +1,10 @@
-use std::{fmt::Display, i64, ops::{Add, Div, Mul, Neg, Rem, Shl, Shr, Sub}};
-
-use num::{bigint::{ParseBigIntError, Sign}, integer::Roots, pow::Pow, traits::{ConstOne, ConstZero}, BigInt, Integer, Num, One, ToPrimitive, Zero};
+use std::{i64, ops::{Add, Div, Mul, Neg, Rem, Shl, Shr, Sub}};
+use num::{bigint::{ParseBigIntError, Sign}, integer::Roots, pow::Pow, traits::{ConstOne, ConstZero}, BigInt, Integer, Num, One, Zero, ToPrimitive};
 
 use once_cell::sync::Lazy;
 
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/SafeLong.scala">SafeLong</a>.
-#[derive(Clone, PartialEq, Eq, Debug)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum SafeI64 {
     I64(i64),
     BI(Box<BigInt>)
@@ -14,7 +13,7 @@ pub enum SafeI64 {
 impl SafeI64 {
 
     fn new_raw(x: BigInt) -> SafeI64 {
-        debug_assert_eq!(x.to_i64(), None);
+        debug_assert_eq!(x.to_i64(), None, "{:?} must not convert into i64.", x);
         SafeI64::BI(Box::new(x))
     }
 
@@ -141,20 +140,20 @@ macro_rules! num_op_impl {
         
             fn $op(self, rhs: Self) -> Self::Output {
                 match rhs {
-                    SafeI64::I64(y) => self.$op(y),
+                    SafeI64::I64(y) => self.$op(*y),
                     SafeI64::BI(y) => self.$op(&**y),
                 }
             }
         }
         
-        impl $typ<&i64> for &SafeI64 {
+        impl $typ<i64> for &SafeI64 {
         
             type Output = SafeI64;
         
-            fn $op(self, rhs: &i64) -> Self::Output {
+            fn $op(self, rhs: i64) -> Self::Output {
                 match self {
                     SafeI64::I64(x) => {
-                        match x.$ch_op(*rhs) {
+                        match x.$ch_op(rhs) {
                             Some(z) => SafeI64::from(z),
                             _ => SafeI64::$gen_fn(BigInt::from(*x).$op(rhs)),
                         }
@@ -185,44 +184,132 @@ num_op_impl!(Mul, mul, checked_mul, new_raw);
 num_op_impl!(Div, div, checked_div, new_raw);
 num_op_impl!(Rem, rem, checked_rem, from_integer);  // i64::MIN.checked_rem(-1) returns None while the result of BigInt is 0.
 
-impl Pow<u32> for SafeI64 {
+impl Pow<u32> for SafeI64{
 
-    type Output = Self;
-
+    type Output = SafeI64;
+    
     fn pow(self, p: u32) -> Self::Output {
+        if p == 0 { return SafeI64::ONE; }
         match self {
-            SafeI64::I64(x) => match x.checked_pow(p) {
-                Some(z) => SafeI64::from(z),
-                _ => SafeI64::from_integer(BigInt::from(x).pow(p)),
+            SafeI64::I64(x) => {
+                match x.checked_pow(p) {
+                    Some(z) => SafeI64::from(z),
+                    _ => SafeI64::new_raw(BigInt::from(x).pow(p)),
+                }
             },
-            SafeI64::BI(x) => SafeI64::from_integer(x.pow(p)),
+            SafeI64::BI(x) => SafeI64::new_raw((*x).pow(p)),
         }
     }
 }
 
-macro_rules! bit_op_impl {
-    ($typ:ident, $op:ident, $ch_op:ident) => {
-        impl $typ<u32> for SafeI64{
+impl Pow<u32> for &SafeI64{
 
-            type Output = Self;
-            
-            fn $op(self, rhs: u32) -> Self::Output {
-                match self {
-                    SafeI64::I64(x) => {
-                        match x.$ch_op(rhs) {
-                            Some(z) => SafeI64::from(z),
-                            _ => SafeI64::from_integer(BigInt::from(x).$op(rhs)),
-                        }
-                    },
-                    SafeI64::BI(x) => SafeI64::from_integer((*x).$op(rhs)),
+    type Output = SafeI64;
+    
+    fn pow(self, p: u32) -> Self::Output {
+        if p == 0 { return SafeI64::ONE; }
+        match self {
+            SafeI64::I64(x) => {
+                match x.checked_pow(p) {
+                    Some(z) => SafeI64::from(z),
+                    _ => SafeI64::new_raw(BigInt::from(*x).pow(p)),
                 }
-            }
+            },
+            SafeI64::BI(x) => SafeI64::new_raw(x.clone().pow(p)),
         }
-    };
+    }
 }
 
-bit_op_impl!(Shl, shl, checked_shl);
-bit_op_impl!(Shr, shr, checked_shr);
+fn positive_shl(x: i64, p: u32) -> SafeI64 {
+    debug_assert!(x > 0);
+    debug_assert!(p != 0);
+    if x.leading_zeros() > p {
+        SafeI64::from(x << p)
+    } else {
+        SafeI64::new_raw(BigInt::from(x) << p)
+    }
+}
+
+impl Shl<u32> for SafeI64{
+
+    type Output = SafeI64;
+    
+    fn shl(self, p: u32) -> Self::Output {
+        if p == 0 { return self; }
+        match self {
+            SafeI64::I64(x) => {
+                if x > 0 {
+                    positive_shl(x, p)
+                } else if x == i64::MIN {
+                    SafeI64::new_raw(BigInt::from(x) << p)  // note p != 0
+                } else if x < 0 {
+                    -positive_shl(-x, p)
+                } else {
+                    SafeI64::ZERO
+                }
+            },
+            SafeI64::BI(x) => SafeI64::new_raw((*x) << p),
+        }
+    }
+}
+
+impl Shl<u32> for &SafeI64{
+
+    type Output = SafeI64;
+    
+    fn shl(self, p: u32) -> Self::Output {
+        if p == 0 { return self.clone(); }
+        match self {
+            SafeI64::I64(x) => {
+                let y = *x;
+                if y > 0 {
+                    positive_shl(y, p)
+                } else if y == i64::MIN {
+                    SafeI64::new_raw(BigInt::from(y) << p)  // note p != 0
+                } else if y < 0 {
+                    -positive_shl(-y, p)
+                } else {
+                    SafeI64::ZERO
+                }
+            },
+            SafeI64::BI(x) => SafeI64::new_raw(*x.clone() << p),
+        }
+    }
+}
+
+impl Shr<u32> for SafeI64{
+
+    type Output = SafeI64;
+    
+    fn shr(self, rhs: u32) -> Self::Output {
+        match self {
+            SafeI64::I64(x) => {
+                match x.checked_shr(rhs) {
+                    Some(z) => SafeI64::from(z),
+                    _ => SafeI64::from_integer(BigInt::from(x).shr(rhs)),
+                }
+            },
+            SafeI64::BI(x) => SafeI64::from_integer((*x).shr(rhs)),
+        }
+    }
+}
+
+impl Shr<u32> for &SafeI64{
+
+    type Output = SafeI64;
+    
+    fn shr(self, rhs: u32) -> Self::Output {
+        match self {
+            SafeI64::I64(x) => {
+                match x.checked_shr(rhs) {
+                    Some(z) => SafeI64::from(z),
+                    _ => SafeI64::from_integer(BigInt::from(*x).shr(rhs)),
+                }
+            },
+            SafeI64::BI(x) => SafeI64::from_integer(x.clone().shr(rhs)),
+        }
+    }
+}
 
 impl Zero for SafeI64{
     
@@ -401,12 +488,21 @@ impl Integer for SafeI64{
     }
 }
 
-impl Display for SafeI64 {
+impl std::fmt::Display for SafeI64 {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             SafeI64::I64(x) => x.fmt(f),
             SafeI64::BI(x) => x.fmt(f),
+        }
+    }
+}
+
+impl std::fmt::Debug for SafeI64 {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::I64(x) => f.debug_tuple("SafeI64::I64").field(x).finish(),
+            Self::BI(x) => f.debug_tuple("SafeI64::BI").field(x).finish(),
         }
     }
 }

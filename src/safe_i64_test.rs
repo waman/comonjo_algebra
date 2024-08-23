@@ -1,5 +1,6 @@
 use std::i64;
 
+use num::pow::Pow;
 use num::{BigInt, ToPrimitive};
 use num::traits::Zero;
 use num_bigint::RandomBits;
@@ -39,10 +40,10 @@ fn new_boundary_values() -> Vec<BigInt> {
 }
 
 fn assert_eq_safe_i64(x: SafeI64, ex: BigInt){
-    assert_eq!(x.to_bigint(), ex);
+    assert_eq!(x.to_bigint(), ex, "{:?} != {:?}", x, ex);
     match ex.to_i64() { 
-        Some(_) => assert!(x.is_primitive()),
-        _ => assert!(!x.is_primitive()),
+        Some(_) => assert!(x.is_primitive(), "{:?} must be primitive.", x),
+        _ => assert!(!x.is_primitive(), "{:?} must not be preimitive.", x),
     }
 }
 
@@ -146,6 +147,30 @@ fn test_integer_impl(){
 }
 
 #[test]
+fn test_pow_and_bit_shift(){
+
+    fn test(x: &BigInt, p: u32){
+        let x_safe = &SafeI64::from_integer(x.clone());
+
+        assert_eq_safe_i64(x_safe.pow(p), x.pow(p));  // Pow for &SafeI64
+        assert_eq_safe_i64(x_safe.clone().pow(p), x.pow(p));  // Pow for SafeI64
+
+        assert_eq_safe_i64(x_safe << p, x << p);
+        assert_eq_safe_i64(x_safe.clone() << p, x << p);
+
+        assert_eq_safe_i64(x_safe >> p, x >> p);
+        assert_eq_safe_i64(x_safe.clone() >> p, x >> p);
+    }
+    
+    let u32_boundary: &[u32] = &[0, 1, 2, 3, 10, 62, 63, 64, 65, 100];
+    for x in &new_boundary_values() {
+        for p in u32_boundary {
+            test(x, *p);
+        }
+    }
+}
+
+#[test]
 fn test_display(){
     // setup
     let x = SafeI64::from(123);
@@ -168,7 +193,7 @@ fn test_display(){
 fn test_debug(){
     // setup
     let x = SafeI64::from(123);
-    let exp_x = "I64(123)";
+    let exp_x = "SafeI64::I64(123)";
     // exercise
     let sut = format!("{:?}", x);
     // verify
@@ -176,7 +201,7 @@ fn test_debug(){
 
     // setup
     let y = SafeI64::from(i64::MAX) + SafeI64::from(123);
-    let exp_y = "BI(9223372036854775930)";  //9223372036854775807 + 123
+    let exp_y = "SafeI64::BI(9223372036854775930)";  //9223372036854775807 + 123
     // exercise
     let sut = format!("{:?}", y);
     // verify
