@@ -13,7 +13,7 @@ pub enum SafeI64 {
 impl SafeI64 {
 
     fn new_raw(x: BigInt) -> SafeI64 {
-        debug_assert_eq!(x.to_i64(), None, "{:?} must not convert into i64.", x);
+        debug_assert_eq!(x.to_i64(), None, "An i64-range value is passed to 'new_raw': {:?}", x);
         SafeI64::BI(Box::new(x))
     }
 
@@ -362,6 +362,28 @@ impl Neg for SafeI64{
     }
 }
 
+impl Neg for &SafeI64{
+
+    type Output = SafeI64;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            SafeI64::I64(x) => 
+                if *x == i64::MIN { 
+                    SafeI64::new_raw(I64_MAX_P1.clone())  // raw creation
+                }else{
+                    SafeI64::I64(-x)  // raw creation
+                },
+            SafeI64::BI(x) => 
+                if **x == *I64_MAX_P1 {
+                    SafeI64::I64(i64::MIN)  // raw creation
+                }else{
+                    SafeI64::new_raw(-*x.clone()) // raw creation
+                },
+        }
+    }
+}
+
 impl Num for SafeI64{
 
     type FromStrRadixErr = ParseBigIntError;
@@ -427,7 +449,13 @@ macro_rules! binary_fn_impl {
         fn $method(&self, other: &Self) -> Self {
             match self {
                 SafeI64::I64(x) => match other {
-                    SafeI64::I64(y) => SafeI64::from(x.$method(y)),
+                    SafeI64::I64(y) => {
+                        if x == &i64::MIN || y == &i64::MIN {
+                            SafeI64::from_integer(BigInt::from(*x).$method(&BigInt::from(*y)))
+                        } else {
+                            SafeI64::from(x.$method(y))
+                        }
+                    },
                     SafeI64::BI(y) => SafeI64::from_integer(BigInt::from(*x).$method(y)),
                 },
                 SafeI64::BI(x) => match other {
@@ -457,7 +485,13 @@ impl Integer for SafeI64{
     fn is_multiple_of(&self, other: &Self) -> bool {
         match self {
             SafeI64::I64(x) => match other {
-                SafeI64::I64(y) => x.is_multiple_of(y),
+                SafeI64::I64(y) => {
+                    if x == &i64::MIN || y == &i64::MIN {
+                        BigInt::from(*x).is_multiple_of(&BigInt::from(*y))
+                    } else {
+                        x.is_multiple_of(y)
+                    }
+                },
                 SafeI64::BI(y) => BigInt::from(*x).is_multiple_of(y),
             },
             SafeI64::BI(x) => match other {
@@ -475,8 +509,13 @@ impl Integer for SafeI64{
         match self {
             SafeI64::I64(x) => match other {
                 SafeI64::I64(y) => {
-                    let r = x.div_rem(y);
-                    (SafeI64::from(r.0), SafeI64::from(r.1))
+                    if x == &i64::MIN || y == &i64::MIN {
+                        let r = BigInt::from(*x).div_rem(&BigInt::from(*y));
+                        (SafeI64::from_integer(r.0), SafeI64::from_integer(r.1))
+                    } else {
+                        let r = x.div_rem(y);
+                        (SafeI64::from(r.0), SafeI64::from(r.1))
+                    }
                 },
                 SafeI64::BI(y) => to_safe_i64_tuple(BigInt::from(*x).div_rem(y))
             },

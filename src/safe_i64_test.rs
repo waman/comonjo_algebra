@@ -1,7 +1,7 @@
 use std::i64;
 
 use num::pow::Pow;
-use num::{BigInt, ToPrimitive};
+use num::{BigInt, Integer, ToPrimitive};
 use num::traits::Zero;
 use num_bigint::RandomBits;
 use rand::prelude::Distribution;
@@ -39,8 +39,8 @@ fn new_boundary_values() -> Vec<BigInt> {
     values
 }
 
-fn assert_eq_safe_i64(x: SafeI64, ex: BigInt){
-    assert_eq!(x.to_bigint(), ex, "{:?} != {:?}", x, ex);
+fn assert_eq_safe_i64(x: SafeI64, ex: &BigInt){
+    assert_eq!(&x.to_bigint(), ex, "{:?} != {:?}", x, ex);
     match ex.to_i64() { 
         Some(_) => assert!(x.is_primitive(), "{:?} must be primitive.", x),
         _ => assert!(!x.is_primitive(), "{:?} must not be preimitive.", x),
@@ -83,52 +83,32 @@ fn test_is_primitive(){
 }
 
 #[test]
-fn test_neg(){
-    fn test(x: BigInt){
-        // setup
-        let x_safe = SafeI64::from_integer(x.clone());
-        let exp = SafeI64::from_integer(-x);
-        // exercise
-        let sut = -x_safe;
-        // verify
-        assert_eq!(sut, exp);
-    }
-
-    // boundary values
-    for x in new_boundary_values() {
-        test(x);
-    }
-
-    // random values
-    let rng = &mut rand::thread_rng();
-    let rand_bits = RandomBits::new(RAND_BITS);
-    for _ in 0..100 {
-        test(rand_bits.sample(rng));
-    }
-}
-
-#[test]
-fn test_integer_impl(){
+fn test_num_binary_op(){
 
     fn test(x: &BigInt, y: &BigInt){
         let x_safe = &SafeI64::from_integer(x.clone());
         let y_safe = &SafeI64::from_integer(y.clone());
 
-        assert_eq_safe_i64(x_safe + y_safe, x + y);  // Add for &SafeI64
-        assert_eq_safe_i64(x_safe.clone() + y_safe.clone(), x + y);  // Add for SafeI64
+        let ex_add = x + y;
+        assert_eq_safe_i64(x_safe + y_safe, &ex_add);  // Add for &SafeI64
+        assert_eq_safe_i64(x_safe.clone() + y_safe.clone(), &ex_add);  // Add for SafeI64
 
-        assert_eq_safe_i64(x_safe - y_safe, x - y);
-        assert_eq_safe_i64(x_safe.clone() - y_safe.clone(), x - y);
+        let ex_sub = x - y;
+        assert_eq_safe_i64(x_safe - y_safe, &ex_sub);
+        assert_eq_safe_i64(x_safe.clone() - y_safe.clone(), &ex_sub);
 
-        assert_eq_safe_i64(x_safe * y_safe, x * y);
-        assert_eq_safe_i64(x_safe.clone() * y_safe.clone(), x * y);
+        let ex_mul = x * y;
+        assert_eq_safe_i64(x_safe * y_safe, &ex_mul);
+        assert_eq_safe_i64(x_safe.clone() * y_safe.clone(), &ex_mul);
 
         if !y.is_zero() {
-            assert_eq_safe_i64(x_safe / y_safe, x / y);
-            assert_eq_safe_i64(x_safe.clone() / y_safe.clone(), x / y);
+            let ex_div = x / y;
+            assert_eq_safe_i64(x_safe / y_safe, &ex_div);
+            assert_eq_safe_i64(x_safe.clone() / y_safe.clone(), &ex_div);
 
-            assert_eq_safe_i64(x_safe % y_safe, x % y);
-            assert_eq_safe_i64(x_safe.clone() % y_safe.clone(), x % y);
+            let ex_rem = x % y;
+            assert_eq_safe_i64(x_safe % y_safe, &ex_rem);
+            assert_eq_safe_i64(x_safe.clone() % y_safe.clone(), &ex_rem);
         }
     }
 
@@ -152,23 +132,129 @@ fn test_pow_and_bit_shift(){
     fn test(x: &BigInt, p: u32){
         let x_safe = &SafeI64::from_integer(x.clone());
 
-        assert_eq_safe_i64(x_safe.pow(p), x.pow(p));  // Pow for &SafeI64
-        assert_eq_safe_i64(x_safe.clone().pow(p), x.pow(p));  // Pow for SafeI64
+        let ex_pow = x.pow(p);
+        assert_eq_safe_i64(x_safe.pow(p), &ex_pow);  // Pow for &SafeI64
+        assert_eq_safe_i64(x_safe.clone().pow(p), &ex_pow);  // Pow for SafeI64
 
-        assert_eq_safe_i64(x_safe << p, x << p);
-        assert_eq_safe_i64(x_safe.clone() << p, x << p);
+        let ex_shl = x << p;
+        assert_eq_safe_i64(x_safe << p, &ex_shl);
+        assert_eq_safe_i64(x_safe.clone() << p, &ex_shl);
 
-        assert_eq_safe_i64(x_safe >> p, x >> p);
-        assert_eq_safe_i64(x_safe.clone() >> p, x >> p);
+        let ex_shr = x >> p;
+        assert_eq_safe_i64(x_safe >> p, &ex_shr);
+        assert_eq_safe_i64(x_safe.clone() >> p, &ex_shr);
     }
-    
+
     let u32_boundary: &[u32] = &[0, 1, 2, 3, 10, 62, 63, 64, 65, 100];
+
     for x in &new_boundary_values() {
         for p in u32_boundary {
             test(x, *p);
         }
     }
+
+    let rng = &mut rand::thread_rng();
+    let rand_bits = RandomBits::new(RAND_BITS);
+
+    for _ in 0..20 {
+        for p in u32_boundary {
+            test(&rand_bits.sample(rng), *p);
+        }
+    }
 }
+
+#[test]
+fn test_neg(){
+
+    fn test(x: &BigInt){
+        let x_safe = &SafeI64::from_integer(x.clone());
+
+        let ex_neg = -x;
+        assert_eq_safe_i64(-x_safe, &ex_neg);  // Neg for &SafeI64
+        assert_eq_safe_i64(-(x_safe.clone()), &ex_neg);  // Neg for SafeI64
+    }
+
+    // boundary values
+    for x in &new_boundary_values() {
+        test(x);
+    }
+
+    // random values
+    let rng = &mut rand::thread_rng();
+    let rand_bits = RandomBits::new(RAND_BITS);
+
+    for _ in 0..100 {
+        test(&rand_bits.sample(rng));
+    }
+}
+
+#[test]
+fn test_unary_integer_methods(){
+    fn test(x: &BigInt){
+        let x_safe = &SafeI64::from_integer(x.clone());
+
+        let ex_is_odd = x.is_odd();
+        assert_eq!(x_safe.is_odd() , ex_is_odd);  // is_odd() for &SafeI64
+        assert_eq!(x_safe.clone().is_odd() , ex_is_odd);  // is_odd() for SafeI64
+
+        let ex_is_even = x.is_even();
+        assert_eq!(x_safe.is_even() , ex_is_even);
+        assert_eq!(x_safe.clone().is_even() , ex_is_even);
+    }
+
+    // boundary values
+    for x in &new_boundary_values() {
+        test(x);
+    }
+
+    // random values
+    let rng = &mut rand::thread_rng();
+    let rand_bits = RandomBits::new(RAND_BITS);
+
+    for _ in 0..20 {
+        test(&rand_bits.sample(rng));
+    }
+}
+
+#[test]
+fn test_integer_binary_op(){
+
+    fn test(x: &BigInt, y: &BigInt){
+        let x_safe = &SafeI64::from_integer(x.clone());
+        let y_safe = &SafeI64::from_integer(y.clone());
+
+        assert_eq_safe_i64(x_safe.gcd(y_safe), &x.gcd(y));
+        assert_eq_safe_i64(x_safe.lcm(y_safe), &x.lcm(y));
+
+        // println!("{}.is_multiple_of({}) ?= {}", x_safe, y_safe, x.is_multiple_of(y));
+        assert_eq!(x_safe.is_multiple_of(y_safe), x.is_multiple_of(y));
+
+        if !y_safe.is_zero() {
+            assert_eq_safe_i64(x_safe.div_floor(y_safe), &x.div_floor(y));
+            assert_eq_safe_i64(x_safe.mod_floor(y_safe), &x.mod_floor(y));
+            
+            // div_rem()
+            let dr = x_safe.div_rem(y_safe);
+            let ex_dr = x.div_rem(y);
+            assert_eq_safe_i64(dr.0, &ex_dr.0);
+            assert_eq_safe_i64(dr.1, &ex_dr.1);
+        }
+    }
+
+    for x in &new_boundary_values() {
+        for y in &new_boundary_values() {
+            test(x, y);
+        }
+    }
+
+    let rng = &mut rand::thread_rng();
+    let rand_bits = RandomBits::new(RAND_BITS);
+
+    for _ in 0..100 {
+        test(&rand_bits.sample(rng), &rand_bits.sample(rng));
+    }
+}
+
 
 #[test]
 fn test_display(){
