@@ -7,19 +7,6 @@ use num_bigint::RandomBits;
 use rand::prelude::Distribution;
 
 use crate::safe_i64::SafeI64;
-// use once_cell::sync::Lazy;
-
-// static I64_MAX: Lazy<BigInt> = Lazy::new(|| BigInt::from(i64::MAX));
-// static I64_MIN: Lazy<BigInt> = Lazy::new(|| BigInt::from(i64::MIN));
-
-// fn append_i64s_around(vec: &mut Vec<i64>, center: i64, width: i64){
-//     for i in -width ..= width { 
-//         match center.checked_add(i) {
-//             Some(x) => vec.push(x),
-//             None => (),
-//         }
-//     }
-// }
 
 const RAND_BITS: u64 = 66;
 
@@ -42,8 +29,8 @@ fn new_boundary_values() -> Vec<BigInt> {
 fn assert_eq_safe_i64(x: SafeI64, ex: &BigInt){
     assert_eq!(&x.to_bigint(), ex, "{:?} != {:?}", x, ex);
     match ex.to_i64() { 
-        Some(_) => assert!(x.is_primitive(), "{:?} must be primitive.", x),
-        _ => assert!(!x.is_primitive(), "{:?} must not be preimitive.", x),
+        Some(_) => assert!( x.is_primitive(), "{:?} must be primitive.", x),
+        _       => assert!(!x.is_primitive(), "{:?} must not be primitive.", x),
     }
 }
 

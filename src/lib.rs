@@ -1,7 +1,8 @@
 
-mod safe_i64;
-mod real;
-mod polynomial;
+pub mod safe_i64;
+pub mod real;
+pub mod polynomial;
+pub mod poly;
 // mod algebraic;
 
 #[cfg(test)]
