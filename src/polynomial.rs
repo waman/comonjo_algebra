@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Display, ops::{Add, Mul}};
+use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::{Add, Mul}};
 
 use num::{traits::{ConstOne, ConstZero}, Num, One, Zero};
 
@@ -473,31 +473,18 @@ impl<C: Num + Clone + Display> Display for Polynomial<C> {
     }
 }
  
-// impl<C: Num + Debug> Debug for Polynomial<C> {
+impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
 
-//     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-
-//         match self {
-//             Polynomial::Zero() => f.write_str("Polynomial::Zero[0]"),
-//             Polynomial::One() => f.write_str("Polynomial::One[1]"),
-//             Polynomial::Constant(c) => f.write_fmt(format_args!("Polynomial::Constant[{}]", c.0)),
-
-//             Polynomial::Dense(dc) => {
-//                 f.write_str("Polynomial::Dense[");
-//                 let result = display_polynomial(f, dc.enumerate());
-//                 f.write_str("]");
-//                 result
-//             },
-
-//             Polynomial::Spares(sc) => {
-//                 f.write_str("Polynomial::Spears[");
-//                 let result = display_polynomial(f, sc.enumerate());
-//                 f.write_str("]");
-//                 result
-//             },
-//         }
-//     }
-// }
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Polynomial::Zero() => "Zero",
+            Polynomial::Constant(_) => "Constant",
+            Polynomial::Dense(_) => "Dense",
+            Polynomial::Spares(_) => "Spears",
+        };
+        f.write_fmt(format_args!("Polynomial::{}[{}]", s, self))
+    }
+}
 
 
 

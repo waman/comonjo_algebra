@@ -72,7 +72,10 @@ fn test_display(){
     for entry in table {
         test(entry.0, entry.1);
     }
+}
 
+#[test]
+fn test_display_for_rational_and_complex(){
     // rational
     fn r(n: i64, d: i64) -> Rational64 { Rational64::new(n, d) }
     let p_rat = dense![Rational64; r(1, 2), r(1, 3), r(2, 3)];
@@ -82,6 +85,27 @@ fn test_display(){
     fn c(re: f64, im: f64) -> Complex<f64> { Complex { re, im } }
     let p_complex = dense!(Complex<f64>; c(1., 2.), c(3., 4.), c(5., 6.));
     assert_eq!(format!("{}", p_complex), "1+2i + (3+4i)x + (5+6i)x²");
+}
+
+#[test]
+fn test_debug(){
+    fn test(p: Polynomial<i64>, exp: &str){
+        assert_eq!(format!("{:?}", p), exp);
+    }
+
+    let table = [
+        (Polynomial::<i64>::zero(), "Polynomial::Zero[(0)]"),
+
+        (Polynomial::<i64>::one(), "Polynomial::Constant[(1)]"),
+        (Polynomial::<i64>::constant(2),  "Polynomial::Constant[(2)]"),
+
+        (dense![i64; 1, 2, 3],  "Polynomial::Dense[1 + 2x + 3x²]"),
+        (spears![i64; (0, 1), (1, 2), (2, 3)],   "Polynomial::Spears[1 + 2x + 3x²]"),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
 }
 
 #[test]
@@ -97,34 +121,34 @@ fn test_degree_zero_one_constant(){
         (Polynomial::<i64>::zero(),       0, true,  false, true),
         (Polynomial::<i64>::one(),        0, false, true,  true),
 
-        // (Polynomial::<i64>::constant(0),  0, true,  false, true),
-        // (Polynomial::<i64>::constant(1),  0, false, true,  true),
-        // (Polynomial::<i64>::constant(-1), 0, false, false, true),
-        // (Polynomial::<i64>::constant(2),  0, false, false, true),
+        (Polynomial::<i64>::constant(0),  0, true,  false, true),
+        (Polynomial::<i64>::constant(1),  0, false, true,  true),
+        (Polynomial::<i64>::constant(-1), 0, false, false, true),
+        (Polynomial::<i64>::constant(2),  0, false, false, true),
 
-        // // dense!
-        // (dense![i64; ],                   0, true,  false, true),  // zero & const
-        // (dense![i64; 0, 0],               0, true,  false, true),  // zero & const
-        // (dense![i64; 1],                  0, false, true,  true),  // const
-        // (dense![i64; -1],                 0, false, false, true),  // const
-        // (dense![i64; 2],                  0, false, false, true),  // const
+        // dense!
+        (dense![i64; ],                   0, true,  false, true),  // zero & const
+        (dense![i64; 0, 0],               0, true,  false, true),  // zero & const
+        (dense![i64; 1],                  0, false, true,  true),  // const
+        (dense![i64; -1],                 0, false, false, true),  // const
+        (dense![i64; 2],                  0, false, false, true),  // const
 
-        // (dense![i64; 1, 2, 3],            2, false, false, false),
-        // (dense![i64; -1, -2, -3],         2, false, false, false),
-        // (dense![i64; 0, 2, 3],            2, false, false, false),
-        // (dense![i64; 1, 2, 3, 0, 0],      2, false, false, false),
+        (dense![i64; 1, 2, 3],            2, false, false, false),
+        (dense![i64; -1, -2, -3],         2, false, false, false),
+        (dense![i64; 0, 2, 3],            2, false, false, false),
+        (dense![i64; 1, 2, 3, 0, 0],      2, false, false, false),
 
-        // // spears!
-        // (spears![i64; ],                  0, true,  false, true),  // zero & const
-        // (spears![i64; (0, 0), (2, 0)],    0, true,  false, true),  // zero & const
-        // (spears![i64; (0, 1)],            0, false, true,  true),  // const
-        // (spears![i64; (0, -1)],           0, false, false, true),  // const
-        // (spears![i64; (0, 2)],            0, false, false, true),  // const
+        // spears!
+        (spears![i64; ],                  0, true,  false, true),  // zero & const
+        (spears![i64; (0, 0), (2, 0)],    0, true,  false, true),  // zero & const
+        (spears![i64; (0, 1)],            0, false, true,  true),  // const
+        (spears![i64; (0, -1)],           0, false, false, true),  // const
+        (spears![i64; (0, 2)],            0, false, false, true),  // const
 
-        // (spears![i64; (0, 1), (1, 2), (2, 3)],                  2, false, false, false),
-        // (spears![i64; (0, -1), (1, -2), (2, -3)],               2, false, false, false),
-        // (spears![i64; (0, 0), (1, 2), (2, 3)],                  2, false, false, false),
-        // (spears![i64; (0, 1), (1, 2), (2, 3), (5, 0), (10, 0)], 2, false, false, false),
+        (spears![i64; (0, 1), (1, 2), (2, 3)],                  2, false, false, false),
+        (spears![i64; (0, -1), (1, -2), (2, -3)],               2, false, false, false),
+        (spears![i64; (0, 0), (1, 2), (2, 3)],                  2, false, false, false),
+        (spears![i64; (0, 1), (1, 2), (2, 3), (5, 0), (10, 0)], 2, false, false, false),
     ];
 
     for entry in table {

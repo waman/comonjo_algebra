@@ -1,6 +1,6 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Display, ops::{Add, Div, Mul, Neg}};
 
-use num::{traits::{ConstOne, ConstZero}, FromPrimitive, Num, One, Zero};
+use num::{FromPrimitive, Num, One, Zero};
 use once_cell::sync::Lazy;
 
 static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
