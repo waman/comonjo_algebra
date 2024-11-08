@@ -4,7 +4,7 @@ use num::Num;
 
 use crate::polynomial::PolyIter;
 
-pub(crate) struct DenseContent<C: Num>(pub(crate) Vec<C>);
+pub struct DenseContent<C: Num>(pub(crate) Vec<C>);
 
 impl<C: Num> DenseContent<C> {
 
@@ -21,8 +21,8 @@ impl<C: Num> DenseContent<C> {
     }
 }
 
-pub(crate) struct DenseIter<'a, C: Num> {
-    pub vec_iter: Enumerate<Iter<'a, C>>
+pub struct DenseIter<'a, C: Num> {
+    vec_iter: Enumerate<Iter<'a, C>>
 }
 
 impl<'a, C: Num> Iterator for DenseIter<'a, C> {

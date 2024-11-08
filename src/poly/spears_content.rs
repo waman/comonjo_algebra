@@ -3,7 +3,7 @@ use num::Num;
 
 use crate::polynomial::PolyIter;
 
-pub(crate) struct SpearsContent<C: Num>(pub(crate) BTreeMap<usize, C>);
+pub struct SpearsContent<C: Num>(pub(crate) BTreeMap<usize, C>);
 
 impl<C: Num> SpearsContent<C> {
 
@@ -20,13 +20,11 @@ impl<C: Num> SpearsContent<C> {
     }
 }
 
-pub(crate) struct SpearsIter<'a, C> {
+pub struct SpearsIter<'a, C> {
     map_iter: Iter<'a, usize, C>
-
 }
 
 impl<'a, C: Num> Iterator for SpearsIter<'a, C> {
-
     type Item = (usize, &'a C);
 
     fn next(&mut self) -> Option<Self::Item> {

@@ -11,15 +11,12 @@ pub enum Polynomial<C: Num> {
     Zero(),
 
     /// Prefer to using <code>Polynomial::constant()</code> function to instantiate.
-    #[allow(private_interfaces)]
     Constant(ConstContent<C>),
 
     /// Use <code>dense!()</code> macro to instantiate.
-    #[allow(private_interfaces)]
     Dense(DenseContent<C>),
     
     /// Use <code>spears!()</code> macro to instantiate.
-    #[allow(private_interfaces)]
     Spares(SpearsContent<C>)
 }
 
@@ -192,26 +189,42 @@ impl<C: Num> Polynomial<C> {
     }
      
  
-    pub fn to_dense(&self) -> Polynomial<C> {
-        todo!()
+    pub fn to_dense(self) -> Polynomial<C> {
+        match self {
+            Polynomial::Spares(spears_content) => todo!(),
+            _ => self,
+        }
     }
 
-    pub fn to_spears(&self) -> Polynomial<C> {
-        todo!()
+    pub fn to_spears(self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dense_content) => todo!(),
+            _ => self
+        }
     }
 
 
     // the following methods are used?
+
+    // iterate non zero terms
     pub fn iter<'a>(&'a self) -> PolyIter<'a, C> {
         match self {
             Polynomial::Zero() => PolyIter::Zero(),
-            Polynomial::Constant(const_content) => const_content.iter(),
-            Polynomial::Dense(dense_content) => dense_content.iter(),
-            Polynomial::Spares(spears_content) => spears_content.iter(),
+            Polynomial::Constant(cc) => cc.iter(),
+            Polynomial::Dense(dc) => dc.iter(),
+            Polynomial::Spares(sc) => sc.iter(),
         }
     }
 
-    fn split(&self) -> (Vec<usize>, Vec<&C>) {
+    // pub fn coeffs(&self) -> Vec<&C> {
+
+    // } 
+
+    // pub fn data(&self) -> Map<usize, &C> {
+
+    // }
+
+    pub fn split(&self) -> (Vec<usize>, Vec<&C>) {
         let n = self.degree();
         let mut es = Vec::with_capacity(n);
         let mut cs = Vec::with_capacity(n);
@@ -231,45 +244,10 @@ impl<C: Num + Clone> Polynomial<C> {
         self.iter().map(|(e, c)| Term::<C>::from_ref(e, c))
     }
 }
-
-//   /**
-//    * Traverses each term in this polynomial, in order of degree, lowest to highest (eg. constant term would be first)
-//    * and calls `f` with the degree of term and its coefficient. This may skip zero terms, or it may not.
-//    */
-//   def foreach[U](f: (Int, C) => U): Unit
-
-//   /**
-//    * Traverses each non-zero term in this polynomial, in order of degree, lowest to highest (eg. constant term would be
-//    * first) and calls `f` with the degree of term and its coefficient.
-//    */
-//   def foreachNonZero[U](f: (Int, C) => U)(implicit ring: Semiring[C], eq: Eq[C]): Unit =
-//     foreach { (e, c) => if (c =!= ring.zero) f(e, c) }
-
 //   /**
 //    * Returns the coefficients in little-endian order. So, the i-th element is coeffsArray(i) * (x ** i).
 //    */
 //   def coeffsArray(implicit ring: Semiring[C]): Array[C]
-
-//   /**
-//    * Returns a list of non-zero terms.
-//    */
-//   def terms(implicit ring: Semiring[C], eq: Eq[C]): List[Term[C]] = {
-//     val lb = new scala.collection.mutable.ListBuffer[Term[C]]
-//     foreachNonZero { (e, c) =>
-//       lb += Term(c, e)
-//     }
-//     lb.result()
-//   }
-
-//   /**
-//    * Return an iterator of non-zero terms.
-//    *
-//    * This method is used to implement equals and hashCode.
-//    *
-//    * NOTE: This method uses a (_ == 0) test to prune zero values. This makes sense in a context where Semiring[C] and
-//    * Eq[C] are unavailable, but not other places.
-//    */
-//   def termsIterator: Iterator[Term[C]]
 
 //   /**
 //    * Returns a map from exponent to coefficient of this polynomial.
@@ -282,21 +260,21 @@ impl<C: Num + Clone> Polynomial<C> {
 //     bldr.result().toMap
 //   }
 
-struct ConstContent<C: Num>(C);
+pub struct ConstContent<C: Num>(C);
 
 impl<C: Num> ConstContent<C> {
 
     fn iter<'a>(&'a self) -> PolyIter<'a, C> {
-        PolyIter::Constant(ConstIter { is_visited: false, value: &self.0 }) 
+        PolyIter::Constant(ConstIter { is_visited: false, ref_to_const: &self.0 })
+
     }
 }
 
-#[allow(private_interfaces)]
 pub enum PolyIter<'a, C: Num> {
     Zero(),
     Constant(ConstIter<'a, C>),
     Dense(DenseIter<'a, C>),
-    Spears(SpearsIter<'a, C>)
+    Spears(SpearsIter<'a, C>),
 }
 
 impl<'a, C: Num> Iterator for PolyIter<'a, C> {
@@ -305,16 +283,16 @@ impl<'a, C: Num> Iterator for PolyIter<'a, C> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             PolyIter::Zero() => None,
-            PolyIter::Constant(iter) => iter.next(),
-            PolyIter::Dense(iter) => iter.next(),
-            PolyIter::Spears(iter) => iter.next(),
+            PolyIter::Constant(cc) => cc.next(),
+            PolyIter::Dense(dc) => dc.next(),
+            PolyIter::Spears(sc) => sc.next(),
         }
     }
 }
 
-struct ConstIter<'a, C: Num> {
+pub struct ConstIter<'a, C: Num> {
     is_visited: bool,
-    value: &'a C
+    ref_to_const: &'a C
 }
 
 impl<'a, C: Num> Iterator for ConstIter<'a, C> {
@@ -323,7 +301,7 @@ impl<'a, C: Num> Iterator for ConstIter<'a, C> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_visited {
             self.is_visited = true;
-            Some((0, self.value))
+            Some((0, self.ref_to_const))
         } else {
             None
         }
