@@ -3,6 +3,7 @@ use num::Num;
 
 use crate::polynomial::PolyIter;
 
+#[derive(Clone)]
 pub struct SpearsContent<C: Num>(pub(crate) BTreeMap<usize, C>);
 
 impl<C: Num> SpearsContent<C> {

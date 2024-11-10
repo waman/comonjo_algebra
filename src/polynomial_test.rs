@@ -12,13 +12,6 @@ fn test_dense_macro(){
     assert_eq!(format!("{}", p1), "4x + 5x² + 6x³ + 7x⁵");
 }
 
-// #[test]
-// fn test_eq(){
-//     let p0 = dense![i64; 1, 0, 2, 4, 0, 1];
-//     let p1 = spears![i64; (0, 1), (2, 2), (3, 4), (6, 1)];
-//     assert_eq!(p0, p1);
-// }
-
 #[test]
 fn test_spears_macro(){
     let p0 = spears![i64; (2, 6), (5, 1)];
@@ -154,4 +147,55 @@ fn test_degree_zero_one_constant(){
     for entry in table {
         test(entry.0, entry.1, entry.2, entry.3, entry.4);
     }
+}
+
+#[test]
+fn test_eq(){
+    let p0 = dense![i64; 1, 0, 2, 4, 0, 0, 1];
+    let p1 = spears![i64; (0, 1), (2, 2), (3, 4), (6, 1)];
+    assert_eq!(p0, p1);
+}
+
+#[test]
+fn test_clone_category_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() and to_spears()
+    // 1 + 2x² + 4x³ + x⁶
+    let pd = dense![i64; 1, 0, 2, 4, 0, 0, 1];
+    let ps = spears![i64; (0, 1), (2, 2), (3, 4), (6, 1)];
+    assert_eq!(pd, ps);
+
+    // dense_clone()
+    let p1 = pd.dense_clone();
+    assert_eq!(p1, pd);
+    assert_eq!(p1, ps);
+
+    let p2 = ps.dense_clone();
+    assert_eq!(p2, pd);
+    assert_eq!(p2, ps);
+
+    // spears_clone()
+    let p3 = pd.spears_clone();
+    assert_eq!(p3, pd);
+    assert_eq!(p3, ps);
+
+    let p4 = ps.spears_clone();
+    assert_eq!(p4, pd);
+    assert_eq!(p4, ps);
+
+    // to_dense()
+    let p5 = pd.clone().to_dense();
+    assert_eq!(p5, pd);
+    assert_eq!(p5, ps);
+
+    let p6 = ps.clone().to_dense();
+    assert_eq!(p6, pd);
+    assert_eq!(p6, ps);
+
+    // to_spears()
+    let p7 = pd.clone().to_spears();
+    assert_eq!(p7, pd);
+    assert_eq!(p7, ps);
+
+    let p8 = ps.clone().to_spears();
+    assert_eq!(p8, pd);
+    assert_eq!(p8, ps);
 }

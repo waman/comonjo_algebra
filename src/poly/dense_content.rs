@@ -4,6 +4,7 @@ use num::Num;
 
 use crate::polynomial::PolyIter;
 
+#[derive(Clone)]
 pub struct DenseContent<C: Num>(pub(crate) Vec<C>);
 
 impl<C: Num> DenseContent<C> {

@@ -10,7 +10,7 @@ pub enum Polynomial<C: Num> {
 
     Zero(),
 
-    /// Prefer to using <code>Polynomial::constant()</code> function to instantiate.
+    /// Use <code>Polynomial::constant()</code> function to instantiate.
     Constant(ConstContent<C>),
 
     /// Use <code>dense!()</code> macro to instantiate.
@@ -188,17 +188,35 @@ impl<C: Num> Polynomial<C> {
         }
     }
      
- 
+    /// Return dense expression of this polynomial if this is spears, otherwise (zero or constant) self.
     pub fn to_dense(self) -> Polynomial<C> {
         match self {
-            Polynomial::Spares(spears_content) => todo!(),
+            Polynomial::Spares(mut sc) => {
+                let n = sc.degree() + 1;
+                let mut v: Vec<C> = Vec::with_capacity(n);
+                for i in 0..n {
+                    match sc.0.remove(&i) {
+                        Some(e) => v.push(e),
+                        None => v.push(C::zero()),
+                    } 
+                }
+                debug_assert!(sc.0.is_empty());
+                Polynomial::<C>::dense_from_vec(v)
+            },
             _ => self,
         }
     }
 
+    /// Return spears expression of this polynomial if this is dense, otherwise (zero or constant) self.
     pub fn to_spears(self) -> Polynomial<C> {
         match self {
-            Polynomial::Dense(dense_content) => todo!(),
+            Polynomial::Dense(mut dc) => {
+                let mut map = BTreeMap::new();
+                while let Some(e) = dc.0.pop() {
+                    map.insert(dc.0.len(), e);
+                }
+                Polynomial::<C>::spears_from_map(map)
+            },
             _ => self
         }
     }
@@ -240,10 +258,55 @@ impl<C: Num> Polynomial<C> {
 
 impl<C: Num + Clone> Polynomial<C> {
 
+    /// Create dense clone of this polynomial if the self is spears, otherwise (zero, constant or dense) return self.
+    pub fn dense_clone(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Spares(sc) => {
+                let n: usize = sc.degree() + 1;
+                let mut v: Vec<C> = Vec::with_capacity(n);
+                for i in 0..n {
+                    match sc.nth(i) {
+                        Some(e) => v.push(e.clone()),
+                        None => v.push(C::zero()),
+                    } 
+                }
+                Polynomial::<C>::dense_from_vec(v)
+            },
+            _ => self.clone()
+        }
+    }
+
+    /// Create spears clone of this polynomial if self is dense, otherwise (zero, constant or spears) return self.
+    pub fn spears_clone(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => {
+                let mut map = BTreeMap::new();
+                for (i, e) in dc.iter() {
+                    map.insert(i, e.clone());  // note e is not zero
+                }
+                Polynomial::<C>::spears_from_map(map)
+            },
+            _ => self.clone()
+        }
+    }
+
     pub fn terms<'a>(&'a self) -> impl Iterator<Item=Term<'a, C>> {
         self.iter().map(|(e, c)| Term::<C>::from_ref(e, c))
     }
 }
+
+impl<C: Num + Clone> Clone for Polynomial<C> {
+
+    fn clone(&self) -> Self {
+        match self {
+            Self::Zero() => Self::Zero(),
+            Self::Constant(cc) => Self::Constant(cc.clone()),
+            Self::Dense(dc) => Self::Dense(dc.clone()),
+            Self::Spares(sc) => Self::Spares(sc.clone()),
+        }
+    }
+}
+
 //   /**
 //    * Returns the coefficients in little-endian order. So, the i-th element is coeffsArray(i) * (x ** i).
 //    */
@@ -260,6 +323,7 @@ impl<C: Num + Clone> Polynomial<C> {
 //     bldr.result().toMap
 //   }
 
+#[derive(Clone)]
 pub struct ConstContent<C: Num>(C);
 
 impl<C: Num> ConstContent<C> {
@@ -362,15 +426,14 @@ impl<C: Num> PartialEq for Polynomial<C> {
 
     fn eq(&self, other: &Self) -> bool {
 
+        if self.degree() != other.degree() {
+            return false;
+        }
+
         fn has_the_same_content<C: Num>(vec: &Vec<C>, map: &BTreeMap<usize, C>) -> bool {
-            let mut n: usize = 0;
-            for (i, c) in vec.iter().enumerate().filter(|(_, c)| !c.is_zero()) {
-                if let Some(v) = map.get(&i) {
-                    if v != c { return false; }
-                }
-                n += 1;
-            }
-            map.len() == n
+            let vec_iter = vec.iter().enumerate().filter(|(_, c)| !c.is_zero());
+            let map_iter = map.iter();
+            vec_iter.zip(map_iter).all(|(v, m)| v.0 == *m.0 && v.1 == m.1)
         }
 
         match self {
