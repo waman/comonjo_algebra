@@ -1,11 +1,10 @@
-use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::{Add, Mul}};
+use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::*};
 
 use num::{traits::{ConstOne, ConstZero}, Num, One, Zero};
 
-use crate::poly::{dense_content::{DenseContent, DenseIter}, spears_content::{SpearsContent, SpearsIter}, term::Term};
+use crate::poly::{const_content::{ConstCoeffsIter, ConstContent, ConstIntoCoeffsIter, ConstIntoNzcIter, ConstNzcIter}, dense_content::{DenseCoeffsIter, DenseContent, DenseIntoCoeffsIter, DenseIntoNzcIter, DenseNzcIter}, spears_content::{SpearsCoeffsIter, SpearsContent, SpearsIntoCoeffsIter, SpearsIntoNzcIter, SpearsNzcIter}, term::Term};
 
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>
-
 pub enum Polynomial<C: Num> {
 
     Zero(),
@@ -20,9 +19,32 @@ pub enum Polynomial<C: Num> {
     Spares(SpearsContent<C>)
 }
 
+#[macro_export]
+macro_rules! dense {
+    // [ $t:ty; $( $x:expr ),* ] => {
+    //     Polynomial::<$t>::dense_from_vec(vec![ $( $x ),* ])
+    // };
+    [ $( $x:expr ),* ] => {
+        Polynomial::dense_from_vec(vec![ $( $x ),* ])
+    };
+    [ $( $x:expr ),+ , ] => {
+        dense![ $( $x ),* ]
+    };
+}
+
+#[macro_export]
+macro_rules! spears {
+    [ $( ($order:expr, $coeff:expr) ),* ] => {
+        Polynomial::spears_from_map(std::collections::BTreeMap::from([ $( ($order, $coeff) ),* ]))
+    };
+    [ $( ($order:expr, $coeff:expr) ),+ , ] => {
+        spears![ $( ($order, $coeff) ),* ]
+    };
+}
+
 impl<C: Num> Polynomial<C> {
 
-    pub fn constant<D: Num>(c: D) -> Polynomial<D> {
+    pub fn constant(c: C) -> Polynomial<C> {
         if c.is_zero() {
             Polynomial::Zero()
         } else {
@@ -30,15 +52,15 @@ impl<C: Num> Polynomial<C> {
         }
     }
 
-    pub fn dense_from_vec<D: Num>(mut coeffs: Vec<D>) -> Polynomial<D>  {
+    pub fn dense_from_vec(mut coeffs: Vec<C>) -> Polynomial<C>  {
 
         while !coeffs.is_empty() && coeffs.last().unwrap().is_zero() {
             coeffs.pop();
         }
 
         match coeffs.len() {
-            0 => Polynomial::<D>::constant(D::zero()),
-            1 => Polynomial::<D>::constant(coeffs.pop().unwrap()),
+            0 => Polynomial::<C>::constant(C::zero()),
+            1 => Polynomial::<C>::constant(coeffs.pop().unwrap()),
             _ => {
                 coeffs.shrink_to_fit();
                 Polynomial::Dense(DenseContent(coeffs))
@@ -46,23 +68,23 @@ impl<C: Num> Polynomial<C> {
         }
     }
 
-    pub fn spears_from_map<D: Num>(mut coeffs: BTreeMap<usize, D>) -> Polynomial<D> {
+    pub fn spears_from_map(mut coeffs: BTreeMap<usize, C>) -> Polynomial<C> {
 
         coeffs.retain(|_, v| !v.is_zero());
 
         match coeffs.len() {
-            0 => Polynomial::<D>::constant(D::zero()),
+            0 => Polynomial::<C>::constant(C::zero()),
             1 => {
                 let mut key = 0_usize;
                 for k in coeffs.keys() { key = *k; }
                 let value = coeffs.remove(&key).unwrap();
-                Polynomial::<D>::constant(value)
+                Polynomial::<C>::constant(value)
             },
             _ => Polynomial::Spares(SpearsContent(coeffs))
         }
     }
 
-    pub fn parse<D: Num>(s: &str) -> Polynomial<D> {
+    pub fn parse(s: &str) -> Polynomial<C> {
     
 //    private[this] val termRe = "([0-9]+\\.[0-9]+|[0-9]+/[0-9]+|[0-9]+)?(?:([a-z])(?:\\^([0-9]+))?)?".r
  
@@ -117,44 +139,6 @@ impl<C: Num> Polynomial<C> {
         todo!()
     }
 
-    pub fn x<D: Num>() -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(1, D::one())]))
-    }
-
-    pub fn two_x<D: Num>() -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(1, D::one() + D::one())]))
-    }
-
-    /// Create a linear polynomial <i>ax</i>.
-    pub fn linear_monomial<D: Num>(a: D) -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(1, a)]))
-    }
-
-    /// Create a linear polynomial <i>ax + b</i>
-    pub fn linear<D: Num>(c1: D, c0: D) -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(1, c1), (0, c0)]))
-    }
-
-    /// Create a quadratic polynomial <i>ax<sup>2</sup><i>
-    pub fn quadratic_monomial<D: Num>(a: D) -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(2, a)]))
-    }
-
-    /// Create a quadratic polynomial <i>ax<sup>2</sup> + bx + c<i>
-    pub fn quadratic<D: Num>(a: D, b: D, c: D) -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(2, a), (1, b), (0, c)]))
-    }
-
-    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
-    pub fn cubic_monomial<D: Num>(a: D) -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(3, a)]))
-    }
-
-    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
-    pub fn cubic<D: Num>(a: D, b: D, c: D, d: D) -> Polynomial<D> {
-        Polynomial::<D>::spears_from_map(BTreeMap::from([(3, a), (2, b), (1, c), (0, d)]))
-    }
-
     //********** METHODS ******
     pub fn is_constant(&self) -> bool {
         match self {
@@ -177,14 +161,9 @@ impl<C: Num> Polynomial<C> {
     pub fn nth(&self, n: usize) -> Option<&C> {
         match self {
             Polynomial::Zero() => None,
-            Polynomial::Constant(const_content) => 
-                if n == 0 && !const_content.0.is_zero() {
-                    Some(&const_content.0)
-                } else {
-                    None
-                },
-            Polynomial::Dense(dense_content) => dense_content.nth(n),
-            Polynomial::Spares(spears_content) => spears_content.nth(n),
+            Polynomial::Constant(cc) => cc.nth(n),
+            Polynomial::Dense(dc) => dc.nth(n),
+            Polynomial::Spares(sc) => sc.nth(n),
         }
     }
      
@@ -221,38 +200,129 @@ impl<C: Num> Polynomial<C> {
         }
     }
 
-
-    // the following methods are used?
-
-    // iterate non zero terms
-    pub fn iter<'a>(&'a self) -> PolyIter<'a, C> {
+    //********** Iteration **********/
+    pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
         match self {
-            Polynomial::Zero() => PolyIter::Zero(),
-            Polynomial::Constant(cc) => cc.iter(),
-            Polynomial::Dense(dc) => dc.iter(),
-            Polynomial::Spares(sc) => sc.iter(),
+            Polynomial::Zero() => CoeffsIter::Zero(),
+            Polynomial::Constant(cc) => cc.coeffs_iter(),
+            Polynomial::Dense(dc) => dc.coeffs_iter(),
+            Polynomial::Spares(sc) => sc.coeffs_iter(),
         }
     }
 
-    // pub fn coeffs(&self) -> Vec<&C> {
+    pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
+        match self {
+            Polynomial::Zero() => IntoCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => cc.into_coeffs_iter(),
+            Polynomial::Dense(dc) => dc.into_coeffs_iter(),
+            Polynomial::Spares(sc) => sc.into_coeffs_iter(),
+        }
+    } 
 
-    // } 
+    // iterate coefficients of non zero terms
+    pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
+        match self {
+            Polynomial::Zero() => NonZeroCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => cc.non_zero_coeffs_iter(),
+            Polynomial::Dense(dc) => dc.non_zero_coeffs_iter(),
+            Polynomial::Spares(sc) => sc.non_zero_coeffs_iter(),
+        }
+    }
 
-    // pub fn data(&self) -> Map<usize, &C> {
+    pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
+        match self {
+            Polynomial::Zero() => IntoNonZeroCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => cc.into_non_zero_coeffs_iter(),
+            Polynomial::Dense(dc) => dc.into_non_zero_coeffs_iter(),
+            Polynomial::Spares(sc) => sc.into_non_zero_coeffs_iter(),
+        }
+    }
 
-    // }
+    // the following methods are used?
+    pub fn max_order_term_coeff(&self) -> Option<&C> {
+        match self {
+            Polynomial::Zero() => None,
+            _ => self.nth(self.degree())
+        }
+    }
 
     pub fn split(&self) -> (Vec<usize>, Vec<&C>) {
         let n = self.degree();
         let mut es = Vec::with_capacity(n);
         let mut cs = Vec::with_capacity(n);
 
-        self.iter().for_each(|(e, c)| {
+        self.non_zero_coeffs_iter().for_each(|(e, c)| {
             es.push(e);
             cs.push(c);
         });
 
         (es, cs)
+    }
+
+    /// Returns a polynomial with the max term removed.
+    pub fn reductum(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.reductum(),
+            Polynomial::Spares(sc) => sc.reductum(),
+            _ => Polynomial::Zero(),
+        }
+    }
+
+    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. `maxOrderTermCoeff`) is 1.
+    pub fn monic(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(_) => Polynomial::one(),
+            Polynomial::Dense(dc) => dc.monic(),
+            Polynomial::Spares(sc) => sc.monic(),
+        }
+    }
+    
+    pub fn derivative(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.derivative(),
+            Polynomial::Spares(sc) => sc.derivative(),
+            _ => Polynomial::Zero(),
+        }
+    }
+
+    //********** Some factory methods **********/
+    pub fn x() -> Polynomial<C> {
+        spears![(1, C::one())]
+    }
+
+    pub fn two_x() -> Polynomial<C> {
+        spears![(1, C::one() + C::one())]
+    }
+
+    /// Create a linear polynomial <i>ax</i>.
+    pub fn linear_monomial(a: C) -> Polynomial<C> {
+        spears![(1, a)]
+    }
+
+    /// Create a linear polynomial <i>ax + b</i>
+    pub fn linear(c1: C, c0: C) -> Polynomial<C> {
+        spears![(1, c1), (0, c0)]
+    }
+
+    /// Create a quadratic polynomial <i>ax<sup>2</sup><i>
+    pub fn quadratic_monomial(a: C) -> Polynomial<C> {
+        spears![(2, a)]
+    }
+
+    /// Create a quadratic polynomial <i>ax<sup>2</sup> + bx + c<i>
+    pub fn quadratic(a: C, b: C, c: C) -> Polynomial<C> {
+        spears![(2, a), (1, b), (0, c)]
+    }
+
+    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
+    pub fn cubic_monomial(a: C) -> Polynomial<C> {
+        spears![(3, a)]
+    }
+
+    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
+    pub fn cubic(a: C, b: C, c: C, d: C) -> Polynomial<C> {
+        spears![(3, a), (2, b), (1, c), (0, d)]
     }
 }
 
@@ -281,7 +351,7 @@ impl<C: Num + Clone> Polynomial<C> {
         match self {
             Polynomial::Dense(dc) => {
                 let mut map = BTreeMap::new();
-                for (i, e) in dc.iter() {
+                for (i, e) in dc.non_zero_coeffs_iter() {
                     map.insert(i, e.clone());  // note e is not zero
                 }
                 Polynomial::<C>::spears_from_map(map)
@@ -291,86 +361,70 @@ impl<C: Num + Clone> Polynomial<C> {
     }
 
     pub fn terms<'a>(&'a self) -> impl Iterator<Item=Term<'a, C>> {
-        self.iter().map(|(e, c)| Term::<C>::from_ref(e, c))
+        self.non_zero_coeffs_iter().map(|(e, c)| Term::<C>::from_ref(e, c))
     }
-}
 
-impl<C: Num + Clone> Clone for Polynomial<C> {
+    pub fn max_term<'a>(&'a self) -> Term<'a, C> {
+        match self.max_order_term_coeff() {
+            Some(c) => Term::<C>::from_ref(self.degree(), c),
+            _ => Term::<C>::from_value(0, C::zero()),
+        }
+    }
 
-    fn clone(&self) -> Self {
+    pub fn min_term<'a>(&'a self) -> Term<'a, C> {
+        match self.terms().next() {
+            Some(t) => t,
+            _ => Term::<C>::from_value(0, C::zero()),
+        }
+    }
+
+    pub fn integral(&self) -> Polynomial<C> {
         match self {
-            Self::Zero() => Self::Zero(),
-            Self::Constant(cc) => Self::Constant(cc.clone()),
-            Self::Dense(dc) => Self::Dense(dc.clone()),
-            Self::Spares(sc) => Self::Spares(sc.clone()),
+            Polynomial::Zero() => Polynomial::ZERO,
+            Polynomial::Constant(cc) => Polynomial::<C>::linear_monomial(cc.0.clone()),
+            Polynomial::Dense(dc) => dc.integral(),
+            Polynomial::Spares(sc) => sc.integral(),
         }
     }
-}
-
-//   /**
-//    * Returns the coefficients in little-endian order. So, the i-th element is coeffsArray(i) * (x ** i).
-//    */
-//   def coeffsArray(implicit ring: Semiring[C]): Array[C]
-
-//   /**
-//    * Returns a map from exponent to coefficient of this polynomial.
-//    */
-//   def data(implicit ring: Semiring[C], eq: Eq[C]): Map[Int, C] = {
-//     val bldr = scala.collection.mutable.Map.newBuilder[Int, C]
-//     foreachNonZero { (e, c) =>
-//       bldr += ((e, c))
-//     }
-//     bldr.result().toMap
-//   }
-
-#[derive(Clone)]
-pub struct ConstContent<C: Num>(C);
-
-impl<C: Num> ConstContent<C> {
-
-    fn iter<'a>(&'a self) -> PolyIter<'a, C> {
-        PolyIter::Constant(ConstIter { is_visited: false, ref_to_const: &self.0 })
-
-    }
-}
-
-pub enum PolyIter<'a, C: Num> {
-    Zero(),
-    Constant(ConstIter<'a, C>),
-    Dense(DenseIter<'a, C>),
-    Spears(SpearsIter<'a, C>),
-}
-
-impl<'a, C: Num> Iterator for PolyIter<'a, C> {
-    type Item = (usize, &'a C);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self {
-            PolyIter::Zero() => None,
-            PolyIter::Constant(cc) => cc.next(),
-            PolyIter::Dense(dc) => dc.next(),
-            PolyIter::Spears(sc) => sc.next(),
-        }
-    }
-}
-
-pub struct ConstIter<'a, C: Num> {
-    is_visited: bool,
-    ref_to_const: &'a C
-}
-
-impl<'a, C: Num> Iterator for ConstIter<'a, C> {
-    type Item = (usize, &'a C);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if self.is_visited {
-            self.is_visited = true;
-            Some((0, self.ref_to_const))
-        } else {
-            None
-        }
-    }
-}
+    //   /**
+    //    * Returns the real roots of this polynomial.
+    //    *
+    //    * Depending on `C`, the `finder` argument may need to be passed "explicitly" via an implicit conversion. This is
+    //    * because some types (eg `BigDecimal`, `Rational`, etc) require an error bound, and so provide implicit conversions
+    //    * to `RootFinder`s from the error type. For instance, `BigDecimal` requires either a scale or MathContext. So, we'd
+    //    * call this method with `poly.roots(MathContext.DECIMAL128)`, which would return a `Roots[BigDecimal` whose roots are
+    //    * approximated to the precision specified in `DECIMAL128` and rounded appropriately.
+    //    *
+    //    * On the other hand, a type like `Double` doesn't require an error bound and so can be called without specifying the
+    //    * `RootFinder`.
+    //    *
+    //    * @param finder
+    //    *   a root finder to extract roots with
+    //    * @return
+    //    *   the real roots of this polynomial
+    //    */
+    //   def roots(implicit finder: RootFinder[C]): Roots[C] =
+    //     finder.findRoots(this)
+    
+    //   /**
+    //    * Evaluate the polynomial at `x`.
+    //    */
+    //   def apply(x: C)(implicit r: Semiring[C]): C
+    
+    //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
+    //     this.map(f).apply(x)
+    
+    //   /**
+    //    * Compose this polynomial with another.
+    //    */
+    //   def compose(y: Polynomial[C])(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
+    //     var polynomial: Polynomial[C] = Polynomial.zero[C]
+    //     foreachNonZero { (e, c) =>
+    //       val z: Polynomial[C] = y.pow(e) :* c
+    //       polynomial = polynomial + z
+    //     }
+    //     polynomial
+    //   }
 
 
     
@@ -390,38 +444,133 @@ impl<'a, C: Num> Iterator for ConstIter<'a, C> {
     //   }
     // }
 
-#[macro_export]
-macro_rules! dense {
-    [ $t:ty; $( $x:expr ),* ] => {
-        Polynomial::<$t>::dense_from_vec(vec![ $( $x ),* ])
-    }
 }
 
-#[macro_export]
-macro_rules! spears {
-    [ $t:ty; $( $x:expr ),* ] => {
-        Polynomial::<$t>::spears_from_map(std::collections::BTreeMap::from([ $( $x ),* ]))
-    }
-}
+impl<C: Num + Clone> Clone for Polynomial<C> {
 
-impl<C: Num> Zero for Polynomial<C> {
-
-    fn zero() -> Self {
-        Polynomial::<C>::ZERO
-    }
-
-    fn is_zero(&self) -> bool {
+    fn clone(&self) -> Self {
         match self {
-            Polynomial::Zero() => true,
-            _ => false,
+            Self::Zero() => Self::Zero(),
+            Self::Constant(cc) => Self::Constant(cc.clone()),
+            Self::Dense(dc) => Self::Dense(dc.clone()),
+            Self::Spares(sc) => Self::Spares(sc.clone()),
+        }
+    }
+}
+ 
+//********** Display and Debug **********
+impl<C: Num + Clone + Display> Display for Polynomial<C> {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+
+        match self {
+            Polynomial::Zero() => f.write_str("(0)"),
+
+            Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
+            
+            _ => {
+                let s: String = self.terms().map(|t|t.to_string()).collect();
+                let first_sign = if s.starts_with(" - ") { "-" } else { "" }; 
+                f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
+            },
+        }
+    }
+}
+ 
+impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Polynomial::Zero() => "Zero",
+            Polynomial::Constant(_) => "Constant",
+            Polynomial::Dense(_) => "Dense",
+            Polynomial::Spares(_) => "Spears",
+        };
+        f.write_fmt(format_args!("Polynomial::<{}>::{}[{}]", std::any::type_name::<C>(), s, self))
+    }
+}
+
+//********** Iterator **********
+pub enum CoeffsIter<'a, C: Num> {
+    Zero(),
+    Constant(ConstCoeffsIter<'a, C>),
+    Dense(DenseCoeffsIter<'a, C>),
+    Spears(SpearsCoeffsIter<'a, C>),
+}
+
+impl<'a, C: Num> Iterator for CoeffsIter<'a, C> {
+    type Item = Option<&'a C>;
+
+    /// <code>next()</code> returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            CoeffsIter::Zero() => None,
+            CoeffsIter::Constant(cc) => cc.next(),
+            CoeffsIter::Dense(dc) => dc.next(),
+            CoeffsIter::Spears(sc) => sc.next(),
         }
     }
 }
 
-impl<C: Num> ConstZero for Polynomial<C> {
-    const ZERO: Self = Polynomial::Zero();
+pub enum IntoCoeffsIter<C: Num> {
+    Zero(),
+    Constant(ConstIntoCoeffsIter<C>),
+    Dense(DenseIntoCoeffsIter<C>),
+    Spears(SpearsIntoCoeffsIter<C>),
 }
 
+impl<'a, C: Num> Iterator for IntoCoeffsIter<C> {
+    type Item = C;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            IntoCoeffsIter::Zero() => None,
+            IntoCoeffsIter::Constant(cc) => cc.next(),
+            IntoCoeffsIter::Dense(dc) => dc.next(),
+            IntoCoeffsIter::Spears(sc) => sc.next(),
+        }
+    }
+}
+pub enum NonZeroCoeffsIter<'a, C: Num> {
+    Zero(),
+    Constant(ConstNzcIter<'a, C>),
+    Dense(DenseNzcIter<'a, C>),
+    Spears(SpearsNzcIter<'a, C>),
+}
+
+impl<'a, C: Num> Iterator for NonZeroCoeffsIter<'a, C> {
+    type Item = (usize, &'a C);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            NonZeroCoeffsIter::Zero() => None,
+            NonZeroCoeffsIter::Constant(cc) => cc.next(),
+            NonZeroCoeffsIter::Dense(dc) => dc.next(),
+            NonZeroCoeffsIter::Spears(sc) => sc.next(),
+        }
+    }
+}
+pub enum IntoNonZeroCoeffsIter<C: Num> {
+    Zero(),
+    Constant(ConstIntoNzcIter<C>),
+    Dense(DenseIntoNzcIter<C>),
+    Spears(SpearsIntoNzcIter<C>),
+}
+
+impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
+    type Item = (usize, C);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            IntoNonZeroCoeffsIter::Zero() => None,
+            IntoNonZeroCoeffsIter::Constant(cc) => cc.next(),
+            IntoNonZeroCoeffsIter::Dense(dc) => dc.next(),
+            IntoNonZeroCoeffsIter::Spears(sc) => sc.next(),
+        }
+    }
+}
+
+//********** Eq, PartialEq, Zero and One **********
 impl<C: Num> PartialEq for Polynomial<C> {
 
     fn eq(&self, other: &Self) -> bool {
@@ -459,6 +608,26 @@ impl<C: Num> PartialEq for Polynomial<C> {
     }
 }
 
+impl<C: Num + Eq> Eq for Polynomial<C> {}
+
+impl<C: Num> Zero for Polynomial<C> {
+
+    fn zero() -> Self {
+        Polynomial::<C>::ZERO
+    }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            Polynomial::Zero() => true,
+            _ => false,
+        }
+    }
+}
+
+impl<C: Num> ConstZero for Polynomial<C> {
+    const ZERO: Self = Polynomial::Zero();
+}
+
 impl<C: Num> One for Polynomial<C> {
 
     fn one() -> Self { 
@@ -478,12 +647,142 @@ impl<C: Num + ConstOne> ConstOne for Polynomial<C> {
     const ONE: Self = Polynomial::Constant(ConstContent(C::ONE));
 }
 
+//********** NumOp **********
+impl<C> Neg for Polynomial<C> where C: Num, for<'a> &'a C: Neg<Output=C>{
+
+    type Output = Polynomial<C>;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Self::Zero() => Polynomial::Zero(),
+            Self::Constant(cc) => Polynomial::Constant(ConstContent(-&cc.0)),  // raw creation
+            Self::Dense(dd) => dd.neg(),
+            Self::Spares(sc) => sc.neg(),
+        }
+    }
+}
+
+/// Return (max, min, first_arg_is_longer)
+fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
+    if x >= y { (x, y, true) } else { (y, x, false) }
+}
+
+
 impl<C: Num> Add for Polynomial<C> {
 
     type Output = Polynomial<C>;
 
-    fn add(self, rhs: Self) -> Self::Output {
-        todo!()
+    fn add(self, other: Self) -> Self::Output {
+        if other.is_zero() { return self; }
+        match self {
+            Self::Zero() => other,
+            Self::Constant(lhs) => match other {
+                Polynomial::Zero() => Polynomial::Constant(lhs),
+                Polynomial::Constant(cc) => Polynomial::<C>::constant(lhs.0 + cc.0),
+                Polynomial::Dense(_) => add_dense(Polynomial::Constant(lhs), other),
+                Polynomial::Spares(spears_content) => todo!(),
+            },
+            Self::Dense(_) => add_dense(self, other),
+            Self::Spares(_) => add_spears(self, other),
+        }
+    }
+}
+
+fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.into_coeffs_iter();
+    let mut rhs_iter = rhs.into_coeffs_iter();
+
+    for _ in 0..d_min {
+        v.push(lhs_iter.next().unwrap() + rhs_iter.next().unwrap());
+    }
+
+    let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
+    v.extend(rest_iter);
+
+    Polynomial::<C>::dense_from_vec(v)
+}
+
+fn add_spears<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+    // let (max, min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+    // let mut map = BTreeMap::new();
+
+    // let mut lhs_iter = lhs.iter_non_zero();
+    // let mut rhs_iter = rhs.iter_non_zero();
+
+    // for i in 0..min {
+    //     match (lhs.nth(i), rhs.nth(i)) {
+    //         (Some(lc), Some(rc)) => map.insert(i, *lc + *rc),
+    //         (Some(lc), None) => map.insert(i, *lc),
+    //         (None, Some(rc)) => map.insert(i, *rc),
+    //         (None, None) => None,
+    //     };
+    // }
+
+    // if min != max {
+    //     for i in (min+1)..max {
+
+    //     }
+    // }
+
+    // Polynomial::<C>::spears_from_map(map)
+    todo!()
+} 
+ 
+//    final private def addSparse[C: Eq: Semiring: ClassTag](lhs: PolySparse[C], rhs: PolySparse[C]): PolySparse[C] = {
+//      val PolySparse(lexp, lcoeff) = lhs
+//      val PolySparse(rexp, rcoeff) = rhs
+ 
+//      val len = countSumTerms(lhs, rhs)
+//      val es = new Array[Int](len)
+//      val cs = new Array[C](len)
+ 
+//      @tailrec
+//      def sum(i: Int, j: Int, k: Int): PolySparse[C] =
+//        if (i < lexp.length && j < rexp.length) {
+//          val ei = lexp(i)
+//          val ej = rexp(j)
+//          if (ei == ej) {
+//            es(k) = ei
+//            cs(k) = lcoeff(i) + rcoeff(j)
+//            sum(i + 1, j + 1, k + 1)
+//          } else if (ei < ej) {
+//            es(k) = ei
+//            cs(k) = lcoeff(i)
+//            sum(i + 1, j, k + 1)
+//          } else {
+//            es(k) = ej
+//            cs(k) = rcoeff(j)
+//            sum(i, j + 1, k + 1)
+//          }
+//        } else {
+//          var k0 = k
+//          cfor(i)(_ < lexp.length, _ + 1) { i0 =>
+//            es(k0) = lexp(i0)
+//            cs(k0) = lcoeff(i0)
+//            k0 += 1
+//          }
+//          cfor(j)(_ < rexp.length, _ + 1) { j0 =>
+//            es(k0) = rexp(j0)
+//            cs(k0) = rcoeff(j0)
+//            k0 += 1
+//          }
+//          PolySparse.safe(es, cs)
+//        }
+ 
+//      sum(0, 0, 0)
+//    }
+
+impl<C: Num + Neg<Output=C>> Sub for Polynomial<C>
+        where C: Num, for<'a> &'a C: Neg<Output=C>{
+
+    type Output = Polynomial<C>;
+
+    fn sub(self, rhs: Self) -> Self::Output {
+        self + (-rhs)
     }
 }
 
@@ -491,131 +790,56 @@ impl<C: Num> Mul for Polynomial<C> {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, rhs: Self) -> Self::Output {
+    fn mul(self, other: Self) -> Self::Output {
         todo!()
     }
 }
- 
-impl<C: Num + Clone + Display> Display for Polynomial<C> {
 
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+impl<C: Num> Div for Polynomial<C> {
 
-        match self {
-            Polynomial::Zero() => f.write_str("(0)"),
+    type Output = Polynomial<C>;
 
-            Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
-            
-            _ => {
-                let s: String = self.terms().map(|t|t.to_string()).collect();
-                let first_sign = if s.starts_with(" - ") { "-" } else { "" }; 
-                f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
-            },
-        }
-    }
-}
- 
-impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
-
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Polynomial::Zero() => "Zero",
-            Polynomial::Constant(_) => "Constant",
-            Polynomial::Dense(_) => "Dense",
-            Polynomial::Spares(_) => "Spears",
-        };
-        f.write_fmt(format_args!("Polynomial::{}[{}]", s, self))
+    fn div(self, other: Self) -> Self::Output {
+        todo!()
     }
 }
 
+impl<C: Num> Rem for Polynomial<C> {
 
+    type Output = Polynomial<C>;
 
-//   /**
-//    * Returns the real roots of this polynomial.
-//    *
-//    * Depending on `C`, the `finder` argument may need to be passed "explicitly" via an implicit conversion. This is
-//    * because some types (eg `BigDecimal`, `Rational`, etc) require an error bound, and so provide implicit conversions
-//    * to `RootFinder`s from the error type. For instance, `BigDecimal` requires either a scale or MathContext. So, we'd
-//    * call this method with `poly.roots(MathContext.DECIMAL128)`, which would return a `Roots[BigDecimal` whose roots are
-//    * approximated to the precision specified in `DECIMAL128` and rounded appropriately.
-//    *
-//    * On the other hand, a type like `Double` doesn't require an error bound and so can be called without specifying the
-//    * `RootFinder`.
-//    *
-//    * @param finder
-//    *   a root finder to extract roots with
-//    * @return
-//    *   the real roots of this polynomial
-//    */
-//   def roots(implicit finder: RootFinder[C]): Roots[C] =
-//     finder.findRoots(this)
+    fn rem(self, other: Self) -> Self::Output {
+        todo!()
+    }
+}
 
-//   /**
-//    * Returns the coefficient of the n-th degree term.
-//    */
-//   def nth(n: Int)(implicit ring: Semiring[C]): C
+//   def unary_-(implicit ring: Rng[C]): Polynomial[C]
+//   def +(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
+//   def -(rhs: Polynomial[C])(implicit ring: Rng[C], eq: Eq[C]): Polynomial[C] = lhs + (-rhs)
+//   def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
 
-//   /**
-//    * Returns the term of the highest degree in this polynomial.
-//    */
-//   def maxTerm(implicit ring: Semiring[C]): Term[C] = Term(maxOrderTermCoeff, degree)
+//   def **(k: Int)(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = pow(k)
 
-//   /**
-//    * Returns the non-zero term of the minimum degree in this polynomial, unless it is zero. If this polynomial is zero,
-//    * then this returns a zero term.
-//    */
-//   @nowarn
-//   def minTerm(implicit ring: Semiring[C], eq: Eq[C]): Term[C] = {
-//     foreachNonZero { (n, c) =>
-//       return Term(c, n)
+//   def pow(k: Int)(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
+//     def loop(b: Polynomial[C], k: Int, extra: Polynomial[C]): Polynomial[C] =
+//       if (k == 1)
+//         b * extra
+//       else
+//         loop(b * b, k >>> 1, if ((k & 1) == 1) b * extra else extra)
+
+//     if (k < 0) {
+//       throw new IllegalArgumentException("negative exponent")
+//     } else if (k == 0) {
+//       Polynomial.one[C]
+//     } else if (k == 1) {
+//       this
+//     } else {
+//       loop(this, k - 1, this)
 //     }
-//     Term(ring.zero, 0)
 //   }
 
-//   /**
-//    * Returns `true` iff this polynomial is constant.
-//    */
-//   def isConstant: Boolean =
-//     degree == 0
 
-//   /**
-//    * Returns the degree of this polynomial.
-//    */
-//   def degree: Int
 
-//   /**
-//    * Returns the coefficient of max term of this polynomial.
-//    */
-//   def maxOrderTermCoeff(implicit ring: Semiring[C]): C
-
-//   /**
-//    * Returns a polynomial with the max term removed.
-//    */
-//   def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C]
-
-//   /**
-//    * Returns `true` if this polynomial is `ring.zero`.
-//    */
-//   def isZero: Boolean
-
-//   /**
-//    * Evaluate the polynomial at `x`.
-//    */
-//   def apply(x: C)(implicit r: Semiring[C]): C
-
-//   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
-//     this.map(f).apply(x)
-
-//   /**
-//    * Compose this polynomial with another.
-//    */
-//   def compose(y: Polynomial[C])(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
-//     var polynomial: Polynomial[C] = Polynomial.zero[C]
-//     foreachNonZero { (e, c) =>
-//       val z: Polynomial[C] = y.pow(e) :* c
-//       polynomial = polynomial + z
-//     }
-//     polynomial
-//   }
 
 //   /**
 //    * Shift this polynomial along the x-axis by `h`, so that `this(x + h) == this.shift(h).apply(x)`. This is equivalent
@@ -673,14 +897,6 @@ impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
 //   }
 
 //   /**
-//    * Returns this polynomial as a monic polynomial, where the leading coefficient (ie. `maxOrderTermCoeff`) is 1.
-//    */
-//   def monic(implicit f: Field[C], eq: Eq[C]): Polynomial[C] = this :/ maxOrderTermCoeff
-
-//   def derivative(implicit ring: Ring[C], eq: Eq[C]): Polynomial[C]
-//   def integral(implicit field: Field[C], eq: Eq[C]): Polynomial[C]
-
-//   /**
 //    * Returns the number of sign variations in the coefficients of this polynomial. Given 2 consecutive terms (ignoring 0
 //    * terms), a sign variation is indicated when the terms have differing signs.
 //    */
@@ -735,31 +951,6 @@ impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
 //     }
 //   }
 
-//   def unary_-(implicit ring: Rng[C]): Polynomial[C]
-//   def +(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
-//   def -(rhs: Polynomial[C])(implicit ring: Rng[C], eq: Eq[C]): Polynomial[C] = lhs + (-rhs)
-//   def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
-
-//   def **(k: Int)(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = pow(k)
-
-//   def pow(k: Int)(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
-//     def loop(b: Polynomial[C], k: Int, extra: Polynomial[C]): Polynomial[C] =
-//       if (k == 1)
-//         b * extra
-//       else
-//         loop(b * b, k >>> 1, if ((k & 1) == 1) b * extra else extra)
-
-//     if (k < 0) {
-//       throw new IllegalArgumentException("negative exponent")
-//     } else if (k == 0) {
-//       Polynomial.one[C]
-//     } else if (k == 1) {
-//       this
-//     } else {
-//       loop(this, k - 1, this)
-//     }
-//   }
-
 //   // VectorSpace ops.
 
 //   def *:(k: C)(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
@@ -802,37 +993,6 @@ impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
 //     case _ =>
 //       false
 //   }
-
-// trait PolynomialOverRig[@sp(Double) C] extends PolynomialOverSemiring[C] with Rig[Polynomial[C]] {
-//   implicit override val scalar: Rig[C]
-
-//   def one: Polynomial[C] = Polynomial.one[C]
-// }
-
-// trait PolynomialOverRng[@sp(Double) C] extends PolynomialOverSemiring[C] with Rng[Polynomial[C]] {
-//   implicit override val scalar: Rng[C]
-
-//   def timesl(r: C, v: Polynomial[C]): Polynomial[C] = r *: v
-//   def negate(x: Polynomial[C]): Polynomial[C] = -x
-// }
-
-// // we skip the CSemiring, CRng, CRig instances
-
-// trait PolynomialOverCRing[@sp(Double) C]
-//     extends CRing[Polynomial[C]]
-//     with PolynomialOverRing[C]
-//     with RingAssociativeAlgebra[Polynomial[C], C] {
-//   implicit override val scalar: CRing[C]
-// }
-
-// trait PolynomialOverField[@sp(Double) C]
-//     extends PolynomialOverRing[C]
-//     with EuclideanRing[Polynomial[C]]
-//     with VectorSpace[Polynomial[C], C]
-//     with FieldAssociativeAlgebra[Polynomial[C], C] { self =>
-//   implicit override val scalar: Field[C]
-
-//   override def divr(x: Polynomial[C], k: C): Polynomial[C] = x :/ k
 
 //   def euclideanFunction(x: Polynomial[C]): BigInt = x.degree
 //   def equot(x: Polynomial[C], y: Polynomial[C]): Polynomial[C] = equotmod(x, y)._1
