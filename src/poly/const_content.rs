@@ -42,10 +42,10 @@ impl<'a, C: Num> Iterator for ConstCoeffsIter<'a, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_visited {
+            None
+        } else {
             self.is_visited = true;
             Some(Some(self.ref_to_value))
-        } else {
-            None
         }
     }
 }
@@ -60,10 +60,10 @@ impl<C: Num> Iterator for ConstIntoCoeffsIter<C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_visited {
+            None
+        } else {
             self.is_visited = true;
             Some(self.value.take().unwrap())
-        } else {
-            None
         }
     }
 }
@@ -78,10 +78,10 @@ impl<'a, C: Num> Iterator for ConstNzcIter<'a, C> {
 
     fn next(&mut self) -> Option<Self::Item> {
         if self.is_visited {
+            None
+        } else {
             self.is_visited = true;
             Some((0, self.ref_to_value))
-        } else {
-            None
         }
     }
 }

@@ -76,11 +76,8 @@ fn test_display_for_rational_and_complex(){
 
     // complex
     fn c(re: f64, im: f64) -> Complex<f64> { Complex { re, im } }
-    let p_complex1 = dense![c(1., 2.), c(3., 4.), c(5., 6.)];
-    assert_eq!(format!("{}", p_complex1), "1+2i + (3+4i)x + (5+6i)x²");
-
-    // let p_complex2 = dense![c(1., 2.), c(3., 4.), c(5., 6.)];
-    // assert_eq!(format!("{}", p_complex2), "1+2i + (3+4i)x + (5+6i)x²");
+    let p_complex = dense![c(1., 2.), c(3., 4.), c(5., 6.)];
+    assert_eq!(format!("{}", p_complex), "1+2i + (3+4i)x + (5+6i)x²");
 }
 
 #[test]
@@ -135,16 +132,16 @@ fn test_degree_zero_one_constant(){
         (dense![1, 2, 3, 0, 0],      2, false, false, false),
 
         // spears!
-        // (spears![],                  0, true,  false, true),  // zero & const
-        // (spears![(0, 0), (2, 0)],    0, true,  false, true),  // zero & const
-        // (spears![(0, 1)],            0, false, true,  true),  // const
-        // (spears![(0, -1)],           0, false, false, true),  // const
-        // (spears![(0, 2)],            0, false, false, true),  // const
+        (spears![],                  0, true,  false, true),  // zero & const
+        (spears![(0, 0), (2, 0)],    0, true,  false, true),  // zero & const
+        (spears![(0, 1)],            0, false, true,  true),  // const
+        (spears![(0, -1)],           0, false, false, true),  // const
+        (spears![(0, 2)],            0, false, false, true),  // const
 
-        // (spears![(0, 1), (1, 2), (2, 3)],                  2, false, false, false),
-        // (spears![(0, -1), (1, -2), (2, -3)],               2, false, false, false),
-        // (spears![(0, 0), (1, 2), (2, 3)],                  2, false, false, false),
-        // (spears![(0, 1), (1, 2), (2, 3), (5, 0), (10, 0)], 2, false, false, false),
+        (spears![(0, 1), (1, 2), (2, 3)],                  2, false, false, false),
+        (spears![(0, -1), (1, -2), (2, -3)],               2, false, false, false),
+        (spears![(0, 0), (1, 2), (2, 3)],                  2, false, false, false),
+        (spears![(0, 1), (1, 2), (2, 3), (5, 0), (10, 0)], 2, false, false, false),
     ];
 
     for entry in table {
@@ -152,53 +149,98 @@ fn test_degree_zero_one_constant(){
     }
 }
 
-// #[test]
-// fn test_eq(){
-//     let p0 = dense![1, 0, 2, 4, 0, 0, 1];
-//     let p1 = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
-//     assert_eq!(p0, p1);
-// }
+#[test]
+fn test_eq(){
+    let p0 = dense![1, 0, 2, 4, 0, 0, 1];
+    let p1 = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
+    assert_eq!(p0, p1);
+}
 
-// #[test]
-// fn test_clone_category_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() and to_spears()
-//     // 1 + 2x² + 4x³ + x⁶
-//     let pd = dense![1, 0, 2, 4, 0, 0, 1];
-//     let ps = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
-//     assert_eq!(pd, ps);
+#[test]
+fn test_clone_category_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() and to_spears()
+    // 1 + 2x² + 4x³ + x⁶
+    let pd = dense![1, 0, 2, 4, 0, 0, 1];
+    let ps = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
+    assert_eq!(pd, ps);
 
-//     // dense_clone()
-//     let p1 = pd.dense_clone();
-//     assert_eq!(p1, pd);
-//     assert_eq!(p1, ps);
+    // dense_clone()
+    let p1 = pd.dense_clone();
+    assert_eq!(p1, pd);
+    assert_eq!(p1, ps);
 
-//     let p2 = ps.dense_clone();
-//     assert_eq!(p2, pd);
-//     assert_eq!(p2, ps);
+    let p2 = ps.dense_clone();
+    assert_eq!(p2, pd);
+    assert_eq!(p2, ps);
 
-//     // spears_clone()
-//     let p3 = pd.spears_clone();
-//     assert_eq!(p3, pd);
-//     assert_eq!(p3, ps);
+    // spears_clone()
+    let p3 = pd.spears_clone();
+    assert_eq!(p3, pd);
+    assert_eq!(p3, ps);
 
-//     let p4 = ps.spears_clone();
-//     assert_eq!(p4, pd);
-//     assert_eq!(p4, ps);
+    let p4 = ps.spears_clone();
+    assert_eq!(p4, pd);
+    assert_eq!(p4, ps);
 
-//     // to_dense()
-//     let p5 = pd.clone().to_dense();
-//     assert_eq!(p5, pd);
-//     assert_eq!(p5, ps);
+    // to_dense()
+    let p5 = pd.clone().to_dense();
+    assert_eq!(p5, pd);
+    assert_eq!(p5, ps);
 
-//     let p6 = ps.clone().to_dense();
-//     assert_eq!(p6, pd);
-//     assert_eq!(p6, ps);
+    let p6 = ps.clone().to_dense();
+    assert_eq!(p6, pd);
+    assert_eq!(p6, ps);
 
-//     // to_spears()
-//     let p7 = pd.clone().to_spears();
-//     assert_eq!(p7, pd);
-//     assert_eq!(p7, ps);
+    // to_spears()
+    let p7 = pd.clone().to_spears();
+    assert_eq!(p7, pd);
+    assert_eq!(p7, ps);
 
-//     let p8 = ps.clone().to_spears();
-//     assert_eq!(p8, pd);
-//     assert_eq!(p8, ps);
-// }
+    let p8 = ps.clone().to_spears();
+    assert_eq!(p8, pd);
+    assert_eq!(p8, ps);
+}
+
+
+
+#[test]
+fn test_add(){
+    fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
+        assert_eq!(x + y, exp);
+    }
+
+    let table = [
+        (Polynomial::<i64>::zero(), Polynomial::<i64>::zero(),       Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::zero(), Polynomial::<i64>::one(),        Polynomial::<i64>::one()),
+        (Polynomial::<i64>::zero(), Polynomial::constant(3),         Polynomial::constant(3)),
+        (Polynomial::<i64>::zero(), dense![1, 2, 3],                 dense![1, 2, 3]),
+        (Polynomial::<i64>::zero(), spears![(0, 1), (2, 3), (4, 5)], dense![1, 0, 3, 0, 5]),
+        
+        (Polynomial::<i64>::one(), Polynomial::<i64>::zero(),       Polynomial::<i64>::one()),
+        (Polynomial::<i64>::one(), Polynomial::<i64>::one(),        Polynomial::constant(2)),
+        (Polynomial::<i64>::one(), Polynomial::constant(3),         Polynomial::constant(4)),
+        (Polynomial::<i64>::one(), dense![1, 2, 3],                 dense![2, 2, 3]),
+        (Polynomial::<i64>::one(), spears![(0, 1), (2, 3), (4, 5)], dense![2, 0, 3, 0, 5]),
+        
+        (Polynomial::constant(5), Polynomial::<i64>::zero(),       Polynomial::constant(5)),
+        (Polynomial::constant(5), Polynomial::<i64>::one(),        Polynomial::constant(6)),
+        (Polynomial::constant(5), Polynomial::constant(3),         Polynomial::constant(8)),
+        (Polynomial::constant(5), dense![1, 2, 3],                 dense![6, 2, 3]),
+        (Polynomial::constant(5), spears![(0, 1), (2, 3), (4, 5)], dense![6, 0, 3, 0, 5]),
+        
+        (dense![4, 5, 0, 6, 7], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
+        (dense![4, 5, 0, 6, 7], Polynomial::<i64>::one(),        dense![5, 5, 0, 6, 7]),
+        (dense![4, 5, 0, 6, 7], Polynomial::constant(3),         dense![7, 5, 0, 6, 7]),
+        (dense![4, 5, 0, 6, 7], dense![1, 2, 3],                 dense![5, 7, 3, 6, 7]),
+        (dense![4, 5, 0, 6, 7], spears![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
+        
+        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
+        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::one(),        dense![5, 5, 0, 6, 7]),
+        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::constant(3),         dense![7, 5, 0, 6, 7]),
+        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], dense![1, 2, 3],                 dense![5, 7, 3, 6, 7]),
+        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], spears![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}

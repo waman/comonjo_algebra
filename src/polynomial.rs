@@ -151,10 +151,9 @@ impl<C: Num> Polynomial<C> {
 
     pub fn degree(&self) -> usize {
         match self {
-            Polynomial::Zero() => 0,
-            Polynomial::Constant(_) => 0,
             Polynomial::Dense(dc) => dc.degree(),
             Polynomial::Spares(sc) => sc.degree(),
+            _ => 0,
         }
     }
 
@@ -662,12 +661,6 @@ impl<C> Neg for Polynomial<C> where C: Num, for<'a> &'a C: Neg<Output=C>{
     }
 }
 
-/// Return (max, min, first_arg_is_longer)
-fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
-    if x >= y { (x, y, true) } else { (y, x, false) }
-}
-
-
 impl<C: Num> Add for Polynomial<C> {
 
     type Output = Polynomial<C>;
@@ -676,11 +669,17 @@ impl<C: Num> Add for Polynomial<C> {
         if other.is_zero() { return self; }
         match self {
             Self::Zero() => other,
-            Self::Constant(lhs) => match other {
-                Polynomial::Zero() => Polynomial::Constant(lhs),
-                Polynomial::Constant(cc) => Polynomial::<C>::constant(lhs.0 + cc.0),
-                Polynomial::Dense(_) => add_dense(Polynomial::Constant(lhs), other),
-                Polynomial::Spares(spears_content) => todo!(),
+            Self::Constant(_) => match other {
+                Polynomial::Zero() => self,
+                Polynomial::Constant(rhs) => {
+                    if let Polynomial::Constant(lhs) = self {
+                        Polynomial::constant(lhs.0 + rhs.0)
+                    } else {
+                        panic!()
+                    }
+                }
+                Polynomial::Dense(_) => add_dense(self, other),
+                Polynomial::Spares(_) => add_spears(self, other),
             },
             Self::Dense(_) => add_dense(self, other),
             Self::Spares(_) => add_spears(self, other),
@@ -689,6 +688,11 @@ impl<C: Num> Add for Polynomial<C> {
 }
 
 fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+    /// Return (max, min, first_arg_is_longer)
+    fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
+        if x >= y { (x, y, true) } else { (y, x, false) }
+    }
+
     let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
 
     let mut v: Vec<C> = Vec::with_capacity(d_max);
@@ -696,41 +700,82 @@ fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
     let mut lhs_iter = lhs.into_coeffs_iter();
     let mut rhs_iter = rhs.into_coeffs_iter();
 
-    for _ in 0..d_min {
+    for _ in 0..=d_min {
         v.push(lhs_iter.next().unwrap() + rhs_iter.next().unwrap());
     }
 
     let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
     v.extend(rest_iter);
 
-    Polynomial::<C>::dense_from_vec(v)
+    Polynomial::dense_from_vec(v)
 }
 
 fn add_spears<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
-    // let (max, min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
-    // let mut map = BTreeMap::new();
+    let mut map = BTreeMap::new();
 
-    // let mut lhs_iter = lhs.iter_non_zero();
-    // let mut rhs_iter = rhs.iter_non_zero();
+    let mut lhs_iter = lhs.into_non_zero_coeffs_iter();
+    let mut rhs_iter = rhs.into_non_zero_coeffs_iter();
 
-    // for i in 0..min {
-    //     match (lhs.nth(i), rhs.nth(i)) {
-    //         (Some(lc), Some(rc)) => map.insert(i, *lc + *rc),
-    //         (Some(lc), None) => map.insert(i, *lc),
-    //         (None, Some(rc)) => map.insert(i, *rc),
-    //         (None, None) => None,
-    //     };
-    // }
+    let mut x_next = lhs_iter.next();
+    let mut y_next = rhs_iter.next();
 
-    // if min != max {
-    //     for i in (min+1)..max {
+    loop {
+        let x = x_next.unwrap();
+        let y = y_next.unwrap();
 
-    //     }
-    // }
+        if x.0 == y.0 {
+            map.insert(x.0, x.1 + y.1);
 
-    // Polynomial::<C>::spears_from_map(map)
-    todo!()
+            x_next = lhs_iter.next();
+            y_next = rhs_iter.next();
+            if x_next.is_none() || y_next.is_none() { break; }
+
+        } else if x.0 < y.0 {
+            map.insert(x.0, x.1);
+
+            x_next = lhs_iter.next();
+            y_next = Some(y);
+            if x_next.is_none() { break; }
+
+        } else {  // x.0 > y.0
+            map.insert(y.0, y.1);
+            
+            x_next = Some(x);
+            y_next = rhs_iter.next();
+            if y_next.is_none() { break; }
+        }
+    }
+
+    if let Some(x) = x_next {
+        map.insert(x.0, x.1);
+        map.extend(lhs_iter);
+    } else if let Some(y) = y_next {
+        map.insert(y.0, y.1);
+        map.extend(rhs_iter);
+    }
+
+    Polynomial::spears_from_map(map)
 } 
+
+// impl<'a, C: Num + Clone> Add for &'a Polynomial<C> {
+
+//     type Output = Polynomial<C>;
+
+//     fn add(self, other: Self) -> Self::Output {
+//         if other.is_zero() { return self.clone(); }
+//         match self {
+//             Polynomial::Zero() => other.clone(),
+//             Polynomial::Constant(lhs) => match other {
+//                 Polynomial::Zero() => Polynomial::Constant(lhs.clone()),
+//                 Polynomial::Constant(rhs) => Polynomial::constant(lhs.0 + rhs.0),
+//                 Polynomial::Dense(_) => add_dense_ref(Polynomial::Constant(lhs), other),
+//                 Polynomial::Spares(_) => add_spears_ref(Polynomial::Constant(lhs), other),
+//             },
+//             Polynomial::Dense(_) => add_dense_ref(self, other),
+//             Polynomial::Spares(_) => add_spears_ref(self, other),
+//         }
+//     }
+// }
  
 //    final private def addSparse[C: Eq: Semiring: ClassTag](lhs: PolySparse[C], rhs: PolySparse[C]): PolySparse[C] = {
 //      val PolySparse(lexp, lcoeff) = lhs
