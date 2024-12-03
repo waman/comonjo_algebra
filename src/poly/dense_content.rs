@@ -50,10 +50,18 @@ impl<C: Num> DenseContent<C> {
     }
 }
 
-impl<C> DenseContent<C> where C: Num, for<'a> &'a C: Neg<Output=C>{
+impl<C> DenseContent<C> where C: Num + Neg<Output=C>{
 
-    pub fn neg(&self) -> Polynomial<C> {
-        let v: Vec<C> = self.0.iter().map(|e|-e).collect();
+    pub fn neg(self) -> Polynomial<C> {
+        let v: Vec<C> = self.0.into_iter().map(|e|-e).collect();
+        Polynomial::Dense(DenseContent(v))
+    }
+}
+
+impl<C> DenseContent<C> where C: Num + Clone + Neg<Output=C> {
+
+    pub fn neg_ref(&self) -> Polynomial<C> {
+        let v: Vec<C> = self.0.iter().map(|e|-e.clone()).collect();
         Polynomial::Dense(DenseContent(v))
     }
 }

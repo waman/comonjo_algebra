@@ -647,16 +647,30 @@ impl<C: Num + ConstOne> ConstOne for Polynomial<C> {
 }
 
 //********** NumOp **********
-impl<C> Neg for Polynomial<C> where C: Num, for<'a> &'a C: Neg<Output=C>{
+impl<C> Neg for Polynomial<C> where C: Num + Neg<Output=C>{
 
     type Output = Polynomial<C>;
 
     fn neg(self) -> Self::Output {
         match self {
             Self::Zero() => Polynomial::Zero(),
-            Self::Constant(cc) => Polynomial::Constant(ConstContent(-&cc.0)),  // raw creation
+            Self::Constant(cc) => cc.neg(),
             Self::Dense(dd) => dd.neg(),
             Self::Spares(sc) => sc.neg(),
+        }
+    }
+}
+
+impl<'a, C> Neg for &'a Polynomial<C> where C: Num + Clone + Neg<Output=C> {
+
+    type Output = Polynomial<C>;
+
+    fn neg(self) -> Self::Output {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => cc.neg_ref(),
+            Polynomial::Dense(dd) => dd.neg_ref(),
+            Polynomial::Spares(sc) => sc.neg_ref(),
         }
     }
 }

@@ -49,10 +49,18 @@ impl<C: Num> SpearsContent<C> {
     }
 }
 
-impl<C> SpearsContent<C> where C: Num, for<'a> &'a C: Neg<Output=C>{
+impl<C> SpearsContent<C> where C: Num + Neg<Output=C>{
 
-    pub fn neg(&self) -> Polynomial<C> {
-        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, -e)).collect();
+    pub fn neg(self) -> Polynomial<C> {
+        let map: BTreeMap<usize, C> = self.0.into_iter().map(|(i, e)|(i, -e)).collect();
+        Polynomial::Spares(SpearsContent(map))
+    }
+}
+
+impl<C> SpearsContent<C> where C: Num + Clone + Neg<Output=C> {
+
+    pub fn neg_ref(&self) -> Polynomial<C> {
+        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, -e.clone())).collect();
         Polynomial::Spares(SpearsContent(map))
     }
 }

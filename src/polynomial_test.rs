@@ -157,7 +157,7 @@ fn test_eq(){
 }
 
 #[test]
-fn test_clone_category_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() and to_spears()
+fn test_clone_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() and to_spears()
     // 1 + 2x² + 4x³ + x⁶
     let pd = dense![1, 0, 2, 4, 0, 0, 1];
     let ps = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
@@ -200,6 +200,25 @@ fn test_clone_category_methods(){  // clone(), dense_clone(), spears_clone(), to
     assert_eq!(p8, ps);
 }
 
+#[test]
+fn test_neg(){
+    fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
+        assert_eq!(-&x, exp.clone());
+        assert_eq!(-x, exp);
+    }
+
+    let table = [
+        (Polynomial::<i64>::zero(), Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::one(), Polynomial::constant(-1)),
+        (Polynomial::constant(5), Polynomial::constant(-5)),
+        (dense![4, 5, 0, 6, 7], dense![-4, -5, 0, -6, -7]),
+        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], dense![-4, -5, 0, -6, -7]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
 
 
 #[test]

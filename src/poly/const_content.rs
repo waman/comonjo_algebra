@@ -1,6 +1,8 @@
+use std::ops::Neg;
+
 use num::Num;
 
-use crate::polynomial::{CoeffsIter, IntoCoeffsIter, NonZeroCoeffsIter, IntoNonZeroCoeffsIter};
+use crate::polynomial::{CoeffsIter, IntoCoeffsIter, IntoNonZeroCoeffsIter, NonZeroCoeffsIter, Polynomial};
 
 #[derive(Clone)]
 pub struct ConstContent<C: Num>(pub(crate) C);
@@ -29,6 +31,20 @@ impl<C: Num> ConstContent<C> {
 
     pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
         IntoNonZeroCoeffsIter::Constant(ConstIntoNzcIter(Some(self.0)))
+    }
+}
+
+impl<C> ConstContent<C> where C: Num + Neg<Output=C>{
+
+    pub fn neg(self) -> Polynomial<C> {
+        Polynomial::Constant(ConstContent(-self.0))
+    }
+}
+
+impl<C> ConstContent<C> where C: Num + Clone + Neg<Output=C> {
+
+    pub fn neg_ref(&self) -> Polynomial<C> {
+        Polynomial::Constant(ConstContent(-self.0.clone()))
     }
 }
 
