@@ -18,15 +18,15 @@ impl<C: Num> ConstContent<C> {
     }
 
     pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
-        CoeffsIter::Constant(ConstCoeffsIter { is_visited: false, ref_to_value: &self.0 })
+        CoeffsIter::Constant(ConstCoeffsIter(Some(Some(&self.0))))
     }
 
     pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
-        IntoCoeffsIter::Constant(ConstIntoCoeffsIter { is_visited: false, value: Some(self.0) })
+        IntoCoeffsIter::Constant(ConstIntoCoeffsIter(Some(self.0)))
     }
 
     pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
-        NonZeroCoeffsIter::Constant(ConstNzcIter { is_visited: false, ref_to_value: &self.0 })
+        NonZeroCoeffsIter::Constant(ConstNzcIter(Some(&self.0)))
     }
 
     pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
@@ -48,56 +48,44 @@ impl<C> ConstContent<C> where C: Num + Clone + Neg<Output=C> {
     }
 }
 
-pub struct ConstCoeffsIter<'a, C: Num> {
-    is_visited: bool,
-    ref_to_value: &'a C
-}
+pub struct ConstCoeffsIter<'a, C: Num>(Option<Option<&'a C>>);
 
 impl<'a, C: Num> Iterator for ConstCoeffsIter<'a, C> {
+
     type Item = Option<&'a C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.is_visited {
-            None
-        } else {
-            self.is_visited = true;
-            Some(Some(self.ref_to_value))
+        match self.0.take() {
+            Some(c) => Some(c),
+            None => None,
         }
     }
 }
 
-pub struct ConstIntoCoeffsIter<C: Num> {
-    is_visited: bool,
-    value: Option<C>
-}
+pub struct ConstIntoCoeffsIter<C: Num>(Option<C>);
 
 impl<C: Num> Iterator for ConstIntoCoeffsIter<C> {
+
     type Item = C;
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.is_visited {
-            None
-        } else {
-            self.is_visited = true;
-            Some(self.value.take().unwrap())
+        match self.0.take() {
+            Some(c) => Some(c),
+            None => None,
         }
     }
 }
 
-pub struct ConstNzcIter<'a, C: Num> {
-    is_visited: bool,
-    ref_to_value: &'a C
-}
+pub struct ConstNzcIter<'a, C: Num>(Option<&'a C>);
 
 impl<'a, C: Num> Iterator for ConstNzcIter<'a, C> {
+
     type Item = (usize, &'a C);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.is_visited {
-            None
-        } else {
-            self.is_visited = true;
-            Some((0, self.ref_to_value))
+        match self.0.take() {
+            Some(c) => Some((0, c)),
+            None => None,
         }
     }
 }
@@ -105,13 +93,13 @@ impl<'a, C: Num> Iterator for ConstNzcIter<'a, C> {
 pub struct ConstIntoNzcIter<C: Num>(Option<C>);
 
 impl<C: Num> Iterator for ConstIntoNzcIter<C> {
+
     type Item = (usize, C);
 
     fn next(&mut self) -> Option<Self::Item> {
-        if self.0.is_some() {
-            Some((0, self.0.take().unwrap()))
-        } else {
-            None
+        match self.0.take() {
+            Some(c) => Some((0, c)),
+            None => None,
         }
     }
 }

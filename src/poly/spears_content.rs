@@ -80,23 +80,23 @@ impl<'a, C: Num> SpearsCoeffsIter<'a, C> {
 }
 
 impl<'a, C: Num> Iterator for SpearsCoeffsIter<'a, C> {
+
     type Item = Option<&'a C>;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let result = match self.current {
-            Some(c) => 
-                if *c.0 == self.index { 
-                    let r = Some(c.1);
-                    self.current = self.map_iter.next();
-                    r
-                } else { 
-                    None
-                }
-            _ => None,
-        };
-
-        self.index += 1;
-        Some(result)
+        if let Some(c) = self.current {
+            let result = if *c.0 == self.index { 
+                let r = Some(c.1);
+                self.current = self.map_iter.next();
+                r
+            } else {
+                None
+            };
+            self.index += 1;
+            Some(result)
+        } else {
+            return None;
+        }
     }
 }
 

@@ -71,8 +71,11 @@ pub struct DenseCoeffsIter<'a, C: Num>(Iter<'a, C>);
 impl<'a, C: Num> Iterator for DenseCoeffsIter<'a, C> {
     type Item = Option<&'a C>;
 
-    fn next(&mut self) -> Option<Self::Item> { 
-        Some(self.0.next())
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.0.next() {
+            Some(c) => Some(Some(c)),
+            None => None,
+        } 
     }
 }
 

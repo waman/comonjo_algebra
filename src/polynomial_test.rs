@@ -1,3 +1,5 @@
+use std::collections::HashMap;
+
 use num::{Complex, One, Rational64, Zero};
 
 use crate::{dense, spears, polynomial::Polynomial};
@@ -150,6 +152,45 @@ fn test_degree_zero_one_constant(){
 }
 
 #[test]
+fn test_iter_methods(){
+    fn test(p: Polynomial<i64>, exp: Vec<i64>){
+        let non_zero_exp: HashMap<usize, i64> = exp.clone().into_iter().enumerate().filter(|(_, c)|*c != 0).collect();
+
+        // coeffs_iter()
+        let cs0: Vec<i64> = p.coeffs_iter().map(|c| match c {
+            Some(c) => *c,
+            None => 0,
+        }).collect();
+        assert_eq!(cs0, exp);
+
+        // non_zero_coeffs_iter
+        let cs1: HashMap<usize, i64> = p.non_zero_coeffs_iter().map(|(e, c)|(e, *c)).collect();
+        assert_eq!(cs1, non_zero_exp);
+
+        // into_coeffs_iter()
+        let cs2: Vec<i64> = p.clone().into_coeffs_iter().collect();
+        assert_eq!(cs2, exp);
+
+        // into_non_zero_coeffs_iter()
+        let cs3: HashMap<usize, i64> = p.into_non_zero_coeffs_iter().collect();
+        assert_eq!(cs3, non_zero_exp);
+    }
+
+    let v = vec![1, 2, 0, 3, 0, 4, 0, 0, 5];
+    let table = [
+        (Polynomial::zero(), vec![]),
+        (Polynomial::one(), vec![1]),
+        (Polynomial::constant(5), vec![5]),
+        (Polynomial::dense_from_vec(v.clone()), v.clone()),
+        (spears![(0, 1), (1, 2), (3, 3), (5, 4), (8, 5)], v.clone())
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
 fn test_eq(){
     let p0 = dense![1, 0, 2, 4, 0, 0, 1];
     let p1 = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
@@ -224,6 +265,7 @@ fn test_neg(){
 #[test]
 fn test_add(){
     fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
+        assert_eq!(&x + &y, exp.clone());
         assert_eq!(x + y, exp);
     }
 
@@ -259,7 +301,37 @@ fn test_add(){
         (spears![(0, 4), (1, 5), (3, 6), (4, 7)], spears![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
     ];
 
+    println!("****** start ******");
     for entry in table {
         test(entry.0, entry.1, entry.2);
     }
 }
+
+// #[test]
+// fn test_neg_performance(){
+
+//     fn gen_vec(order: usize, rng: &mut ThreadRng) -> Vec<i64> {
+//         let mut v: Vec<i64> = Vec::with_capacity(order + 1);
+//         for _ in 0..=order {
+//             v.push(rng.gen());
+//         }
+//         v
+//     }
+
+//     let mut rng = rand::thread_rng();
+//     const N: usize = 1000;
+
+//     let vv0: Vec<Vec<i64>> = (0..N).map(move|_| gen_vec(20, &mut rng)).collect();
+//     let ps0: Vec<Polynomial<i64>> = vv0.iter().map(|v|Polynomial::dense_from_vec(v.clone())).collect();
+//     let ps1: Vec<Polynomial<i64>> = vv0.into_iter().map(|v| Polynomial::dense_from_vec(v.into_iter().map(|e|-e).collect())).collect();
+//     let mut ps2 = Vec::with_capacity(N);
+
+//     let now = Instant::now();
+//     for p in ps0 {
+//         ps2.push(-p)
+//     }
+//     let elapsed_time = now.elapsed();
+
+//     ps1.iter().zip(ps2.iter()).for_each(|(p1, p2)| assert_eq!(p1, p2));
+//     println!("Running slow_function() took {} microseconds.", elapsed_time.as_micros());
+// }
