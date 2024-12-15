@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::*};
+use std::{collections::{BTreeMap, btree_map}, fmt::{Debug, Display}, iter::Enumerate, ops::*, slice::Iter};
 
 use num::{traits::{ConstOne, ConstZero}, Num, One, Zero};
 
-use crate::poly::{const_content::{ConstCoeffsIter, ConstContent, ConstIntoCoeffsIter, ConstIntoNzcIter, ConstNzcIter}, dense_content::{DenseCoeffsIter, DenseContent, DenseIntoCoeffsIter, DenseIntoNzcIter, DenseNzcIter}, sparse_content::{SparseCoeffsIter, SparseContent, SparseIntoCoeffsIter, SparseIntoNzcIter, SparseNzcIter}, term::Term};
+use crate::poly::{const_content::ConstContent, dense_content::DenseContent, sparse_content::SparseContent, term::Term};
 
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>
 pub enum Polynomial<C: Num> {
@@ -203,18 +203,24 @@ impl<C: Num> Polynomial<C> {
     pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
         match self {
             Polynomial::Zero() => CoeffsIter::Zero(),
-            Polynomial::Constant(cc) => cc.coeffs_iter(),
-            Polynomial::Dense(dc) => dc.coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.coeffs_iter(),
+            Polynomial::Constant(cc) => CoeffsIter::Constant(Some(Some(&cc.0))),
+            Polynomial::Dense(dc) => CoeffsIter::Dense(dc.0.iter()),
+            Polynomial::Sparse(sc) => {
+                let mut map_iter = sc.0.iter();
+                CoeffsIter::Sparse{ index: 0, current: map_iter.next(), map_iter}
+            },
         }
     }
 
     pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
         match self {
             Polynomial::Zero() => IntoCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => cc.into_coeffs_iter(),
-            Polynomial::Dense(dc) => dc.into_coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.into_coeffs_iter(),
+            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
+            Polynomial::Dense(dc) => IntoCoeffsIter::Dense(dc.0.into_iter()),
+            Polynomial::Sparse(sc) => {
+                let mut map_iter = sc.0.into_iter();
+                IntoCoeffsIter::Sparse { index: 0, current: map_iter.next(), map_iter }
+            },
         }
     } 
 
@@ -222,20 +228,21 @@ impl<C: Num> Polynomial<C> {
     pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
         match self {
             Polynomial::Zero() => NonZeroCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => cc.non_zero_coeffs_iter(),
-            Polynomial::Dense(dc) => dc.non_zero_coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.non_zero_coeffs_iter(),
+            Polynomial::Constant(cc) => NonZeroCoeffsIter::Constant(Some(&cc.0)),
+            Polynomial::Dense(dc) => NonZeroCoeffsIter::Dense(dc.0.iter().enumerate()),
+            Polynomial::Sparse(sc) => NonZeroCoeffsIter::Sparse(sc.0.iter()),
         }
     }
 
     pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
         match self {
             Polynomial::Zero() => IntoNonZeroCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => cc.into_non_zero_coeffs_iter(),
-            Polynomial::Dense(dc) => dc.into_non_zero_coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.into_non_zero_coeffs_iter(),
+            Polynomial::Constant(cc) => IntoNonZeroCoeffsIter::Constant(Some(cc.0)),
+            Polynomial::Dense(dc) => IntoNonZeroCoeffsIter::Dense(dc.0.into_iter().enumerate()),
+            Polynomial::Sparse(sc) => IntoNonZeroCoeffsIter::Sparse(sc.0.into_iter()),
         }
     }
+
 
     // the following methods are used?
     pub fn max_order_term_coeff(&self) -> Option<&C> {
@@ -348,9 +355,9 @@ impl<C: Num + Clone> Polynomial<C> {
     /// Create sparse clone of this polynomial if self is dense, otherwise (zero, constant or sparse) return self.
     pub fn sparse_clone(&self) -> Polynomial<C> {
         match self {
-            Polynomial::Dense(dc) => {
+            d @ Polynomial::Dense(_) => {
                 let mut map = BTreeMap::new();
-                for (i, e) in dc.non_zero_coeffs_iter() {
+                for (i, e) in d.non_zero_coeffs_iter() {
                     map.insert(i, e.clone());  // note e is not zero
                 }
                 Polynomial::<C>::sparse_from_map(map)
@@ -493,29 +500,55 @@ impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
 /// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
 pub enum CoeffsIter<'a, C: Num> {
     Zero(),
-    Constant(ConstCoeffsIter<'a, C>),
-    Dense(DenseCoeffsIter<'a, C>),
-    Sparse(SparseCoeffsIter<'a, C>),
+    Constant(Option<Option<&'a C>>),
+    Dense(Iter<'a, C>),
+    Sparse{
+        index: usize,
+        current: Option<(&'a usize, &'a C)>,
+        map_iter: btree_map::Iter<'a, usize, C>,
+    },
 }
 
 impl<'a, C: Num> Iterator for CoeffsIter<'a, C> {
+
     type Item = Option<&'a C>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             CoeffsIter::Zero() => None,
-            CoeffsIter::Constant(cc) => cc.next(),
-            CoeffsIter::Dense(dc) => dc.next(),
-            CoeffsIter::Sparse(sc) => sc.next(),
+            CoeffsIter::Constant(value) => value.take(),
+            CoeffsIter::Dense(vec_iter) => 
+                match vec_iter.next() {
+                    Some(c) => Some(Some(c)),
+                    None => None,
+                } ,
+            CoeffsIter::Sparse{ index, current, map_iter } => 
+                if let Some(c) = current {
+                    let result = if c.0 == index { 
+                        let r = Some(c.1);
+                        *current = map_iter.next();
+                        r
+                    } else {
+                        None
+                    };
+                    *index += 1;
+                    Some(result)
+                } else {
+                    return None;
+                },
         }
     }
 }
 
 pub enum IntoCoeffsIter<C: Num> {
     Zero(),
-    Constant(ConstIntoCoeffsIter<C>),
-    Dense(DenseIntoCoeffsIter<C>),
-    Sparse(SparseIntoCoeffsIter<C>),
+    Constant(Option<C>),
+    Dense(std::vec::IntoIter<C>),
+    Sparse{
+        index: usize,
+        current: Option<(usize, C)>,
+        map_iter: btree_map::IntoIter<usize, C>
+    },
 }
 
 impl<C: Num> Iterator for IntoCoeffsIter<C> {
@@ -524,17 +557,35 @@ impl<C: Num> Iterator for IntoCoeffsIter<C> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             IntoCoeffsIter::Zero() => None,
-            IntoCoeffsIter::Constant(cc) => cc.next(),
-            IntoCoeffsIter::Dense(dc) => dc.next(),
-            IntoCoeffsIter::Sparse(sc) => sc.next(),
+            IntoCoeffsIter::Constant(value) => value.take(),
+            IntoCoeffsIter::Dense(vec_iter) =>  vec_iter.next(),
+            IntoCoeffsIter::Sparse{ index, current, map_iter } => {
+                let result = match current {
+                    Some(c) => 
+                        if c.0 == *index {
+                            let r = match map_iter.next() {
+                                Some(nxt) => current.replace(nxt),
+                                None => current.take(),
+                            };
+                            Some(r.unwrap().1)
+                        } else { 
+                            Some(C::zero())
+                        }
+                    _ => None,
+                };
+        
+                *index += 1;
+                return result;
+            },
         }
     }
 }
+
 pub enum NonZeroCoeffsIter<'a, C: Num> {
     Zero(),
-    Constant(ConstNzcIter<'a, C>),
-    Dense(DenseNzcIter<'a, C>),
-    Sparse(SparseNzcIter<'a, C>),
+    Constant(Option<&'a C>),
+    Dense(Enumerate<Iter<'a, C>>),
+    Sparse(btree_map::Iter<'a, usize, C>),
 }
 
 impl<'a, C: Num> Iterator for NonZeroCoeffsIter<'a, C> {
@@ -543,41 +594,28 @@ impl<'a, C: Num> Iterator for NonZeroCoeffsIter<'a, C> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             NonZeroCoeffsIter::Zero() => None,
-            NonZeroCoeffsIter::Constant(cc) => cc.next(),
-            NonZeroCoeffsIter::Dense(dc) => dc.next(),
-            NonZeroCoeffsIter::Sparse(sc) => sc.next(),
+            NonZeroCoeffsIter::Constant(value) => 
+                match value.take() {
+                    Some(c) => Some((0, c)),
+                    None => None,
+                },
+            NonZeroCoeffsIter::Dense(vec_iter) => 
+                loop {
+                    match vec_iter.next() {
+                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
+                        None => return None,
+                    }
+                },
+            NonZeroCoeffsIter::Sparse(map_iter) => map_iter.next().map(|(e, c)| (*e, c)),
         }
     }
 }
 
-// macro_rules! impl_into_iterator {
-//     ($iter_ty:ty, $item_ty) => {
-//         pub enum IntoNonZeroCoeffsIter<C: Num> {
-//             Zero(),
-//             Constant(ConstIntoNzcIter<C>),
-//             Dense(DenseIntoNzcIter<C>),
-//             Sparse(SparseIntoNzcIter<C>),
-//         }
-        
-//         impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
-//             type Item = (usize, C);
-        
-//             fn next(&mut self) -> Option<Self::Item> {
-//                 match self {
-//                     IntoNonZeroCoeffsIter::Zero() => None,
-//                     IntoNonZeroCoeffsIter::Constant(cc) => cc.next(),
-//                     IntoNonZeroCoeffsIter::Dense(dc) => dc.next(),
-//                     IntoNonZeroCoeffsIter::Sparse(sc) => sc.next(),
-//                 }
-//             }
-//         }
-//     };
-// }
 pub enum IntoNonZeroCoeffsIter<C: Num> {
     Zero(),
-    Constant(ConstIntoNzcIter<C>),
-    Dense(DenseIntoNzcIter<C>),
-    Sparse(SparseIntoNzcIter<C>),
+    Constant(Option<C>),
+    Dense(Enumerate<std::vec::IntoIter<C>>),
+    Sparse(btree_map::IntoIter<usize, C>),
 }
 
 impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
@@ -586,9 +624,19 @@ impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             IntoNonZeroCoeffsIter::Zero() => None,
-            IntoNonZeroCoeffsIter::Constant(cc) => cc.next(),
-            IntoNonZeroCoeffsIter::Dense(dc) => dc.next(),
-            IntoNonZeroCoeffsIter::Sparse(sc) => sc.next(),
+            IntoNonZeroCoeffsIter::Constant(value) => 
+                match value.take() {
+                    Some(c) => Some((0, c)),
+                    None => None,
+                },
+            IntoNonZeroCoeffsIter::Dense(vec_iter) => 
+                loop {
+                    match vec_iter.next() {
+                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
+                        None => return None,
+                    }
+                },
+            IntoNonZeroCoeffsIter::Sparse(map_iter) => map_iter.next(),
         }
     }
 }

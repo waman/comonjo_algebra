@@ -1,8 +1,8 @@
-use std::{iter::Enumerate, ops::Neg, slice::Iter};
+use std::ops::Neg;
 
 use num::Num;
 
-use crate::polynomial::{CoeffsIter, IntoCoeffsIter, NonZeroCoeffsIter, IntoNonZeroCoeffsIter, Polynomial};
+use crate::polynomial::Polynomial;
 
 #[derive(Clone)]
 pub struct DenseContent<C: Num>(pub(crate) Vec<C>);
@@ -15,22 +15,6 @@ impl<C: Num> DenseContent<C> {
 
     pub fn nth(&self, n: usize) -> Option<&C> {
         self.0.get(n)
-    }
-
-    pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
-        CoeffsIter::Dense(DenseCoeffsIter(self.0.iter()))
-    }
-
-    pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
-        IntoCoeffsIter::Dense(DenseIntoCoeffsIter(self.0.into_iter()))
-    }
-
-    pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
-        NonZeroCoeffsIter::Dense(DenseNzcIter(self.0.iter().enumerate()))
-    }
-
-    pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
-        IntoNonZeroCoeffsIter::Dense(DenseIntoNzcIter(self.0.into_iter().enumerate()))
     }
 
     pub fn reductum(&self) -> Polynomial<C> {
@@ -66,58 +50,6 @@ impl<C> DenseContent<C> where C: Num + Clone + Neg<Output=C> {
     }
 }
 
-pub struct DenseCoeffsIter<'a, C: Num>(Iter<'a, C>);
-
-impl<'a, C: Num> Iterator for DenseCoeffsIter<'a, C> {
-    type Item = Option<&'a C>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some(c) => Some(Some(c)),
-            None => None,
-        } 
-    }
-}
-
-pub struct DenseIntoCoeffsIter<C: Num>(std::vec::IntoIter<C>);
-
-impl<C: Num> Iterator for DenseIntoCoeffsIter<C> {
-    type Item = C;
-
-    fn next(&mut self) -> Option<Self::Item> { 
-        self.0.next()
-    }
-}
-
-pub struct DenseNzcIter<'a, C: Num>(Enumerate<Iter<'a, C>>);
-
-impl<'a, C: Num> Iterator for DenseNzcIter<'a, C> {
-    type Item = (usize, &'a C);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.0.next() {
-                Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
-                None => return None,
-            }
-        }
-    }
-}
-
-pub struct DenseIntoNzcIter<C: Num>(Enumerate<std::vec::IntoIter<C>>);
-
-impl<C: Num> Iterator for DenseIntoNzcIter<C> {
-    type Item = (usize, C);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.0.next() {
-                Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
-                None => return None,
-            }
-        }
-    }
-}
 
 
 // def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C] = {
