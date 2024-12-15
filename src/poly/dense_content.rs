@@ -51,6 +51,122 @@ impl<C> DenseContent<C> where C: Num + Clone + Neg<Output=C> {
 }
 
 
+/// Return (max, min, first_arg_is_longer)
+fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
+    if x >= y { (x, y, true) } else { (y, x, false) }
+}
+
+pub(crate) fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.into_coeffs_iter();
+    let mut rhs_iter = rhs.into_coeffs_iter();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(x), Some(y)) => v.push(x + y),
+            _ => panic!(),
+        }
+    }
+
+    let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
+    v.extend(rest_iter);
+
+    Polynomial::dense_from_vec(v)
+}
+
+pub(crate) fn add_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
+    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.coeffs_iter();
+    let mut rhs_iter = rhs.coeffs_iter();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(some_x), Some(some_y)) => match (some_x, some_y) {
+                (Some(x), Some(y)) => v.push(x.clone() + y.clone()),
+                (Some(x), None) => v.push(x.clone()),
+                (None, Some(y)) => v.push(y.clone()),
+                (None, None) => v.push(C::zero()),
+            },
+            _ => panic!(),
+        }
+    }
+
+    let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
+    v.extend(rest_iter.map(|c| match c {
+        Some(x) => x.clone(),
+        None => C::zero(),
+    }));
+
+    Polynomial::dense_from_vec(v)
+}
+
+pub(crate) fn sub_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
+        where C: Num + Neg<Output=C>{
+
+    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.into_coeffs_iter();
+    let mut rhs_iter = rhs.into_coeffs_iter();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(x), Some(y)) => v.push(x - y),
+            _ => panic!(),
+        }
+    }
+
+    if lhs_is_longer {
+        v.extend(lhs_iter);
+    } else {
+        v.extend(rhs_iter.map(|c|-c));
+    }
+
+    Polynomial::dense_from_vec(v)
+}
+
+pub(crate) fn sub_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+        where C: Num + Clone + Neg<Output=C>{
+    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.coeffs_iter();
+    let mut rhs_iter = rhs.coeffs_iter();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(some_x), Some(some_y)) => match (some_x, some_y) {
+                (Some(x), Some(y)) => v.push(x.clone() - y.clone()),
+                (Some(x), None) => v.push(x.clone()),
+                (None, Some(y)) => v.push(y.clone()),
+                (None, None) => v.push(C::zero()),
+            },
+            _ => panic!(),
+        }
+    }
+
+    if lhs_is_longer {
+        v.extend(lhs_iter.map(|c| match c {
+            Some(x) => x.clone(),
+            None => C::zero(),
+        }));
+    } else {
+        v.extend(rhs_iter.map(|c| match c {
+            Some(x) => -x.clone(),
+            None => C::zero(),
+        }));
+    }
+
+    Polynomial::dense_from_vec(v)
+}
 
 // def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C] = {
 //   var i = coeffs.length - 2

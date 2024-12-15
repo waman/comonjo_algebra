@@ -1,8 +1,8 @@
-use std::{collections::{BTreeMap, btree_map}, fmt::{Debug, Display}, iter::Enumerate, ops::*, slice::Iter};
+use std::{collections::{BTreeMap, btree_map}, fmt::{Debug, Display}, iter::Enumerate, vec, ops::*, slice::Iter};
 
 use num::{traits::{ConstOne, ConstZero}, Num, One, Zero};
 
-use crate::poly::{const_content::ConstContent, dense_content::DenseContent, sparse_content::SparseContent, term::Term};
+use crate::poly::{const_content::ConstContent, dense_content::{add_dense, add_dense_ref, sub_dense, sub_dense_ref, DenseContent}, sparse_content::{add_sparse, add_sparse_ref, sub_sparse, sub_sparse_ref, SparseContent}, term::Term};
 
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>
 pub enum Polynomial<C: Num> {
@@ -543,7 +543,7 @@ impl<'a, C: Num> Iterator for CoeffsIter<'a, C> {
 pub enum IntoCoeffsIter<C: Num> {
     Zero(),
     Constant(Option<C>),
-    Dense(std::vec::IntoIter<C>),
+    Dense(vec::IntoIter<C>),
     Sparse{
         index: usize,
         current: Option<(usize, C)>,
@@ -552,6 +552,7 @@ pub enum IntoCoeffsIter<C: Num> {
 }
 
 impl<C: Num> Iterator for IntoCoeffsIter<C> {
+
     type Item = C;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -589,6 +590,7 @@ pub enum NonZeroCoeffsIter<'a, C: Num> {
 }
 
 impl<'a, C: Num> Iterator for NonZeroCoeffsIter<'a, C> {
+
     type Item = (usize, &'a C);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -614,11 +616,12 @@ impl<'a, C: Num> Iterator for NonZeroCoeffsIter<'a, C> {
 pub enum IntoNonZeroCoeffsIter<C: Num> {
     Zero(),
     Constant(Option<C>),
-    Dense(Enumerate<std::vec::IntoIter<C>>),
+    Dense(Enumerate<vec::IntoIter<C>>),
     Sparse(btree_map::IntoIter<usize, C>),
 }
 
 impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
+
     type Item = (usize, C);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -764,79 +767,6 @@ impl<C: Num> Add for Polynomial<C> {
     }
 }
 
-/// Return (max, min, first_arg_is_longer)
-fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
-    if x >= y { (x, y, true) } else { (y, x, false) }
-}
-
-fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
-    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
-
-    let mut v: Vec<C> = Vec::with_capacity(d_max);
-
-    let mut lhs_iter = lhs.into_coeffs_iter();
-    let mut rhs_iter = rhs.into_coeffs_iter();
-
-    for _ in 0..=d_min {
-        match (lhs_iter.next(), rhs_iter.next()) {
-            (Some(x), Some(y)) => v.push(x + y),
-            _ => panic!(),
-        }
-    }
-
-    let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
-    v.extend(rest_iter);
-
-    Polynomial::dense_from_vec(v)
-}
-
-fn add_sparse<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
-    let mut map = BTreeMap::new();
-
-    let mut lhs_iter = lhs.into_non_zero_coeffs_iter();
-    let mut rhs_iter = rhs.into_non_zero_coeffs_iter();
-
-    let mut x_next = lhs_iter.next();
-    let mut y_next = rhs_iter.next();
-
-    loop {
-        let x = x_next.unwrap();
-        let y = y_next.unwrap();
-
-        if x.0 == y.0 {
-            map.insert(x.0, x.1 + y.1);
-
-            x_next = lhs_iter.next();
-            y_next = rhs_iter.next();
-            if x_next.is_none() || y_next.is_none() { break; }
-
-        } else if x.0 < y.0 {
-            map.insert(x.0, x.1);
-
-            x_next = lhs_iter.next();
-            y_next = Some(y);
-            if x_next.is_none() { break; }
-
-        } else {  // x.0 > y.0
-            map.insert(y.0, y.1);
-            
-            x_next = Some(x);
-            y_next = rhs_iter.next();
-            if y_next.is_none() { break; }
-        }
-    }
-
-    if let Some(x) = x_next {
-        map.insert(x.0, x.1);
-        map.extend(lhs_iter);
-    } else if let Some(y) = y_next {
-        map.insert(y.0, y.1);
-        map.extend(rhs_iter);
-    }
-
-    Polynomial::sparse_from_map(map)
-} 
-
 impl<'a, C: Num + Clone> Add for &'a Polynomial<C> {
 
     type Output = Polynomial<C>;
@@ -855,87 +785,41 @@ impl<'a, C: Num + Clone> Add for &'a Polynomial<C> {
     }
 }
 
-fn add_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
-    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
 
-    let mut v: Vec<C> = Vec::with_capacity(d_max);
+impl<C> Sub for Polynomial<C> where C: Num + Neg<Output=C>{
 
-    let mut lhs_iter = lhs.coeffs_iter();
-    let mut rhs_iter = rhs.coeffs_iter();
+    type Output = Polynomial<C>;
 
-    for _ in 0..=d_min {
-        match (lhs_iter.next(), rhs_iter.next()) {
-            (Some(some_x), Some(some_y)) => match (some_x, some_y) {
-                (Some(x), Some(y)) => v.push(x.clone() + y.clone()),
-                (Some(x), None) => v.push(x.clone()),
-                (None, Some(y)) => v.push(y.clone()),
-                (None, None) => v.push(C::zero()),
-            },
-            _ => panic!(),
+    fn sub(self, other: Self) -> Self::Output {
+        match (self, other) {
+            (lhs, Polynomial::Zero()) => lhs,
+            (Polynomial::Zero(), rhs) => -rhs,
+            (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 - rhs.0),
+            (lhs @ Polynomial::Dense(_), rhs) | 
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => sub_dense(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) |
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sub_sparse(lhs, rhs),
         }
     }
-
-    let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
-    for c in rest_iter {
-        match c {
-            Some(x) => v.push(x.clone()),
-            None => v.push(C::zero()),
-        }
-    }
-    // v.extend(rest_iter.map(|c| match c {
-    //     Some(x) => x.clone(),
-    //     None => C::zero(),
-    // }));
-
-    Polynomial::dense_from_vec(v)
 }
 
-fn add_sparse_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C> {
-    let mut map = BTreeMap::new();
+impl<'a, C> Sub for &'a Polynomial<C> where C: Num + Clone + Neg<Output=C> {
 
-    let mut lhs_iter = lhs.non_zero_coeffs_iter();
-    let mut rhs_iter = rhs.non_zero_coeffs_iter();
+    type Output = Polynomial<C>;
 
-    let mut x_next = lhs_iter.next();
-    let mut y_next = rhs_iter.next();
-
-    loop {
-        let x = x_next.unwrap();
-        let y = y_next.unwrap();
-
-        if x.0 == y.0 {
-            map.insert(x.0, x.1.clone() + y.1.clone());
-
-            x_next = lhs_iter.next();
-            y_next = rhs_iter.next();
-            if x_next.is_none() || y_next.is_none() { break; }
-
-        } else if x.0 < y.0 {
-            map.insert(x.0, x.1.clone());
-
-            x_next = lhs_iter.next();
-            y_next = Some(y);
-            if x_next.is_none() { break; }
-
-        } else {  // x.0 > y.0
-            map.insert(y.0, y.1.clone());
-            
-            x_next = Some(x);
-            y_next = rhs_iter.next();
-            if y_next.is_none() { break; }
+    fn sub(self, other: Self) -> Self::Output {
+        match (self, other) {
+            (lhs, Polynomial::Zero()) => lhs.clone(),
+            (Polynomial::Zero(), rhs) => -rhs.clone(),
+            (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
+                Polynomial::constant(lhs.0.clone() - rhs.0.clone()),
+            (lhs @ Polynomial::Dense(_), rhs) | 
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => sub_dense_ref(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) |
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sub_sparse_ref(lhs, rhs),
         }
     }
-
-    if let Some(x) = x_next {
-        map.insert(x.0, x.1.clone());
-        map.extend(lhs_iter.map(|(e, c)|(e, c.clone())));
-    } else if let Some(y) = y_next {
-        map.insert(y.0, y.1.clone());
-        map.extend(rhs_iter.map(|(e, c)|(e, c.clone())));
-    }
-
-    Polynomial::sparse_from_map(map)
-} 
+}
  
 //    final private def addSparse[C: Eq: Semiring: ClassTag](lhs: PolySparse[C], rhs: PolySparse[C]): PolySparse[C] = {
 //      val PolySparse(lexp, lcoeff) = lhs
@@ -981,16 +865,6 @@ fn add_sparse_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'a Polyn
 //      sum(0, 0, 0)
 //    }
 
-impl<C: Num + Neg<Output=C>> Sub for Polynomial<C>
-        where C: Num, for<'a> &'a C: Neg<Output=C>{
-
-    type Output = Polynomial<C>;
-
-    fn sub(self, rhs: Self) -> Self::Output {
-        self + (-rhs)
-    }
-}
-
 impl<C: Num> Mul for Polynomial<C> {
 
     type Output = Polynomial<C>;
@@ -1018,9 +892,6 @@ impl<C: Num> Rem for Polynomial<C> {
     }
 }
 
-//   def unary_-(implicit ring: Rng[C]): Polynomial[C]
-//   def +(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
-//   def -(rhs: Polynomial[C])(implicit ring: Rng[C], eq: Eq[C]): Polynomial[C] = lhs + (-rhs)
 //   def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
 
 //   def **(k: Int)(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = pow(k)

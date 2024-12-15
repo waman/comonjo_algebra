@@ -261,7 +261,6 @@ fn test_neg(){
     }
 }
 
-
 #[test]
 fn test_add(){
     fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
@@ -301,7 +300,50 @@ fn test_add(){
         (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], sparse![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
     ];
 
-    println!("****** start ******");
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
+#[test]
+fn test_sub(){
+    fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
+        assert_eq!(&x - &y, exp.clone());
+        assert_eq!(x - y, exp);
+    }
+
+    let table = [
+        (Polynomial::<i64>::zero(), Polynomial::<i64>::zero(),       Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::zero(), Polynomial::<i64>::one(),        Polynomial::<i64>::constant(-1)),
+        (Polynomial::<i64>::zero(), Polynomial::constant(3),         Polynomial::constant(-3)),
+        (Polynomial::<i64>::zero(), dense![1, 2, 3],                 dense![-1, -2, -3]),
+        (Polynomial::<i64>::zero(), sparse![(0, 1), (2, 3), (4, 5)], dense![-1, 0, -3, 0, -5]),
+        
+        (Polynomial::<i64>::one(), Polynomial::<i64>::zero(),       Polynomial::<i64>::one()),
+        (Polynomial::<i64>::one(), Polynomial::<i64>::one(),        Polynomial::Zero()),
+        (Polynomial::<i64>::one(), Polynomial::constant(3),         Polynomial::constant(-2)),
+        (Polynomial::<i64>::one(), dense![1, 2, 3],                 dense![0, -2, -3]),
+        (Polynomial::<i64>::one(), sparse![(0, 1), (2, 3), (4, 5)], dense![0, 0, -3, 0, -5]),
+        
+        // (Polynomial::constant(5), Polynomial::<i64>::zero(),       Polynomial::constant(5)),
+        // (Polynomial::constant(5), Polynomial::<i64>::one(),        Polynomial::constant(4)),
+        // (Polynomial::constant(5), Polynomial::constant(3),         Polynomial::constant(2)),
+        // (Polynomial::constant(5), dense![1, 2, 3],                 dense![4, -2, -3]),
+        // (Polynomial::constant(5), sparse![(0, 1), (2, 3), (4, 5)], dense![4, 0, -3, 0, -5]),
+        
+        // (dense![4, 5, 0, 6, 7], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
+        // (dense![4, 5, 0, 6, 7], Polynomial::<i64>::one(),        dense![3, 5, 0, 6, 7]),
+        // (dense![4, 5, 0, 6, 7], Polynomial::constant(3),         dense![1, 5, 0, 6, 7]),
+        // (dense![4, 5, 0, 6, 7], dense![1, 2, 3],                 dense![3, 3, -3, 6, 7]),
+        // (dense![4, 5, 0, 6, 7], sparse![(0, 1), (2, 3), (4, 5)], dense![3, 5, -3, 6, 2]),
+        
+        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
+        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::one(),        dense![3, 5, 0, 6, 7]),
+        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::constant(3),         dense![1, 5, 0, 6, 7]),
+        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], dense![1, 2, 3],                 dense![3, 3, -3, 6, 7]),
+        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], sparse![(0, 1), (2, 3), (4, 5)], dense![3, 5, 3, 6, 2]),
+    ];
+
     for entry in table {
         test(entry.0, entry.1, entry.2);
     }
