@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::*};
 
 use num::{traits::{ConstOne, ConstZero}, Num, One, Zero};
 
-use crate::poly::{const_content::{ConstCoeffsIter, ConstContent, ConstIntoCoeffsIter, ConstIntoNzcIter, ConstNzcIter}, dense_content::{DenseCoeffsIter, DenseContent, DenseIntoCoeffsIter, DenseIntoNzcIter, DenseNzcIter}, spears_content::{SpearsCoeffsIter, SpearsContent, SpearsIntoCoeffsIter, SpearsIntoNzcIter, SpearsNzcIter}, term::Term};
+use crate::poly::{const_content::{ConstCoeffsIter, ConstContent, ConstIntoCoeffsIter, ConstIntoNzcIter, ConstNzcIter}, dense_content::{DenseCoeffsIter, DenseContent, DenseIntoCoeffsIter, DenseIntoNzcIter, DenseNzcIter}, sparse_content::{SparseCoeffsIter, SparseContent, SparseIntoCoeffsIter, SparseIntoNzcIter, SparseNzcIter}, term::Term};
 
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>
 pub enum Polynomial<C: Num> {
@@ -15,8 +15,8 @@ pub enum Polynomial<C: Num> {
     /// Use <code>dense!()</code> macro to instantiate.
     Dense(DenseContent<C>),
     
-    /// Use <code>spears!()</code> macro to instantiate.
-    Spares(SpearsContent<C>)
+    /// Use <code>sparse!()</code> macro to instantiate.
+    Sparse(SparseContent<C>)
 }
 
 #[macro_export]
@@ -33,12 +33,12 @@ macro_rules! dense {
 }
 
 #[macro_export]
-macro_rules! spears {
+macro_rules! sparse {
     [ $( ($order:expr, $coeff:expr) ),* ] => {
-        Polynomial::spears_from_map(std::collections::BTreeMap::from([ $( ($order, $coeff) ),* ]))
+        Polynomial::sparse_from_map(std::collections::BTreeMap::from([ $( ($order, $coeff) ),* ]))
     };
     [ $( ($order:expr, $coeff:expr) ),+ , ] => {
-        spears![ $( ($order, $coeff) ),* ]
+        sparse![ $( ($order, $coeff) ),* ]
     };
 }
 
@@ -68,7 +68,7 @@ impl<C: Num> Polynomial<C> {
         }
     }
 
-    pub fn spears_from_map(mut coeffs: BTreeMap<usize, C>) -> Polynomial<C> {
+    pub fn sparse_from_map(mut coeffs: BTreeMap<usize, C>) -> Polynomial<C> {
 
         coeffs.retain(|_, v| !v.is_zero());
 
@@ -80,7 +80,7 @@ impl<C: Num> Polynomial<C> {
                 let value = coeffs.remove(&key).unwrap();
                 Polynomial::<C>::constant(value)
             },
-            _ => Polynomial::Spares(SpearsContent(coeffs))
+            _ => Polynomial::Sparse(SparseContent(coeffs))
         }
     }
 
@@ -145,14 +145,14 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Zero() => true,
             Polynomial::Constant(_) => true,
             Polynomial::Dense(_) => false,
-            Polynomial::Spares(_) => false,
+            Polynomial::Sparse(_) => false,
         }
     }
 
     pub fn degree(&self) -> usize {
         match self {
             Polynomial::Dense(dc) => dc.degree(),
-            Polynomial::Spares(sc) => sc.degree(),
+            Polynomial::Sparse(sc) => sc.degree(),
             _ => 0,
         }
     }
@@ -162,14 +162,14 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Zero() => None,
             Polynomial::Constant(cc) => cc.nth(n),
             Polynomial::Dense(dc) => dc.nth(n),
-            Polynomial::Spares(sc) => sc.nth(n),
+            Polynomial::Sparse(sc) => sc.nth(n),
         }
     }
      
-    /// Return dense expression of this polynomial if this is spears, otherwise (zero or constant) self.
+    /// Return dense expression of this polynomial if this is sparse, otherwise (zero or constant) self.
     pub fn to_dense(self) -> Polynomial<C> {
         match self {
-            Polynomial::Spares(mut sc) => {
+            Polynomial::Sparse(mut sc) => {
                 let n = sc.degree() + 1;
                 let mut v: Vec<C> = Vec::with_capacity(n);
                 for i in 0..n {
@@ -185,15 +185,15 @@ impl<C: Num> Polynomial<C> {
         }
     }
 
-    /// Return spears expression of this polynomial if this is dense, otherwise (zero or constant) self.
-    pub fn to_spears(self) -> Polynomial<C> {
+    /// Return sparse expression of this polynomial if this is dense, otherwise (zero or constant) self.
+    pub fn to_sparse(self) -> Polynomial<C> {
         match self {
             Polynomial::Dense(mut dc) => {
                 let mut map = BTreeMap::new();
                 while let Some(e) = dc.0.pop() {
                     map.insert(dc.0.len(), e);
                 }
-                Polynomial::<C>::spears_from_map(map)
+                Polynomial::<C>::sparse_from_map(map)
             },
             _ => self
         }
@@ -205,7 +205,7 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Zero() => CoeffsIter::Zero(),
             Polynomial::Constant(cc) => cc.coeffs_iter(),
             Polynomial::Dense(dc) => dc.coeffs_iter(),
-            Polynomial::Spares(sc) => sc.coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.coeffs_iter(),
         }
     }
 
@@ -214,7 +214,7 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Zero() => IntoCoeffsIter::Zero(),
             Polynomial::Constant(cc) => cc.into_coeffs_iter(),
             Polynomial::Dense(dc) => dc.into_coeffs_iter(),
-            Polynomial::Spares(sc) => sc.into_coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.into_coeffs_iter(),
         }
     } 
 
@@ -224,7 +224,7 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Zero() => NonZeroCoeffsIter::Zero(),
             Polynomial::Constant(cc) => cc.non_zero_coeffs_iter(),
             Polynomial::Dense(dc) => dc.non_zero_coeffs_iter(),
-            Polynomial::Spares(sc) => sc.non_zero_coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.non_zero_coeffs_iter(),
         }
     }
 
@@ -233,7 +233,7 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Zero() => IntoNonZeroCoeffsIter::Zero(),
             Polynomial::Constant(cc) => cc.into_non_zero_coeffs_iter(),
             Polynomial::Dense(dc) => dc.into_non_zero_coeffs_iter(),
-            Polynomial::Spares(sc) => sc.into_non_zero_coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.into_non_zero_coeffs_iter(),
         }
     }
 
@@ -262,7 +262,7 @@ impl<C: Num> Polynomial<C> {
     pub fn reductum(&self) -> Polynomial<C> {
         match self {
             Polynomial::Dense(dc) => dc.reductum(),
-            Polynomial::Spares(sc) => sc.reductum(),
+            Polynomial::Sparse(sc) => sc.reductum(),
             _ => Polynomial::Zero(),
         }
     }
@@ -273,64 +273,64 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(_) => Polynomial::one(),
             Polynomial::Dense(dc) => dc.monic(),
-            Polynomial::Spares(sc) => sc.monic(),
+            Polynomial::Sparse(sc) => sc.monic(),
         }
     }
     
     pub fn derivative(&self) -> Polynomial<C> {
         match self {
             Polynomial::Dense(dc) => dc.derivative(),
-            Polynomial::Spares(sc) => sc.derivative(),
+            Polynomial::Sparse(sc) => sc.derivative(),
             _ => Polynomial::Zero(),
         }
     }
 
     //********** Some factory methods **********/
     pub fn x() -> Polynomial<C> {
-        spears![(1, C::one())]
+        sparse![(1, C::one())]
     }
 
     pub fn two_x() -> Polynomial<C> {
-        spears![(1, C::one() + C::one())]
+        sparse![(1, C::one() + C::one())]
     }
 
     /// Create a linear polynomial <i>ax</i>.
     pub fn linear_monomial(a: C) -> Polynomial<C> {
-        spears![(1, a)]
+        sparse![(1, a)]
     }
 
     /// Create a linear polynomial <i>ax + b</i>
     pub fn linear(c1: C, c0: C) -> Polynomial<C> {
-        spears![(1, c1), (0, c0)]
+        sparse![(1, c1), (0, c0)]
     }
 
     /// Create a quadratic polynomial <i>ax<sup>2</sup><i>
     pub fn quadratic_monomial(a: C) -> Polynomial<C> {
-        spears![(2, a)]
+        sparse![(2, a)]
     }
 
     /// Create a quadratic polynomial <i>ax<sup>2</sup> + bx + c<i>
     pub fn quadratic(a: C, b: C, c: C) -> Polynomial<C> {
-        spears![(2, a), (1, b), (0, c)]
+        sparse![(2, a), (1, b), (0, c)]
     }
 
     /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
     pub fn cubic_monomial(a: C) -> Polynomial<C> {
-        spears![(3, a)]
+        sparse![(3, a)]
     }
 
     /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
     pub fn cubic(a: C, b: C, c: C, d: C) -> Polynomial<C> {
-        spears![(3, a), (2, b), (1, c), (0, d)]
+        sparse![(3, a), (2, b), (1, c), (0, d)]
     }
 }
 
 impl<C: Num + Clone> Polynomial<C> {
 
-    /// Create dense clone of this polynomial if the self is spears, otherwise (zero, constant or dense) return self.
+    /// Create dense clone of this polynomial if the self is sparse, otherwise (zero, constant or dense) return self.
     pub fn dense_clone(&self) -> Polynomial<C> {
         match self {
-            Polynomial::Spares(sc) => {
+            Polynomial::Sparse(sc) => {
                 let n: usize = sc.degree() + 1;
                 let mut v: Vec<C> = Vec::with_capacity(n);
                 for i in 0..n {
@@ -345,15 +345,15 @@ impl<C: Num + Clone> Polynomial<C> {
         }
     }
 
-    /// Create spears clone of this polynomial if self is dense, otherwise (zero, constant or spears) return self.
-    pub fn spears_clone(&self) -> Polynomial<C> {
+    /// Create sparse clone of this polynomial if self is dense, otherwise (zero, constant or sparse) return self.
+    pub fn sparse_clone(&self) -> Polynomial<C> {
         match self {
             Polynomial::Dense(dc) => {
                 let mut map = BTreeMap::new();
                 for (i, e) in dc.non_zero_coeffs_iter() {
                     map.insert(i, e.clone());  // note e is not zero
                 }
-                Polynomial::<C>::spears_from_map(map)
+                Polynomial::<C>::sparse_from_map(map)
             },
             _ => self.clone()
         }
@@ -382,7 +382,7 @@ impl<C: Num + Clone> Polynomial<C> {
             Polynomial::Zero() => Polynomial::ZERO,
             Polynomial::Constant(cc) => Polynomial::<C>::linear_monomial(cc.0.clone()),
             Polynomial::Dense(dc) => dc.integral(),
-            Polynomial::Spares(sc) => sc.integral(),
+            Polynomial::Sparse(sc) => sc.integral(),
         }
     }
     //   /**
@@ -452,7 +452,7 @@ impl<C: Num + Clone> Clone for Polynomial<C> {
             Self::Zero() => Self::Zero(),
             Self::Constant(cc) => Self::Constant(cc.clone()),
             Self::Dense(dc) => Self::Dense(dc.clone()),
-            Self::Spares(sc) => Self::Spares(sc.clone()),
+            Self::Sparse(sc) => Self::Sparse(sc.clone()),
         }
     }
 }
@@ -483,30 +483,30 @@ impl<C> Debug for Polynomial<C> where C: Num + Clone + Display{
             Polynomial::Zero() => "Zero",
             Polynomial::Constant(_) => "Constant",
             Polynomial::Dense(_) => "Dense",
-            Polynomial::Spares(_) => "Spears",
+            Polynomial::Sparse(_) => "Sparse",
         };
         f.write_fmt(format_args!("Polynomial::<{}>::{}[{}]", std::any::type_name::<C>(), s, self))
     }
 }
 
 //********** Iterator **********
+/// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
 pub enum CoeffsIter<'a, C: Num> {
     Zero(),
     Constant(ConstCoeffsIter<'a, C>),
     Dense(DenseCoeffsIter<'a, C>),
-    Spears(SpearsCoeffsIter<'a, C>),
+    Sparse(SparseCoeffsIter<'a, C>),
 }
 
 impl<'a, C: Num> Iterator for CoeffsIter<'a, C> {
     type Item = Option<&'a C>;
 
-    /// <code>next()</code> returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             CoeffsIter::Zero() => None,
             CoeffsIter::Constant(cc) => cc.next(),
             CoeffsIter::Dense(dc) => dc.next(),
-            CoeffsIter::Spears(sc) => sc.next(),
+            CoeffsIter::Sparse(sc) => sc.next(),
         }
     }
 }
@@ -515,10 +515,10 @@ pub enum IntoCoeffsIter<C: Num> {
     Zero(),
     Constant(ConstIntoCoeffsIter<C>),
     Dense(DenseIntoCoeffsIter<C>),
-    Spears(SpearsIntoCoeffsIter<C>),
+    Sparse(SparseIntoCoeffsIter<C>),
 }
 
-impl<'a, C: Num> Iterator for IntoCoeffsIter<C> {
+impl<C: Num> Iterator for IntoCoeffsIter<C> {
     type Item = C;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -526,7 +526,7 @@ impl<'a, C: Num> Iterator for IntoCoeffsIter<C> {
             IntoCoeffsIter::Zero() => None,
             IntoCoeffsIter::Constant(cc) => cc.next(),
             IntoCoeffsIter::Dense(dc) => dc.next(),
-            IntoCoeffsIter::Spears(sc) => sc.next(),
+            IntoCoeffsIter::Sparse(sc) => sc.next(),
         }
     }
 }
@@ -534,7 +534,7 @@ pub enum NonZeroCoeffsIter<'a, C: Num> {
     Zero(),
     Constant(ConstNzcIter<'a, C>),
     Dense(DenseNzcIter<'a, C>),
-    Spears(SpearsNzcIter<'a, C>),
+    Sparse(SparseNzcIter<'a, C>),
 }
 
 impl<'a, C: Num> Iterator for NonZeroCoeffsIter<'a, C> {
@@ -545,15 +545,39 @@ impl<'a, C: Num> Iterator for NonZeroCoeffsIter<'a, C> {
             NonZeroCoeffsIter::Zero() => None,
             NonZeroCoeffsIter::Constant(cc) => cc.next(),
             NonZeroCoeffsIter::Dense(dc) => dc.next(),
-            NonZeroCoeffsIter::Spears(sc) => sc.next(),
+            NonZeroCoeffsIter::Sparse(sc) => sc.next(),
         }
     }
 }
+
+// macro_rules! impl_into_iterator {
+//     ($iter_ty:ty, $item_ty) => {
+//         pub enum IntoNonZeroCoeffsIter<C: Num> {
+//             Zero(),
+//             Constant(ConstIntoNzcIter<C>),
+//             Dense(DenseIntoNzcIter<C>),
+//             Sparse(SparseIntoNzcIter<C>),
+//         }
+        
+//         impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
+//             type Item = (usize, C);
+        
+//             fn next(&mut self) -> Option<Self::Item> {
+//                 match self {
+//                     IntoNonZeroCoeffsIter::Zero() => None,
+//                     IntoNonZeroCoeffsIter::Constant(cc) => cc.next(),
+//                     IntoNonZeroCoeffsIter::Dense(dc) => dc.next(),
+//                     IntoNonZeroCoeffsIter::Sparse(sc) => sc.next(),
+//                 }
+//             }
+//         }
+//     };
+// }
 pub enum IntoNonZeroCoeffsIter<C: Num> {
     Zero(),
     Constant(ConstIntoNzcIter<C>),
     Dense(DenseIntoNzcIter<C>),
-    Spears(SpearsIntoNzcIter<C>),
+    Sparse(SparseIntoNzcIter<C>),
 }
 
 impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
@@ -564,7 +588,7 @@ impl<C: Num> Iterator for IntoNonZeroCoeffsIter<C> {
             IntoNonZeroCoeffsIter::Zero() => None,
             IntoNonZeroCoeffsIter::Constant(cc) => cc.next(),
             IntoNonZeroCoeffsIter::Dense(dc) => dc.next(),
-            IntoNonZeroCoeffsIter::Spears(sc) => sc.next(),
+            IntoNonZeroCoeffsIter::Sparse(sc) => sc.next(),
         }
     }
 }
@@ -594,13 +618,13 @@ impl<C: Num> PartialEq for Polynomial<C> {
 
             Polynomial::Dense(lhs) => match other {
                 Polynomial::Dense(rhs) => lhs.0 == rhs.0,
-                Polynomial::Spares(rhs) => has_the_same_content(&lhs.0, &rhs.0),
+                Polynomial::Sparse(rhs) => has_the_same_content(&lhs.0, &rhs.0),
                 _ => false,
             },
 
-            Polynomial::Spares(lhs) => match other {
+            Polynomial::Sparse(lhs) => match other {
                 Polynomial::Dense(rhs) => has_the_same_content(&rhs.0, &lhs.0),
-                Polynomial::Spares(rhs) => lhs.0 == rhs.0,
+                Polynomial::Sparse(rhs) => lhs.0 == rhs.0,
                 _ => false,
             },
         }
@@ -656,7 +680,7 @@ impl<C> Neg for Polynomial<C> where C: Num + Neg<Output=C>{
             Self::Zero() => Polynomial::Zero(),
             Self::Constant(cc) => cc.neg(),
             Self::Dense(dd) => dd.neg(),
-            Self::Spares(sc) => sc.neg(),
+            Self::Sparse(sc) => sc.neg(),
         }
     }
 }
@@ -670,7 +694,7 @@ impl<'a, C> Neg for &'a Polynomial<C> where C: Num + Clone + Neg<Output=C> {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(cc) => cc.neg_ref(),
             Polynomial::Dense(dd) => dd.neg_ref(),
-            Polynomial::Spares(sc) => sc.neg_ref(),
+            Polynomial::Sparse(sc) => sc.neg_ref(),
         }
     }
 }
@@ -680,21 +704,14 @@ impl<C: Num> Add for Polynomial<C> {
     type Output = Polynomial<C>;
 
     fn add(self, other: Self) -> Self::Output {
-        if other.is_zero() { return self; }
-        match self {
-            Self::Zero() => other,
-            Self::Constant(_) => match other {
-                Self::Zero() => self,
-                Self::Constant(rhs) => {
-                    if let Self::Constant(lhs) = self {
-                        Self::constant(lhs.0 + rhs.0)
-                    } else { panic!() }
-                }
-                Self::Dense(_) => add_dense(self, other),
-                Self::Spares(_) => add_spears(self, other),
-            },
-            Self::Dense(_) => add_dense(self, other),
-            Self::Spares(_) => add_spears(self, other),
+        match (self, other) {
+            (lhs, Polynomial::Zero()) => lhs,
+            (Polynomial::Zero(), rhs) => rhs,
+            (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 + rhs.0),
+            (lhs @ Polynomial::Dense(_), rhs) | 
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => add_dense(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) |
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => add_sparse(lhs, rhs),
         }
     }
 }
@@ -725,7 +742,7 @@ fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
     Polynomial::dense_from_vec(v)
 }
 
-fn add_spears<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+fn add_sparse<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
     let mut map = BTreeMap::new();
 
     let mut lhs_iter = lhs.into_non_zero_coeffs_iter();
@@ -769,7 +786,7 @@ fn add_spears<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
         map.extend(rhs_iter);
     }
 
-    Polynomial::spears_from_map(map)
+    Polynomial::sparse_from_map(map)
 } 
 
 impl<'a, C: Num + Clone> Add for &'a Polynomial<C> {
@@ -777,21 +794,15 @@ impl<'a, C: Num + Clone> Add for &'a Polynomial<C> {
     type Output = Polynomial<C>;
 
     fn add(self, other: Self) -> Self::Output {
-        if other.is_zero() { return self.clone(); }
-        match self {
-            Polynomial::Zero() => other.clone(),
-            Polynomial::Constant(_) => match other {
-                Polynomial::Zero() => self.clone(),
-                Polynomial::Constant(rhs) => {
-                    if let Polynomial::Constant(lhs) = self {
-                        Polynomial::constant(lhs.0.clone() + rhs.0.clone())
-                    } else { panic!() }
-                }
-                Polynomial::Dense(_) => add_dense_ref(self, other),
-                Polynomial::Spares(_) => add_spears_ref(self, other),
-            },
-            Polynomial::Dense(_) => add_dense_ref(self, other),
-            Polynomial::Spares(_) => add_spears_ref(self, other),
+        match (self, other) {
+            (lhs, Polynomial::Zero()) => lhs.clone(),
+            (Polynomial::Zero(), rhs) => rhs.clone(),
+            (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
+                Polynomial::constant(lhs.0.clone() + rhs.0.clone()),
+            (lhs @ Polynomial::Dense(_), rhs) | 
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => add_dense_ref(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) |
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => add_sparse_ref(lhs, rhs),
         }
     }
 }
@@ -831,7 +842,7 @@ fn add_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polyno
     Polynomial::dense_from_vec(v)
 }
 
-fn add_spears_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C> {
+fn add_sparse_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C> {
     let mut map = BTreeMap::new();
 
     let mut lhs_iter = lhs.non_zero_coeffs_iter();
@@ -875,7 +886,7 @@ fn add_spears_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'a Polyn
         map.extend(rhs_iter.map(|(e, c)|(e, c.clone())));
     }
 
-    Polynomial::spears_from_map(map)
+    Polynomial::sparse_from_map(map)
 } 
  
 //    final private def addSparse[C: Eq: Semiring: ClassTag](lhs: PolySparse[C], rhs: PolySparse[C]): PolySparse[C] = {

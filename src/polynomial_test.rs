@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use num::{Complex, One, Rational64, Zero};
 
-use crate::{dense, spears, polynomial::Polynomial};
+use crate::{dense, sparse, polynomial::Polynomial};
 
 // ⁰¹²³⁴⁵⁶⁷⁸⁹
 #[test]
@@ -15,8 +15,8 @@ fn test_dense_macro(){
 }
 
 #[test]
-fn test_spears_macro(){
-    let p0 = spears![(2, 6), (5, 1)];
+fn test_sparse_macro(){
+    let p0 = sparse![(2, 6), (5, 1)];
     assert_eq!(format!("{}", p0), "6x² + x⁵");
 }
 
@@ -49,19 +49,19 @@ fn test_display(){
         (dense![1, 1, 1, 1],     "1 + x + x² + x³"),
         (dense![-1, -1, -1, -1], "-1 - x - x² - x³"),
 
-        // spears!
-        (spears![], "(0)"),
-        (spears![(0, 0), (1, 0)], "(0)"),
-        (spears![(0, 1)],  "(1)"),
-        (spears![(0, -1)], "(-1)"),
-        (spears![(0, 2)],   "(2)"),
+        // sparse!
+        (sparse![], "(0)"),
+        (sparse![(0, 0), (1, 0)], "(0)"),
+        (sparse![(0, 1)],  "(1)"),
+        (sparse![(0, -1)], "(-1)"),
+        (sparse![(0, 2)],   "(2)"),
 
-        (spears![(0, 1), (2, 3)],   "1 + 3x²"),
-        (spears![(0, -1), (2, -3)], "-1 - 3x²"),
-        (spears![(1, 2), (2, 3)],   "2x + 3x²"),
-        (spears![(0, 1), (2, 3), (4, 0)], "1 + 3x²"),
-        (spears![(0, 1), (1, 1), (2, 1), (3, 1)],     "1 + x + x² + x³"),
-        (spears![(0, -1), (1, -1), (2, -1), (3, -1)], "-1 - x - x² - x³"),
+        (sparse![(0, 1), (2, 3)],   "1 + 3x²"),
+        (sparse![(0, -1), (2, -3)], "-1 - 3x²"),
+        (sparse![(1, 2), (2, 3)],   "2x + 3x²"),
+        (sparse![(0, 1), (2, 3), (4, 0)], "1 + 3x²"),
+        (sparse![(0, 1), (1, 1), (2, 1), (3, 1)],     "1 + x + x² + x³"),
+        (sparse![(0, -1), (1, -1), (2, -1), (3, -1)], "-1 - x - x² - x³"),
     ];
 
     for entry in table {
@@ -95,7 +95,7 @@ fn test_debug(){
         (Polynomial::constant(2),  "Polynomial::<i64>::Constant[(2)]"),
 
         (dense![1, 2, 3],  "Polynomial::<i64>::Dense[1 + 2x + 3x²]"),
-        (spears![(0, 1), (1, 2), (2, 3)],   "Polynomial::<i64>::Spears[1 + 2x + 3x²]"),
+        (sparse![(0, 1), (1, 2), (2, 3)],   "Polynomial::<i64>::Sparse[1 + 2x + 3x²]"),
     ];
 
     for entry in table {
@@ -133,17 +133,17 @@ fn test_degree_zero_one_constant(){
         (dense![0, 2, 3],            2, false, false, false),
         (dense![1, 2, 3, 0, 0],      2, false, false, false),
 
-        // spears!
-        (spears![],                  0, true,  false, true),  // zero & const
-        (spears![(0, 0), (2, 0)],    0, true,  false, true),  // zero & const
-        (spears![(0, 1)],            0, false, true,  true),  // const
-        (spears![(0, -1)],           0, false, false, true),  // const
-        (spears![(0, 2)],            0, false, false, true),  // const
+        // sparse!
+        (sparse![],                  0, true,  false, true),  // zero & const
+        (sparse![(0, 0), (2, 0)],    0, true,  false, true),  // zero & const
+        (sparse![(0, 1)],            0, false, true,  true),  // const
+        (sparse![(0, -1)],           0, false, false, true),  // const
+        (sparse![(0, 2)],            0, false, false, true),  // const
 
-        (spears![(0, 1), (1, 2), (2, 3)],                  2, false, false, false),
-        (spears![(0, -1), (1, -2), (2, -3)],               2, false, false, false),
-        (spears![(0, 0), (1, 2), (2, 3)],                  2, false, false, false),
-        (spears![(0, 1), (1, 2), (2, 3), (5, 0), (10, 0)], 2, false, false, false),
+        (sparse![(0, 1), (1, 2), (2, 3)],                  2, false, false, false),
+        (sparse![(0, -1), (1, -2), (2, -3)],               2, false, false, false),
+        (sparse![(0, 0), (1, 2), (2, 3)],                  2, false, false, false),
+        (sparse![(0, 1), (1, 2), (2, 3), (5, 0), (10, 0)], 2, false, false, false),
     ];
 
     for entry in table {
@@ -182,7 +182,7 @@ fn test_iter_methods(){
         (Polynomial::one(), vec![1]),
         (Polynomial::constant(5), vec![5]),
         (Polynomial::dense_from_vec(v.clone()), v.clone()),
-        (spears![(0, 1), (1, 2), (3, 3), (5, 4), (8, 5)], v.clone())
+        (sparse![(0, 1), (1, 2), (3, 3), (5, 4), (8, 5)], v.clone())
     ];
 
     for entry in table {
@@ -193,15 +193,15 @@ fn test_iter_methods(){
 #[test]
 fn test_eq(){
     let p0 = dense![1, 0, 2, 4, 0, 0, 1];
-    let p1 = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
+    let p1 = sparse![(0, 1), (2, 2), (3, 4), (6, 1)];
     assert_eq!(p0, p1);
 }
 
 #[test]
-fn test_clone_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() and to_spears()
+fn test_clone_methods(){  // clone(), dense_clone(), sparse_clone(), to_dense() and to_sparse()
     // 1 + 2x² + 4x³ + x⁶
     let pd = dense![1, 0, 2, 4, 0, 0, 1];
-    let ps = spears![(0, 1), (2, 2), (3, 4), (6, 1)];
+    let ps = sparse![(0, 1), (2, 2), (3, 4), (6, 1)];
     assert_eq!(pd, ps);
 
     // dense_clone()
@@ -213,12 +213,12 @@ fn test_clone_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() 
     assert_eq!(p2, pd);
     assert_eq!(p2, ps);
 
-    // spears_clone()
-    let p3 = pd.spears_clone();
+    // sparse_clone()
+    let p3 = pd.sparse_clone();
     assert_eq!(p3, pd);
     assert_eq!(p3, ps);
 
-    let p4 = ps.spears_clone();
+    let p4 = ps.sparse_clone();
     assert_eq!(p4, pd);
     assert_eq!(p4, ps);
 
@@ -231,12 +231,12 @@ fn test_clone_methods(){  // clone(), dense_clone(), spears_clone(), to_dense() 
     assert_eq!(p6, pd);
     assert_eq!(p6, ps);
 
-    // to_spears()
-    let p7 = pd.clone().to_spears();
+    // to_sparse()
+    let p7 = pd.clone().to_sparse();
     assert_eq!(p7, pd);
     assert_eq!(p7, ps);
 
-    let p8 = ps.clone().to_spears();
+    let p8 = ps.clone().to_sparse();
     assert_eq!(p8, pd);
     assert_eq!(p8, ps);
 }
@@ -253,7 +253,7 @@ fn test_neg(){
         (Polynomial::<i64>::one(), Polynomial::constant(-1)),
         (Polynomial::constant(5), Polynomial::constant(-5)),
         (dense![4, 5, 0, 6, 7], dense![-4, -5, 0, -6, -7]),
-        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], dense![-4, -5, 0, -6, -7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], dense![-4, -5, 0, -6, -7]),
     ];
 
     for entry in table {
@@ -274,31 +274,31 @@ fn test_add(){
         (Polynomial::<i64>::zero(), Polynomial::<i64>::one(),        Polynomial::<i64>::one()),
         (Polynomial::<i64>::zero(), Polynomial::constant(3),         Polynomial::constant(3)),
         (Polynomial::<i64>::zero(), dense![1, 2, 3],                 dense![1, 2, 3]),
-        (Polynomial::<i64>::zero(), spears![(0, 1), (2, 3), (4, 5)], dense![1, 0, 3, 0, 5]),
+        (Polynomial::<i64>::zero(), sparse![(0, 1), (2, 3), (4, 5)], dense![1, 0, 3, 0, 5]),
         
         (Polynomial::<i64>::one(), Polynomial::<i64>::zero(),       Polynomial::<i64>::one()),
         (Polynomial::<i64>::one(), Polynomial::<i64>::one(),        Polynomial::constant(2)),
         (Polynomial::<i64>::one(), Polynomial::constant(3),         Polynomial::constant(4)),
         (Polynomial::<i64>::one(), dense![1, 2, 3],                 dense![2, 2, 3]),
-        (Polynomial::<i64>::one(), spears![(0, 1), (2, 3), (4, 5)], dense![2, 0, 3, 0, 5]),
+        (Polynomial::<i64>::one(), sparse![(0, 1), (2, 3), (4, 5)], dense![2, 0, 3, 0, 5]),
         
         (Polynomial::constant(5), Polynomial::<i64>::zero(),       Polynomial::constant(5)),
         (Polynomial::constant(5), Polynomial::<i64>::one(),        Polynomial::constant(6)),
         (Polynomial::constant(5), Polynomial::constant(3),         Polynomial::constant(8)),
         (Polynomial::constant(5), dense![1, 2, 3],                 dense![6, 2, 3]),
-        (Polynomial::constant(5), spears![(0, 1), (2, 3), (4, 5)], dense![6, 0, 3, 0, 5]),
+        (Polynomial::constant(5), sparse![(0, 1), (2, 3), (4, 5)], dense![6, 0, 3, 0, 5]),
         
         (dense![4, 5, 0, 6, 7], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
         (dense![4, 5, 0, 6, 7], Polynomial::<i64>::one(),        dense![5, 5, 0, 6, 7]),
         (dense![4, 5, 0, 6, 7], Polynomial::constant(3),         dense![7, 5, 0, 6, 7]),
         (dense![4, 5, 0, 6, 7], dense![1, 2, 3],                 dense![5, 7, 3, 6, 7]),
-        (dense![4, 5, 0, 6, 7], spears![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
+        (dense![4, 5, 0, 6, 7], sparse![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
         
-        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
-        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::one(),        dense![5, 5, 0, 6, 7]),
-        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::constant(3),         dense![7, 5, 0, 6, 7]),
-        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], dense![1, 2, 3],                 dense![5, 7, 3, 6, 7]),
-        (spears![(0, 4), (1, 5), (3, 6), (4, 7)], spears![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::one(),        dense![5, 5, 0, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::constant(3),         dense![7, 5, 0, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], dense![1, 2, 3],                 dense![5, 7, 3, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], sparse![(0, 1), (2, 3), (4, 5)], dense![5, 5, 3, 6, 12]),
     ];
 
     println!("****** start ******");

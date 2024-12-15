@@ -4,9 +4,9 @@ use num::Num;
 use crate::polynomial::{CoeffsIter, IntoCoeffsIter, IntoNonZeroCoeffsIter, NonZeroCoeffsIter, Polynomial};
 
 #[derive(Clone)]
-pub struct SpearsContent<C: Num>(pub(crate) BTreeMap<usize, C>);
+pub struct SparseContent<C: Num>(pub(crate) BTreeMap<usize, C>);
 
-impl<C: Num> SpearsContent<C> {
+impl<C: Num> SparseContent<C> {
 
     pub fn degree(&self) -> usize {
         *self.0.last_key_value().unwrap().0
@@ -17,19 +17,19 @@ impl<C: Num> SpearsContent<C> {
     }
 
     pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
-        CoeffsIter::Spears(SpearsCoeffsIter::new(self))
+        CoeffsIter::Sparse(SparseCoeffsIter::new(self))
     }
 
     pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
-        IntoCoeffsIter::Spears(SpearsIntoCoeffsIter::new(self))
+        IntoCoeffsIter::Sparse(SparseIntoCoeffsIter::new(self))
     }
 
     pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
-        NonZeroCoeffsIter::Spears(SpearsNzcIter(self.0.iter()))
+        NonZeroCoeffsIter::Sparse(SparseNzcIter(self.0.iter()))
     }
 
     pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
-        IntoNonZeroCoeffsIter::Spears(SpearsIntoNzcIter(self.0.into_iter()))
+        IntoNonZeroCoeffsIter::Sparse(SparseIntoNzcIter(self.0.into_iter()))
     }
 
     pub fn reductum(&self) -> Polynomial<C> {
@@ -49,37 +49,37 @@ impl<C: Num> SpearsContent<C> {
     }
 }
 
-impl<C> SpearsContent<C> where C: Num + Neg<Output=C>{
+impl<C> SparseContent<C> where C: Num + Neg<Output=C>{
 
     pub fn neg(self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = self.0.into_iter().map(|(i, e)|(i, -e)).collect();
-        Polynomial::Spares(SpearsContent(map))
+        Polynomial::Sparse(SparseContent(map))
     }
 }
 
-impl<C> SpearsContent<C> where C: Num + Clone + Neg<Output=C> {
+impl<C> SparseContent<C> where C: Num + Clone + Neg<Output=C> {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, -e.clone())).collect();
-        Polynomial::Spares(SpearsContent(map))
+        Polynomial::Sparse(SparseContent(map))
     }
 }
 
-pub struct SpearsCoeffsIter<'a, C: Num>{
+pub struct SparseCoeffsIter<'a, C: Num>{
     index: usize,
     current: Option<(&'a usize, &'a C)>,
     map_iter: Iter<'a, usize, C>,
 }
 
-impl<'a, C: Num> SpearsCoeffsIter<'a, C> {
+impl<'a, C: Num> SparseCoeffsIter<'a, C> {
     
-    fn new(sc: &'a SpearsContent<C>) -> SpearsCoeffsIter<'a, C> {
+    fn new(sc: &'a SparseContent<C>) -> SparseCoeffsIter<'a, C> {
         let mut map_iter = sc.0.iter();
-        SpearsCoeffsIter{ index: 0, current: map_iter.next(), map_iter}
+        SparseCoeffsIter{ index: 0, current: map_iter.next(), map_iter}
     }
 }
 
-impl<'a, C: Num> Iterator for SpearsCoeffsIter<'a, C> {
+impl<'a, C: Num> Iterator for SparseCoeffsIter<'a, C> {
 
     type Item = Option<&'a C>;
 
@@ -100,21 +100,21 @@ impl<'a, C: Num> Iterator for SpearsCoeffsIter<'a, C> {
     }
 }
 
-pub struct SpearsIntoCoeffsIter<C: Num>{
+pub struct SparseIntoCoeffsIter<C: Num>{
     index: usize,
     current: Option<(usize, C)>,
     map_iter: IntoIter<usize, C>
 }
 
-impl<C: Num> SpearsIntoCoeffsIter<C> {
+impl<C: Num> SparseIntoCoeffsIter<C> {
 
-    fn new(sc: SpearsContent<C>) -> SpearsIntoCoeffsIter<C> {
+    fn new(sc: SparseContent<C>) -> SparseIntoCoeffsIter<C> {
         let mut map_iter = sc.0.into_iter();
-        SpearsIntoCoeffsIter { index: 0, current: map_iter.next(), map_iter }
+        SparseIntoCoeffsIter { index: 0, current: map_iter.next(), map_iter }
     } 
 }
 
-impl<C: Num> Iterator for SpearsIntoCoeffsIter<C> {
+impl<C: Num> Iterator for SparseIntoCoeffsIter<C> {
     type Item = C;
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -137,9 +137,9 @@ impl<C: Num> Iterator for SpearsIntoCoeffsIter<C> {
     }
 }
 
-pub struct SpearsNzcIter<'a, C>(std::collections::btree_map::Iter<'a, usize, C>);
+pub struct SparseNzcIter<'a, C>(std::collections::btree_map::Iter<'a, usize, C>);
 
-impl<'a, C: Num> Iterator for SpearsNzcIter<'a, C> {
+impl<'a, C: Num> Iterator for SparseNzcIter<'a, C> {
     type Item = (usize, &'a C);
 
     fn next(&mut self) -> Option<Self::Item> {
@@ -147,9 +147,9 @@ impl<'a, C: Num> Iterator for SpearsNzcIter<'a, C> {
     }
 }
 
-pub struct SpearsIntoNzcIter<C>(std::collections::btree_map::IntoIter<usize, C>);
+pub struct SparseIntoNzcIter<C>(std::collections::btree_map::IntoIter<usize, C>);
 
-impl<C: Num> Iterator for SpearsIntoNzcIter<C> {
+impl<C: Num> Iterator for SparseIntoNzcIter<C> {
     type Item = (usize, C);
 
     fn next(&mut self) -> Option<Self::Item> {
