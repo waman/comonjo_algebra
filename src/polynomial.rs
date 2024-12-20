@@ -2,7 +2,7 @@ use std::{collections::{BTreeMap, btree_map}, fmt::{Debug, Display}, iter::Enume
 
 use num::{traits::{ConstOne, ConstZero}, Num, One, Zero};
 
-use crate::poly::{const_content::ConstContent, dense_content::{add_dense, add_dense_ref, sub_dense, sub_dense_ref, DenseContent}, sparse_content::{add_sparse, add_sparse_ref, sub_sparse, sub_sparse_ref, SparseContent}, term::Term};
+use crate::poly::{const_content::ConstContent, dense_content::*, sparse_content::*, term::Term};
 
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>
 pub enum Polynomial<C: Num> {
@@ -200,6 +200,32 @@ impl<C: Num> Polynomial<C> {
     }
 
     //********** Iteration **********/
+
+    /// Iterate coefficients of non zero terms.
+    /// Return <code>impl Iterator<Item=(usize, &C)></code>.
+    pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
+        match self {
+            Polynomial::Zero() => NonZeroCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => NonZeroCoeffsIter::Constant(Some(&cc.0)),
+            Polynomial::Dense(dc) => NonZeroCoeffsIter::Dense(dc.0.iter().enumerate()),
+            Polynomial::Sparse(sc) => NonZeroCoeffsIter::Sparse(sc.0.iter()),
+        }
+    }
+
+    /// Return <code>impl Iterator<Item=C></code>.
+    pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
+        match self {
+            Polynomial::Zero() => IntoCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
+            Polynomial::Dense(dc) => IntoCoeffsIter::Dense(dc.0.into_iter()),
+            Polynomial::Sparse(sc) => {
+                let mut map_iter = sc.0.into_iter();
+                IntoCoeffsIter::Sparse { index: 0, current: map_iter.next(), map_iter }
+            },
+        }
+    } 
+    
+    /// Return <code>impl Iterator<Item=Option<Option<&C>>></code>.
     pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
         match self {
             Polynomial::Zero() => CoeffsIter::Zero(),
@@ -212,28 +238,7 @@ impl<C: Num> Polynomial<C> {
         }
     }
 
-    pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
-        match self {
-            Polynomial::Zero() => IntoCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
-            Polynomial::Dense(dc) => IntoCoeffsIter::Dense(dc.0.into_iter()),
-            Polynomial::Sparse(sc) => {
-                let mut map_iter = sc.0.into_iter();
-                IntoCoeffsIter::Sparse { index: 0, current: map_iter.next(), map_iter }
-            },
-        }
-    } 
-
-    // iterate coefficients of non zero terms
-    pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
-        match self {
-            Polynomial::Zero() => NonZeroCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => NonZeroCoeffsIter::Constant(Some(&cc.0)),
-            Polynomial::Dense(dc) => NonZeroCoeffsIter::Dense(dc.0.iter().enumerate()),
-            Polynomial::Sparse(sc) => NonZeroCoeffsIter::Sparse(sc.0.iter()),
-        }
-    }
-
+    /// Return <code>impl Iterator<Item=(usize, C)></code>.
     pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
         match self {
             Polynomial::Zero() => IntoNonZeroCoeffsIter::Zero(),
@@ -271,16 +276,6 @@ impl<C: Num> Polynomial<C> {
             Polynomial::Dense(dc) => dc.reductum(),
             Polynomial::Sparse(sc) => sc.reductum(),
             _ => Polynomial::Zero(),
-        }
-    }
-
-    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. `maxOrderTermCoeff`) is 1.
-    pub fn monic(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(_) => Polynomial::one(),
-            Polynomial::Dense(dc) => dc.monic(),
-            Polynomial::Sparse(sc) => sc.monic(),
         }
     }
     
@@ -381,6 +376,16 @@ impl<C: Num + Clone> Polynomial<C> {
         match self.terms().next() {
             Some(t) => t,
             _ => Term::<C>::from_value(0, C::zero()),
+        }
+    }
+
+    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. `maxOrderTermCoeff`) is 1.
+    pub fn monic(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(_) => Polynomial::one(),
+            Polynomial::Dense(dc) => dc.monic(),
+            Polynomial::Sparse(sc) => sc.monic(),
         }
     }
 
@@ -702,7 +707,7 @@ impl<C: Num> ConstZero for Polynomial<C> {
     const ZERO: Self = Polynomial::Zero();
 }
 
-impl<C: Num> One for Polynomial<C> {
+impl<C: Num + Clone> One for Polynomial<C> {
 
     fn one() -> Self { 
         Polynomial::Constant(ConstContent(C::one()))  // raw creation
@@ -716,7 +721,7 @@ impl<C: Num> One for Polynomial<C> {
     }
 }
 
-impl<C: Num + ConstOne> ConstOne for Polynomial<C> {
+impl<C: Num + Clone + ConstOne> ConstOne for Polynomial<C> {
 
     const ONE: Self = Polynomial::Constant(ConstContent(C::ONE));
 }
@@ -821,56 +826,39 @@ impl<'a, C> Sub for &'a Polynomial<C> where C: Num + Clone + Neg<Output=C> {
     }
 }
  
-//    final private def addSparse[C: Eq: Semiring: ClassTag](lhs: PolySparse[C], rhs: PolySparse[C]): PolySparse[C] = {
-//      val PolySparse(lexp, lcoeff) = lhs
-//      val PolySparse(rexp, rcoeff) = rhs
- 
-//      val len = countSumTerms(lhs, rhs)
-//      val es = new Array[Int](len)
-//      val cs = new Array[C](len)
- 
-//      @tailrec
-//      def sum(i: Int, j: Int, k: Int): PolySparse[C] =
-//        if (i < lexp.length && j < rexp.length) {
-//          val ei = lexp(i)
-//          val ej = rexp(j)
-//          if (ei == ej) {
-//            es(k) = ei
-//            cs(k) = lcoeff(i) + rcoeff(j)
-//            sum(i + 1, j + 1, k + 1)
-//          } else if (ei < ej) {
-//            es(k) = ei
-//            cs(k) = lcoeff(i)
-//            sum(i + 1, j, k + 1)
-//          } else {
-//            es(k) = ej
-//            cs(k) = rcoeff(j)
-//            sum(i, j + 1, k + 1)
-//          }
-//        } else {
-//          var k0 = k
-//          cfor(i)(_ < lexp.length, _ + 1) { i0 =>
-//            es(k0) = lexp(i0)
-//            cs(k0) = lcoeff(i0)
-//            k0 += 1
-//          }
-//          cfor(j)(_ < rexp.length, _ + 1) { j0 =>
-//            es(k0) = rexp(j0)
-//            cs(k0) = rcoeff(j0)
-//            k0 += 1
-//          }
-//          PolySparse.safe(es, cs)
-//        }
- 
-//      sum(0, 0, 0)
-//    }
 
-impl<C: Num> Mul for Polynomial<C> {
+impl<C: Num + Clone> Mul for Polynomial<C> {
 
     type Output = Polynomial<C>;
 
     fn mul(self, other: Self) -> Self::Output {
-        todo!()
+        match (self, other) {
+            (_, Polynomial::Zero()) |
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 * rhs.0),
+            (lhs @ Polynomial::Dense(_), rhs) | 
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => mul_dense(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) |
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => mul_sparse(lhs, rhs),
+        }
+    }
+}
+
+impl<'a, C: Num + Clone> Mul for &'a Polynomial<C> {
+
+    type Output = Polynomial<C>;
+
+    fn mul(self, other: Self) -> Self::Output {
+        match (self, other) {
+            (_, Polynomial::Zero()) |
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
+                Polynomial::constant(lhs.0.clone() * rhs.0.clone()),
+            (lhs @ Polynomial::Dense(_), rhs) | 
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => mul_dense_ref(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) |
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => mul_sparse_ref(lhs, rhs),
+        }
     }
 }
 
@@ -883,7 +871,25 @@ impl<C: Num> Div for Polynomial<C> {
     }
 }
 
+impl<'a, C: Num + Clone> Div for &'a Polynomial<C> {
+
+    type Output = Polynomial<C>;
+
+    fn div(self, other: Self) -> Self::Output {
+        todo!()
+    }
+}
+
 impl<C: Num> Rem for Polynomial<C> {
+
+    type Output = Polynomial<C>;
+
+    fn rem(self, other: Self) -> Self::Output {
+        todo!()
+    }
+}
+
+impl<'a, C: Num + Clone> Rem for &'a Polynomial<C> {
 
     type Output = Polynomial<C>;
 

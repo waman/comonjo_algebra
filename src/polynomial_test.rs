@@ -325,23 +325,75 @@ fn test_sub(){
         (Polynomial::<i64>::one(), dense![1, 2, 3],                 dense![0, -2, -3]),
         (Polynomial::<i64>::one(), sparse![(0, 1), (2, 3), (4, 5)], dense![0, 0, -3, 0, -5]),
         
-        // (Polynomial::constant(5), Polynomial::<i64>::zero(),       Polynomial::constant(5)),
-        // (Polynomial::constant(5), Polynomial::<i64>::one(),        Polynomial::constant(4)),
-        // (Polynomial::constant(5), Polynomial::constant(3),         Polynomial::constant(2)),
-        // (Polynomial::constant(5), dense![1, 2, 3],                 dense![4, -2, -3]),
-        // (Polynomial::constant(5), sparse![(0, 1), (2, 3), (4, 5)], dense![4, 0, -3, 0, -5]),
+        (Polynomial::constant(5), Polynomial::<i64>::zero(),       Polynomial::constant(5)),
+        (Polynomial::constant(5), Polynomial::<i64>::one(),        Polynomial::constant(4)),
+        (Polynomial::constant(5), Polynomial::constant(3),         Polynomial::constant(2)),
+        (Polynomial::constant(5), dense![1, 2, 3],                 dense![4, -2, -3]),
+        (Polynomial::constant(5), sparse![(0, 1), (2, 3), (4, 5)], dense![4, 0, -3, 0, -5]),
         
-        // (dense![4, 5, 0, 6, 7], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
-        // (dense![4, 5, 0, 6, 7], Polynomial::<i64>::one(),        dense![3, 5, 0, 6, 7]),
-        // (dense![4, 5, 0, 6, 7], Polynomial::constant(3),         dense![1, 5, 0, 6, 7]),
-        // (dense![4, 5, 0, 6, 7], dense![1, 2, 3],                 dense![3, 3, -3, 6, 7]),
-        // (dense![4, 5, 0, 6, 7], sparse![(0, 1), (2, 3), (4, 5)], dense![3, 5, -3, 6, 2]),
+        (dense![4, 5, 0, 6, 7], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
+        (dense![4, 5, 0, 6, 7], Polynomial::<i64>::one(),        dense![3, 5, 0, 6, 7]),
+        (dense![4, 5, 0, 6, 7], Polynomial::constant(3),         dense![1, 5, 0, 6, 7]),
+        (dense![4, 5, 0, 6, 7], dense![1, 2, 3],                 dense![3, 3, -3, 6, 7]),
+        (dense![4, 5, 0, 6, 7], sparse![(0, 1), (2, 3), (4, 5)], dense![3, 5, -3, 6, 2]),
         
-        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
-        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::one(),        dense![3, 5, 0, 6, 7]),
-        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::constant(3),         dense![1, 5, 0, 6, 7]),
-        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], dense![1, 2, 3],                 dense![3, 3, -3, 6, 7]),
-        // (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], sparse![(0, 1), (2, 3), (4, 5)], dense![3, 5, 3, 6, 2]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::zero(),       dense![4, 5, 0, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::one(),        dense![3, 5, 0, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::constant(3),         dense![1, 5, 0, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], dense![1, 2, 3],                 dense![3, 3, 3, 6, 7]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], sparse![(0, 1), (2, 3), (4, 5)], dense![3, 5, 3, 6, 2]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
+#[test]
+fn test_mul(){
+    fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
+        assert_eq!(&x * &y, exp.clone());
+        assert_eq!(x * y, exp);
+    }
+
+    let table = [
+        (Polynomial::<i64>::zero(), Polynomial::<i64>::zero(),       Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::zero(), Polynomial::<i64>::one(),        Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::zero(), Polynomial::constant(3),         Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::zero(), dense![1, 2, 3],                 Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::zero(), sparse![(0, 1), (2, 3), (4, 5)], Polynomial::<i64>::zero()),
+        
+        (Polynomial::<i64>::one(), Polynomial::<i64>::zero(),       Polynomial::<i64>::zero()),
+        (Polynomial::<i64>::one(), Polynomial::<i64>::one(),        Polynomial::one()),
+        (Polynomial::<i64>::one(), Polynomial::constant(3),         Polynomial::constant(3)),
+        (Polynomial::<i64>::one(), dense![1, 2, 3],                 dense![1, 2, 3]),
+        (Polynomial::<i64>::one(), sparse![(0, 1), (2, 3), (4, 5)], sparse![(0, 1), (2, 3), (4, 5)]),
+        
+        (Polynomial::constant(5), Polynomial::<i64>::zero(),       Polynomial::<i64>::zero()),
+        (Polynomial::constant(5), Polynomial::<i64>::one(),        Polynomial::constant(5)),
+        (Polynomial::constant(5), Polynomial::constant(3),         Polynomial::constant(15)),
+        (Polynomial::constant(5), dense![1, 2, 3],                 dense![5, 10, 15]),
+        (Polynomial::constant(5), sparse![(0, 1), (2, 3), (4, 5)], sparse![(0, 5), (2, 15), (4, 25)]),
+        
+        (dense![4, 5, 0, 6, 7], Polynomial::<i64>::zero(),   Polynomial::<i64>::zero()),
+        (dense![4, 5, 0, 6, 7], Polynomial::<i64>::one(),    dense![4, 5, 0, 6, 7]),
+        (dense![4, 5, 0, 6, 7], Polynomial::constant(3),     dense![12, 15, 0, 18, 21]),
+        (dense![4, 5, 0, 6, 7], dense![1, 2, 3],             dense![4, 13, 22, 21, 19, 32, 21]),
+        (sparse![(0, 4), (3, 5), (7, 6)].to_dense(), sparse![(0, 1), (4, 2)].to_dense(),
+                sparse![(0, 4), (3, 5), (4, 8), (7, 16), (11, 12)]),
+        (dense![4, 5, 0, 6, 7], dense![1, 2, 3].to_sparse(), dense![4, 13, 22, 21, 19, 32, 21]),
+        (sparse![(0, 4), (3, 5), (7, 6)].to_dense(), sparse![(0, 1), (4, 2)], 
+                sparse![(0, 4), (3, 5), (4, 8), (7, 16), (11, 12)]),
+        
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::zero(), Polynomial::<i64>::zero()),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::<i64>::one(),  sparse![(0, 4), (1, 5), (3, 6), (4, 7)]),
+        (sparse![(0, 4), (1, 5), (3, 6), (4, 7)], Polynomial::constant(3),   sparse![(0, 12), (1, 15), (3, 18), (4, 21)]),
+        (dense![4, 5, 0, 6, 7].to_sparse(), dense![1, 2, 3],                 dense![4, 13, 22, 21, 19, 32, 21]),
+        (sparse![(0, 4), (3, 5), (7, 6)].to_sparse(), sparse![(0, 1), (4, 2)].to_dense(),
+                sparse![(0, 4), (3, 5), (4, 8), (7, 16), (11, 12)]),
+        (dense![4, 5, 0, 6, 7].to_sparse(), dense![1, 2, 3].to_sparse(),     dense![4, 13, 22, 21, 19, 32, 21]),
+        (sparse![(0, 4), (3, 5), (7, 6)].to_sparse(), sparse![(0, 1), (4, 2)], 
+                sparse![(0, 4), (3, 5), (4, 8), (7, 16), (11, 12)]),
     ];
 
     for entry in table {

@@ -240,6 +240,27 @@ pub(crate) fn sub_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynom
     Polynomial::sparse_from_map(map)
 } 
 
+pub(crate) fn mul_sparse<C: Num + Clone>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+    mul_sparse_ref(&lhs, &rhs)
+}
+
+pub(crate) fn mul_sparse_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
+    let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+    for (i, x) in lhs.non_zero_coeffs_iter() {
+        for (j, y) in rhs.non_zero_coeffs_iter() {
+            let k = i + j;
+            let z = x.clone() * y.clone();
+            match map.get_mut(&k){
+                Some(c) => *c = c.clone() + z,
+                None => { map.insert(k, z); },
+            }
+        }
+    }
+
+    Polynomial::sparse_from_map(map)
+}
+
  
 //    def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C] = {
 //      var i = coeff.length - 2

@@ -168,6 +168,50 @@ pub(crate) fn sub_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomi
     Polynomial::dense_from_vec(v)
 }
 
+pub(crate) fn mul_dense<C: Num + Clone>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+    mul_dense_ref(&lhs, &rhs)
+}
+
+pub(crate) fn mul_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
+    let deg = lhs.degree() + rhs.degree();
+    let mut v: Vec<C> = Vec::with_capacity(deg + 1);
+
+    for (i, x) in lhs.non_zero_coeffs_iter() {
+        for (j, y) in rhs.non_zero_coeffs_iter() {
+            let k = i + j;
+            let z = x.clone() * y.clone();
+            match v.get_mut(k) {
+                Some(c) => *c = c.clone() + z,
+                None => {
+                    let n = v.len();
+                    for _ in 0..(k-n) { v.push(C::zero()) }
+                    v.push(z);
+                },
+            }
+        }
+    }
+
+    Polynomial::dense_from_vec(v)
+}
+
+// def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
+//   if (rhs.isZero) return rhs
+//   if (lhs.isZero) return lhs
+//   val lcs = lhs.coeffsArray
+//   val rcs = rhs.coeffsArray
+//   val cs = new Array[C](lcs.length + rcs.length - 1)
+//   cfor(0)(_ < cs.length, _ + 1) { i => cs(i) = ring.zero }
+//   cfor(0)(_ < lcs.length, _ + 1) { i =>
+//     val c = lcs(i)
+//     var k = i
+//     cfor(0)(_ < rcs.length, _ + 1) { j =>
+//       cs(k) += c * rcs(j)
+//       k += 1
+//     }
+//   }
+//   Polynomial.dense(cs)
+// }
+
 // def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C] = {
 //   var i = coeffs.length - 2
 //   while (i >= 0 && coeffs(i) === ring.zero) i -= 1
@@ -219,30 +263,6 @@ pub(crate) fn sub_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomi
 //   val cs = new Array[C](coeffs.length + 1)
 //   cs(0) = field.zero
 //   cfor(0)(_ < coeffs.length, _ + 1) { i => cs(i + 1) = coeffs(i) / field.fromInt(i + 1) }
-//   Polynomial.dense(cs)
-// }
-
-// def unary_-(implicit ring: Rng[C]): Polynomial[C] = {
-//   val negArray = new Array[C](coeffs.length)
-//   cfor(0)(_ < coeffs.length, _ + 1) { i => negArray(i) = -coeffs(i) }
-//   new PolyDense(negArray)
-// }
-
-// def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
-//   if (rhs.isZero) return rhs
-//   if (lhs.isZero) return lhs
-//   val lcs = lhs.coeffsArray
-//   val rcs = rhs.coeffsArray
-//   val cs = new Array[C](lcs.length + rcs.length - 1)
-//   cfor(0)(_ < cs.length, _ + 1) { i => cs(i) = ring.zero }
-//   cfor(0)(_ < lcs.length, _ + 1) { i =>
-//     val c = lcs(i)
-//     var k = i
-//     cfor(0)(_ < rcs.length, _ + 1) { j =>
-//       cs(k) += c * rcs(j)
-//       k += 1
-//     }
-//   }
 //   Polynomial.dense(cs)
 // }
 
