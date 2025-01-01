@@ -1,6 +1,6 @@
 use std::{collections::{BTreeMap, btree_map}, fmt::{Debug, Display}, iter::Enumerate, vec, ops::*, slice::Iter};
 
-use num::{traits::{ConstOne, ConstZero}, Num, One, Zero};
+use num::{pow::Pow, traits::{ConstOne, ConstZero}, Num, One, Zero};
 
 use crate::poly::{const_content::ConstContent, dense_content::*, sparse_content::*, term::Term};
 
@@ -898,30 +898,60 @@ impl<'a, C: Num + Clone> Rem for &'a Polynomial<C> {
     }
 }
 
-//   def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
+fn calc_pow<C: Num + Clone>(base: &Polynomial<C>, p: u32, extra: &Polynomial<C>) -> Polynomial<C> {
+    if p == 1 {
+        base * extra
+    } else {
+        let next_extra = if (p & 1) == 1 { base * extra } else { extra.clone() };
+        calc_pow(&(base * base), p >> 1, &next_extra)
+    }
+}
 
-//   def **(k: Int)(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = pow(k)
+/// Note that 0^0 returns 1 for simplicity.
+impl<C: Num + Clone> Pow<u32> for Polynomial<C> {
 
-//   def pow(k: Int)(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
-//     def loop(b: Polynomial[C], k: Int, extra: Polynomial[C]): Polynomial[C] =
-//       if (k == 1)
-//         b * extra
-//       else
-//         loop(b * b, k >>> 1, if ((k & 1) == 1) b * extra else extra)
+    type Output = Polynomial<C>;
 
-//     if (k < 0) {
-//       throw new IllegalArgumentException("negative exponent")
-//     } else if (k == 0) {
-//       Polynomial.one[C]
-//     } else if (k == 1) {
-//       this
-//     } else {
-//       loop(this, k - 1, this)
+    fn pow(self, power: u32) -> Self::Output {
+        match power {
+            0 => Polynomial::one(),
+            1 => self,
+            _ => calc_pow(&self, power-1, &self)
+        }
+    }
+}
+
+/// Note that 0^0 returns 1 for simplicity.
+impl<'a, C: Num + Clone> Pow<u32> for &'a Polynomial<C> {
+
+    type Output = Polynomial<C>;
+
+    fn pow(self, power: u32) -> Polynomial<C> {
+        match power {
+            0 => Polynomial::one(),
+            1 => self.clone(),
+            _ => calc_pow(self, power-1, self)
+        }
+    }
+}
+
+// impl<C: Num + Clone> BitXor<u32> for Polynomial<C> {
+
+//     type Output = Polynomial<C>;
+
+//     fn bitxor(self, power: u32) -> Self::Output {
+//         self.pow(power)
 //     }
-//   }
+// }
 
+// impl<'a, C: Num + Clone> BitXor<u32> for &'a Polynomial<C> {
 
+//     type Output = Polynomial<C>;
 
+//     fn bitxor(self, power: u32) -> Self::Output {
+//         self.pow(power)
+//     }
+// }
 
 //   /**
 //    * Shift this polynomial along the x-axis by `h`, so that `this(x + h) == this.shift(h).apply(x)`. This is equivalent
