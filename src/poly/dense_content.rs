@@ -51,13 +51,13 @@ impl<C> DenseContent<C> where C: Num + Clone + Neg<Output=C> {
 }
 
 
-/// Return (max, min, first_arg_is_longer)
+/// Return (max, min, first_arg_is_higher)
 fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
     if x >= y { (x, y, true) } else { (y, x, false) }
 }
 
 pub(crate) fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
-    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+    let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
 
     let mut v: Vec<C> = Vec::with_capacity(d_max);
 
@@ -71,14 +71,14 @@ pub(crate) fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polyn
         }
     }
 
-    let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
+    let rest_iter = if lhs_is_higher { lhs_iter } else { rhs_iter };
     v.extend(rest_iter);
 
     Polynomial::dense_from_vec(v)
 }
 
 pub(crate) fn add_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
-    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+    let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
 
     let mut v: Vec<C> = Vec::with_capacity(d_max);
 
@@ -97,7 +97,7 @@ pub(crate) fn add_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs:
         }
     }
 
-    let rest_iter = if lhs_is_longer { lhs_iter } else { rhs_iter };
+    let rest_iter = if lhs_is_higher { lhs_iter } else { rhs_iter };
     v.extend(rest_iter.map(|c| match c {
         Some(x) => x.clone(),
         None => C::zero(),

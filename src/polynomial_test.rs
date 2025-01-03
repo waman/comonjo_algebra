@@ -197,52 +197,47 @@ fn test_iter_methods(){
 #[test]
 fn test_eq(){
     let p0 = dense![1, 0, 2, 4, 0, 0, 1];
+    assert_eq!(p0, dense![1, 0, 2, 4, 0, 0, 1]);
+
     let p1 = sparse![(0, 1), (2, 2), (3, 4), (6, 1)];
+    assert_eq!(p1, sparse![(0, 1), (2, 2), (3, 4), (6, 1)]);
+
     assert_eq!(p0, p1);
 }
 
 #[test]
 fn test_clone_methods(){  // clone(), dense_clone(), sparse_clone(), to_dense() and to_sparse()
+    fn test_with_clones<F>(p: Polynomial<i64>, test: F) where F: Fn(Polynomial<i64>) {
+        for p_clone in [
+            p.clone(),
+            p.dense_clone(),
+            p.sparse_clone(),
+            p.clone().to_dense(),
+            p.clone().to_sparse()
+        ]{
+            test(p_clone)
+        }
+    }
+
+    test_with_clones(zero(), |p| assert!(p.is_zero()));
+    test_with_clones(one(), |p| assert!(p.is_one()));
+    test_with_clones(cst(5), |p| {
+        assert!(p.is_constant());
+        assert_eq!(p.nth(0), Some(&5));
+    });
+    
     // 1 + 2x² + 4x³ + x⁶
     let pd = dense![1, 0, 2, 4, 0, 0, 1];
     let ps = sparse![(0, 1), (2, 2), (3, 4), (6, 1)];
-    assert_eq!(pd, ps);
 
-    // dense_clone()
-    let p1 = pd.dense_clone();
-    assert_eq!(p1, pd);
-    assert_eq!(p1, ps);
-
-    let p2 = ps.dense_clone();
-    assert_eq!(p2, pd);
-    assert_eq!(p2, ps);
-
-    // sparse_clone()
-    let p3 = pd.sparse_clone();
-    assert_eq!(p3, pd);
-    assert_eq!(p3, ps);
-
-    let p4 = ps.sparse_clone();
-    assert_eq!(p4, pd);
-    assert_eq!(p4, ps);
-
-    // to_dense()
-    let p5 = pd.clone().to_dense();
-    assert_eq!(p5, pd);
-    assert_eq!(p5, ps);
-
-    let p6 = ps.clone().to_dense();
-    assert_eq!(p6, pd);
-    assert_eq!(p6, ps);
-
-    // to_sparse()
-    let p7 = pd.clone().to_sparse();
-    assert_eq!(p7, pd);
-    assert_eq!(p7, ps);
-
-    let p8 = ps.clone().to_sparse();
-    assert_eq!(p8, pd);
-    assert_eq!(p8, ps);
+    test_with_clones(dense![1, 0, 2, 4, 0, 0, 1], |p|{
+        assert_eq!(p, pd);
+        assert_eq!(p, ps);
+    });
+    test_with_clones(sparse![(0, 1), (2, 2), (3, 4), (6, 1)], |p|{
+        assert_eq!(p, pd);
+        assert_eq!(p, ps);
+    });
 }
 
 #[test]
