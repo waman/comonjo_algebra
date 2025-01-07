@@ -1,12 +1,11 @@
-use std::{collections::BTreeMap, ops::Neg};
-use num::Num;
+use std::collections::BTreeMap;
 
-use crate::polynomial::Polynomial;
+use crate::{algebra::algebra::{Ring, Semiring}, polynomial::Polynomial};
 
 #[derive(Clone)]
-pub struct SparseContent<C: Num>(pub(crate) BTreeMap<usize, C>);
+pub struct SparseContent<C>(pub(crate) BTreeMap<usize, C>);
 
-impl<C: Num> SparseContent<C> {
+impl<C> SparseContent<C> where C: Semiring {
 
     pub fn degree(&self) -> usize {
         *self.0.last_key_value().unwrap().0
@@ -33,7 +32,7 @@ impl<C: Num> SparseContent<C> {
     }
 }
 
-impl<C> SparseContent<C> where C: Num + Neg<Output=C>{
+impl<C> SparseContent<C> where C: Ring {
 
     pub fn neg(self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = self.0.into_iter().map(|(i, e)|(i, -e)).collect();
@@ -41,7 +40,7 @@ impl<C> SparseContent<C> where C: Num + Neg<Output=C>{
     }
 }
 
-impl<C> SparseContent<C> where C: Num + Clone + Neg<Output=C> {
+impl<C> SparseContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, -e.clone())).collect();
@@ -49,7 +48,9 @@ impl<C> SparseContent<C> where C: Num + Clone + Neg<Output=C> {
     }
 }
 
-pub(crate) fn add_sparse<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn add_sparse<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+        where C: Semiring {
+
     let mut map = BTreeMap::new();
 
     let mut lhs_iter = lhs.into_non_zero_coeffs_iter();
@@ -96,7 +97,8 @@ pub(crate) fn add_sparse<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Poly
     Polynomial::sparse_from_map(map)
 } 
 
-pub(crate) fn add_sparse_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn add_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
+        where C: Semiring + Clone {
 
     let mut map = BTreeMap::new();
 
@@ -144,7 +146,9 @@ pub(crate) fn add_sparse_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs
     Polynomial::sparse_from_map(map)
 } 
 
-pub(crate) fn sub_sparse<C: Num + Neg<Output=C>>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>{
+pub(crate) fn sub_sparse<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+        where C: Ring {
+
     let mut map = BTreeMap::new();
 
     let mut lhs_iter = lhs.into_non_zero_coeffs_iter();
@@ -192,7 +196,7 @@ pub(crate) fn sub_sparse<C: Num + Neg<Output=C>>(lhs: Polynomial<C>, rhs: Polyno
 } 
 
 pub(crate) fn sub_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
-        where C: Num + Clone + Neg<Output=C> {
+        where C: Ring + Clone {
 
     let mut map = BTreeMap::new();
 
@@ -240,11 +244,13 @@ pub(crate) fn sub_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynom
     Polynomial::sparse_from_map(map)
 } 
 
-pub(crate) fn mul_sparse<C: Num + Clone>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn mul_sparse<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+        where C: Semiring + Clone {
     mul_sparse_ref(&lhs, &rhs)
 }
 
-pub(crate) fn mul_sparse_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn mul_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
+        where C: Semiring + Clone {
     let mut map: BTreeMap<usize, C> = BTreeMap::new();
 
     for (i, x) in lhs.non_zero_coeffs_iter() {

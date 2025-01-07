@@ -1,13 +1,9 @@
-use std::ops::Neg;
-
-use num::Num;
-
-use crate::polynomial::Polynomial;
+use crate::{algebra::algebra::{Ring, Semiring}, polynomial::Polynomial};
 
 #[derive(Clone)]
-pub struct DenseContent<C: Num>(pub(crate) Vec<C>);
+pub struct DenseContent<C>(pub(crate) Vec<C>);
 
-impl<C: Num> DenseContent<C> {
+impl<C> DenseContent<C> where C: Semiring {
 
     pub fn degree(&self) -> usize {
         self.0.len() - 1
@@ -34,7 +30,7 @@ impl<C: Num> DenseContent<C> {
     }
 }
 
-impl<C> DenseContent<C> where C: Num + Neg<Output=C>{
+impl<C> DenseContent<C> where C: Ring {
 
     pub fn neg(self) -> Polynomial<C> {
         let v: Vec<C> = self.0.into_iter().map(|e|-e).collect();
@@ -42,7 +38,7 @@ impl<C> DenseContent<C> where C: Num + Neg<Output=C>{
     }
 }
 
-impl<C> DenseContent<C> where C: Num + Clone + Neg<Output=C> {
+impl<C> DenseContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
         let v: Vec<C> = self.0.iter().map(|e|-e.clone()).collect();
@@ -56,7 +52,9 @@ fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
     if x >= y { (x, y, true) } else { (y, x, false) }
 }
 
-pub(crate) fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn add_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+        where C: Semiring {
+
     let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
 
     let mut v: Vec<C> = Vec::with_capacity(d_max);
@@ -77,7 +75,9 @@ pub(crate) fn add_dense<C: Num>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polyn
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn add_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn add_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+        where C: Semiring + Clone {
+
     let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
 
     let mut v: Vec<C> = Vec::with_capacity(d_max);
@@ -107,7 +107,7 @@ pub(crate) fn add_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs:
 }
 
 pub(crate) fn sub_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
-        where C: Num + Neg<Output=C>{
+        where C: Ring {
 
     let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
 
@@ -133,7 +133,8 @@ pub(crate) fn sub_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial
 }
 
 pub(crate) fn sub_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
-        where C: Num + Clone + Neg<Output=C>{
+        where C: Ring + Clone {
+
     let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
 
     let mut v: Vec<C> = Vec::with_capacity(d_max);
@@ -168,11 +169,14 @@ pub(crate) fn sub_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomi
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn mul_dense<C: Num + Clone>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn mul_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
+        where C: Semiring + Clone {
     mul_dense_ref(&lhs, &rhs)
 }
 
-pub(crate) fn mul_dense_ref<'a, 'b, C: Num + Clone>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> {
+pub(crate) fn mul_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
+        where C: Semiring + Clone {
+
     let deg = lhs.degree() + rhs.degree();
     let mut v: Vec<C> = Vec::with_capacity(deg + 1);
 

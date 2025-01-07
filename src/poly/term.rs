@@ -1,7 +1,9 @@
 use std::{borrow::Cow, collections::HashMap, fmt::Display, ops::{Add, Div, Mul, Neg}};
 
-use num::{FromPrimitive, Num, One, Zero};
+use num::{One, Zero};
 use once_cell::sync::Lazy;
+
+use crate::algebra::algebra::{AdditiveGroup, AdditiveMonoid, AdditiveSemigroup, Field, Monoid, Semigroup};
 
 static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 
@@ -18,23 +20,23 @@ fn to_superscript(p: usize) -> String {
 }
 
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/poly/Term.scala">Term</a>
-pub struct Term<'a, C: Num + Clone>{
+pub struct Term<'a, C> where C: Clone {
     pub(crate) exp: usize,
     pub(crate) coeff: Cow<'a, C>,
 }
 
-impl<'a, C: Num + Clone> Term<'a, C> {
+impl<'a, C> Term<'a, C> where C: Clone {
 
-    pub fn from_ref<'b, D: Num + Clone>(exp: usize, coeff: &'b D) -> Term<'b, D> {
+    pub fn from_ref(exp: usize, coeff: &'a C) -> Term<'a, C> {
         Term { exp, coeff: Cow::Borrowed(coeff) }
     }
 
-    pub fn from_value<'b, D: Num + Clone>(exp: usize, coeff: D) -> Term<'b, D> {
+    pub fn from_value(exp: usize, coeff: C) -> Term<'a, C> {
         Term { exp, coeff: Cow::Owned(coeff) }
     }
 }
 
-impl<'a, C: Num + Clone> Term<'a, C>{
+impl<'a, C> Term<'a, C> where C: Semigroup + Clone {
 
     pub fn is_index_zero(&self) -> bool {
         self.exp == 0
@@ -49,7 +51,7 @@ impl<'a, C: Num + Clone> Term<'a, C>{
     }
 }
 
-impl<'a, C: Num + Clone + Display> Term<'a, C> {
+impl<'a, C> Term<'a, C> where C: Zero + PartialEq + One + Clone + Display {
 
     pub fn to_string(&self) -> String {
     
@@ -102,55 +104,48 @@ impl<'a, C: Num + Clone + Display> Term<'a, C> {
     }
 }
 
-impl<'a, C: Num + Clone + FromPrimitive> Term<'a, C> {
+// impl<'a, C> Term<'a, C> where C: Clone + FromPrimitive {
 
-    pub fn derivate(self) -> Term<'a, C> {
-        match FromPrimitive::from_usize(self.exp) {
-            Some(x) => Term::<C>::from_value(self.exp - 1, self.coeff.into_owned() * x),
-            None => panic!("can't derivate term of exp {}", self.exp),
-        }
-    }
+//     pub fn derivate(self) -> Term<'a, C> {
+//         match FromPrimitive::from_usize(self.exp) {
+//             Some(x) => Term::from_value(self.exp - 1, self.coeff.into_owned() * x),
+//             None => panic!("can't derivate term of exp {}", self.exp),
+//         }
+//     }
 
-    pub fn integrate(self) -> Term<'a, C> {
-        match FromPrimitive::from_usize(self.exp + 1) {
-            Some(x) => Term::<C>::from_value(self.exp + 1, self.coeff.into_owned() / x),
-            None => panic!("can't integrate term of exp {}", self.exp),
-        }
-    }
-}
+//     pub fn integrate(self) -> Term<'a, C> {
+//         match FromPrimitive::from_usize(self.exp + 1) {
+//             Some(x) => Term::from_value(self.exp + 1, self.coeff.into_owned() / x),
+//             None => panic!("can't integrate term of exp {}", self.exp),
+//         }
+//     }
+// }
 
-// impl<C> Term<C> where C: Num + Pow<usize, Output=Term<C>>{
+// impl<C> Term<C> where C: Ring + Pow<usize, Output=Term<C>>{
 
 //     pub fn eval(&self, x: C) -> C {
 //         if self.exp != 0 { self.coeff * (x.pow(self.exp)) } else { self.coeff }
 //     }
 // }
 
-impl<'a, C: Num + Clone> From<(usize, &'a C)> for Term<'a, C>{
+impl<'a, C> From<(usize, &'a C)> for Term<'a, C> where C: Clone {
 
     fn from(value: (usize, &'a C)) -> Self {
-        Term::<C>::from_ref(value.0, value.1)
+        Term::from_ref(value.0, value.1)
     }
 }
 
-impl<'a, C: Num + Clone> From<(usize, C)> for Term<'a, C>{
+impl<'a, C> From<(usize, C)> for Term<'a, C> where C: Clone {
 
     fn from(value: (usize, C)) -> Self {
-        Term::<C>::from_value(value.0, value.1)
+        Term::from_value(value.0, value.1)
     }
 }
 
-// impl<'a, C: Num + Clone> Into<(usize, C)> for Term<'a, C> {
-
-//     fn into(self) -> (usize, C) {
-//         (self.exp, self.coeff.into_owned())
-//     }
-// }
-
-impl<'a, C: Num + Clone> Zero for Term<'a, C> {
+impl<'a, C> Zero for Term<'a, C> where C: AdditiveMonoid + Clone {
 
     fn zero() -> Self {
-        Term::<C>::from_value(0, C::zero())
+        Term::from_value(0, C::zero())
     }
 
     fn is_zero(&self) -> bool {
@@ -158,29 +153,29 @@ impl<'a, C: Num + Clone> Zero for Term<'a, C> {
     }
 }
 
-impl<'a, C: Num + Clone> One for Term<'a, C> {
+impl<'a, C> One for Term<'a, C> where C: Monoid + Clone {
 
     fn one() -> Self {
-        Term::<C>::from_value(0, C::one())
+        Term::from_value(0, C::one())
     }
 }
 
-impl<'a, C: Num + Clone + Neg<Output=C>> Neg for Term<'a, C> {
+impl<'a, C> Neg for Term<'a, C> where C: AdditiveGroup + Clone {
 
     type Output = Term<'a, C>;
 
     fn neg(self) -> Self::Output {
-        Term::<C>::from_value(self.exp, -self.coeff.into_owned())
+        Term::from_value(self.exp, -self.coeff.into_owned())
     }
 }
 
-impl<'a, C: Num + Clone> Add for Term<'a, C> {
+impl<'a, C> Add for Term<'a, C> where C: AdditiveSemigroup + Clone {
 
     type Output = Term<'a, C>;
 
     fn add(self, other: Self) -> Self::Output {
         if self.exp == other.exp {
-            Term::<C>::from_value(self.exp, self.coeff.into_owned() + other.coeff.into_owned())
+            Term::from_value(self.exp, self.coeff.into_owned() + other.coeff.into_owned())
         } else {
             panic!("can't add terms of degree {} and ${}", self.exp, other.exp)
         }
@@ -188,20 +183,20 @@ impl<'a, C: Num + Clone> Add for Term<'a, C> {
     }
 }
 
-impl<'a, C: Num + Clone> Mul for Term<'a, C> {
+impl<'a, C> Mul for Term<'a, C> where C: Semigroup + Clone{
 
     type Output = Term<'a, C>;
 
     fn mul(self, other: Self) -> Self::Output {
-        Term::<C>::from_value(self.exp + other.exp, self.coeff.into_owned() * other.coeff.into_owned())
+        Term::from_value(self.exp + other.exp, self.coeff.into_owned() * other.coeff.into_owned())
     }
 }
 
-impl<'a, C: Num + Clone> Div<C> for Term<'a, C> {
+impl<'a, C> Div<C> for Term<'a, C> where C: Field + Clone {
 
     type Output = Term<'a, C>;
 
     fn div(self, rhs: C) -> Self::Output {
-        Term::<C>::from_value(self.exp, self.coeff.into_owned() / rhs)
+        Term::from_value(self.exp, self.coeff.into_owned() / rhs)
     }
 }

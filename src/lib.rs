@@ -1,4 +1,5 @@
 
+pub mod algebra;
 pub mod safe_i64;
 pub mod real;
 pub mod polynomial;

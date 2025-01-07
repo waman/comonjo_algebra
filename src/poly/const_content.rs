@@ -1,13 +1,9 @@
-use std::ops::Neg;
-
-use num::Num;
-
-use crate::polynomial::Polynomial;
+use crate::{algebra::algebra::Ring, polynomial::Polynomial};
 
 #[derive(Clone)]
-pub struct ConstContent<C: Num>(pub(crate) C);
+pub struct ConstContent<C>(pub(crate) C);
 
-impl<C: Num> ConstContent<C> {
+impl<C> ConstContent<C> {
 
     pub fn nth(&self, n: usize) -> Option<&C> {
         if n == 0 {  // note self.0 != 0
@@ -18,14 +14,14 @@ impl<C: Num> ConstContent<C> {
     }
 }
 
-impl<C> ConstContent<C> where C: Num + Neg<Output=C>{
+impl<C> ConstContent<C> where C: Ring {
 
     pub fn neg(self) -> Polynomial<C> {
         Polynomial::Constant(ConstContent(-self.0))
     }
 }
 
-impl<C> ConstContent<C> where C: Num + Clone + Neg<Output=C> {
+impl<C> ConstContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
         Polynomial::Constant(ConstContent(-self.0.clone()))
