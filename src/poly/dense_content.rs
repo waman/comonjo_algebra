@@ -41,7 +41,7 @@ impl<C> DenseContent<C> where C: Ring {
 impl<C> DenseContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
-        let v: Vec<C> = self.0.iter().map(|e|-e.clone()).collect();
+        let v: Vec<C> = self.0.iter().map(|e|e.neg()).collect();
         Polynomial::Dense(DenseContent(v))
     }
 }
@@ -88,7 +88,7 @@ pub(crate) fn add_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomi
     for _ in 0..=d_min {
         match (lhs_iter.next(), rhs_iter.next()) {
             (Some(some_x), Some(some_y)) => match (some_x, some_y) {
-                (Some(x), Some(y)) => v.push(x.clone() + y.clone()),
+                (Some(x), Some(y)) => v.push(x.add(y)),
                 (Some(x), None) => v.push(x.clone()),
                 (None, Some(y)) => v.push(y.clone()),
                 (None, None) => v.push(C::zero()),

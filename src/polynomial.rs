@@ -769,16 +769,16 @@ impl<C> Add for Polynomial<C> where C: Semiring {
     }
 }
 
-impl<'a, C> Add for &'a Polynomial<C> where C: Semiring + Clone {
+impl<'a, 'b, C> Add<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn add(self, other: Self) -> Self::Output {
+    fn add(self, other: &'b Polynomial<C>) -> Polynomial<C> {
         match (self, other) {
             (lhs, Polynomial::Zero()) => lhs.clone(),
             (Polynomial::Zero(), rhs) => rhs.clone(),
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
-                Polynomial::constant(lhs.0.clone() + rhs.0.clone()),
+                Polynomial::constant((&lhs.0).add(&rhs.0)),
             (lhs @ Polynomial::Dense(_), rhs) | 
             (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => add_dense_ref(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
@@ -812,9 +812,9 @@ impl<'a, C> Sub for &'a Polynomial<C> where C: Ring + Clone {
     fn sub(self, other: Self) -> Self::Output {
         match (self, other) {
             (lhs, Polynomial::Zero()) => lhs.clone(),
-            (Polynomial::Zero(), rhs) => -rhs.clone(),
+            (Polynomial::Zero(), rhs) => -rhs,
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
-                Polynomial::constant(lhs.0.clone() - rhs.0.clone()),
+                Polynomial::constant((&lhs.0).sub(&rhs.0)),
             (lhs @ Polynomial::Dense(_), rhs) | 
             (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => sub_dense_ref(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
@@ -850,7 +850,7 @@ impl<'a, C> Mul for &'a Polynomial<C> where C: Semiring + Clone {
             (_, Polynomial::Zero()) |
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
-                Polynomial::constant(lhs.0.clone() * rhs.0.clone()),
+                Polynomial::constant((&lhs.0).mul(&rhs.0)),
             (lhs @ Polynomial::Dense(_), rhs) | 
             (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => mul_dense_ref(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
@@ -860,6 +860,10 @@ impl<'a, C> Mul for &'a Polynomial<C> where C: Semiring + Clone {
 }
 
 // impl<C: Ring> Polynomial<C> {
+
+//     pub fn euclidean_fn(&self) -> BigUint {
+//         BigUint::from(self.degree())
+//     }
 
 //     pub fn quot_mod(self, other: Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) {
 //         if other.is_zero() { }
@@ -881,6 +885,8 @@ impl<'a, C> Mul for &'a Polynomial<C> where C: Semiring + Clone {
 //             (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => mul_sparse(lhs, rhs),
 //         }
 //     }
+
+//     // pub fn equot
 // }
 
 //   def euclideanFunction(x: Polynomial[C]): BigInt = x.degree

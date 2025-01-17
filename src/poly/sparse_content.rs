@@ -43,7 +43,7 @@ impl<C> SparseContent<C> where C: Ring {
 impl<C> SparseContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
-        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, -e.clone())).collect();
+        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, e.neg())).collect();
         Polynomial::Sparse(SparseContent(map))
     }
 }

@@ -24,6 +24,6 @@ impl<C> ConstContent<C> where C: Ring {
 impl<C> ConstContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
-        Polynomial::Constant(ConstContent(-self.0.clone()))
+        Polynomial::Constant(ConstContent((&self.0).neg()))
     }
 }

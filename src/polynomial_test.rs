@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use num::{pow::Pow, Complex, One, Rational64, Zero};
+use num::{complex::c64, pow::Pow, One, Rational64, Zero};
 
 use crate::{dense, sparse, polynomial::Polynomial};
 
@@ -81,8 +81,7 @@ fn test_display_for_rational_and_complex(){
     assert_eq!(format!("{}", p_rat), "1/2 + (1/3)x + (2/3)x²");
 
     // complex
-    fn c(re: f64, im: f64) -> Complex<f64> { Complex { re, im } }
-    let p_cx = dense![c(1., 2.), c(3., 4.), c(5., 6.)];
+    let p_cx = dense![c64(1., 2.), c64(3., 4.), c64(5., 6.)];
     assert_eq!(format!("{}", p_cx), "1+2i + (3+4i)x + (5+6i)x²");
 }
 
