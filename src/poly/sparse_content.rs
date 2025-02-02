@@ -1,6 +1,8 @@
 use std::collections::BTreeMap;
 
-use crate::{algebra::algebra::{Ring, Semiring}, polynomial::Polynomial};
+use crate::{algebra::{Ring, Semiring}, poly::Polynomial};
+
+use super::IntoCoeffsIterator;
 
 #[derive(Clone)]
 pub struct SparseContent<C>(pub(crate) BTreeMap<usize, C>);
@@ -43,7 +45,7 @@ impl<C> SparseContent<C> where C: Ring {
 impl<C> SparseContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
-        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, e.neg())).collect();
+        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, e)|(*i, e.neg_ref())).collect();
         Polynomial::Sparse(SparseContent(map))
     }
 }
@@ -53,8 +55,8 @@ pub(crate) fn add_sparse<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomia
 
     let mut map = BTreeMap::new();
 
-    let mut lhs_iter = lhs.into_non_zero_coeffs_iter();
-    let mut rhs_iter = rhs.into_non_zero_coeffs_iter();
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
 
     let mut x_next = lhs_iter.next();
     let mut y_next = rhs_iter.next();
@@ -102,8 +104,8 @@ pub(crate) fn add_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynom
 
     let mut map = BTreeMap::new();
 
-    let mut lhs_iter = lhs.non_zero_coeffs_iter();
-    let mut rhs_iter = rhs.non_zero_coeffs_iter();
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
 
     let mut x_next = lhs_iter.next();
     let mut y_next = rhs_iter.next();
@@ -151,8 +153,8 @@ pub(crate) fn sub_sparse<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomia
 
     let mut map = BTreeMap::new();
 
-    let mut lhs_iter = lhs.into_non_zero_coeffs_iter();
-    let mut rhs_iter = rhs.into_non_zero_coeffs_iter();
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
 
     let mut x_next = lhs_iter.next();
     let mut y_next = rhs_iter.next();
@@ -200,8 +202,8 @@ pub(crate) fn sub_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynom
 
     let mut map = BTreeMap::new();
 
-    let mut lhs_iter = lhs.non_zero_coeffs_iter();
-    let mut rhs_iter = rhs.non_zero_coeffs_iter();
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
 
     let mut x_next = lhs_iter.next();
     let mut y_next = rhs_iter.next();
@@ -253,8 +255,8 @@ pub(crate) fn mul_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynom
         where C: Semiring + Clone {
     let mut map: BTreeMap<usize, C> = BTreeMap::new();
 
-    for (i, x) in lhs.non_zero_coeffs_iter() {
-        for (j, y) in rhs.non_zero_coeffs_iter() {
+    for (i, x) in lhs.nonzero_coeffs() {
+        for (j, y) in rhs.nonzero_coeffs() {
             let k = i + j;
             let z = x.clone() * y.clone();
             match map.get_mut(&k){
@@ -266,6 +268,43 @@ pub(crate) fn mul_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynom
 
     Polynomial::sparse_from_map(map)
 }
+
+// pub(crate) fn div_rem_by_c_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b C) -> (Polynomial<C>, Polynomial<C>) 
+//         where C: Field + Clone {
+
+// }
+
+// pub(crate) fn div_rem_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) 
+//         where C: Field + Clone {
+ 
+//             //    final private[math] def quotmodSparse[@sp(Double) C: Field: Eq: ClassTag](lhs: PolySparse[C],
+//             //                                                                              rhs: PolySparse[C]
+//             //    ): (PolySparse[C], PolySparse[C]) = {
+//             //      val rdegree = rhs.degree
+//             //      val rmaxCoeff = rhs.maxOrderTermCoeff
+             
+//             //      @tailrec
+//             //      def inflate(ts: List[Term[C]], i: Int, es: Array[Int], cs: Array[C]): PolySparse[C] =
+//             //        ts match {
+//             //          case Term(c, e) :: ts0 => es(i) = e; cs(i) = c; inflate(ts0, i + 1, es, cs)
+//             //          case Nil               => new PolySparse(es, cs)
+//             //        }
+             
+//             //      @tailrec
+//             //      def loop(quot: List[Term[C]], rem: PolySparse[C]): (PolySparse[C], PolySparse[C]) =
+//             //        if (!rem.isZero && rem.degree >= rdegree) {
+//             //          val c0 = rem.maxOrderTermCoeff / rmaxCoeff
+//             //          val e0 = rem.degree - rdegree
+//             //          loop(Term(c0, e0) :: quot, subtractScaled(rem, c0, e0, rhs))
+//             //        } else {
+//             //          val len = quot.size
+//             //          (inflate(quot, 0, new Array[Int](len), new Array[C](len)), rem)
+//             //        }
+             
+//             //      loop(Nil, lhs)
+//             //    }
+//             //  }
+// }
 
  
 //    def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C] = {
@@ -517,11 +556,11 @@ pub(crate) fn mul_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynom
  
 //        case _ =>
 //          var len = 0
-//          poly.foreachNonZero { (_, _) => len += 1 }
+//          poly.foreachNonzero { (_, _) => len += 1 }
 //          val es = new Array[Int](len)
 //          val cs = new Array[C](len)
 //          var i = 0
-//          poly.foreachNonZero { (e, c) =>
+//          poly.foreachNonzero { (e, c) =>
 //            es(i) = e
 //            cs(i) = c
 //            i += 1
@@ -623,31 +662,3 @@ pub(crate) fn mul_sparse_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynom
  
 //      loop(0, 0, 0)
 //    }
- 
-//    final private[math] def quotmodSparse[@sp(Double) C: Field: Eq: ClassTag](lhs: PolySparse[C],
-//                                                                              rhs: PolySparse[C]
-//    ): (PolySparse[C], PolySparse[C]) = {
-//      val rdegree = rhs.degree
-//      val rmaxCoeff = rhs.maxOrderTermCoeff
- 
-//      @tailrec
-//      def inflate(ts: List[Term[C]], i: Int, es: Array[Int], cs: Array[C]): PolySparse[C] =
-//        ts match {
-//          case Term(c, e) :: ts0 => es(i) = e; cs(i) = c; inflate(ts0, i + 1, es, cs)
-//          case Nil               => new PolySparse(es, cs)
-//        }
- 
-//      @tailrec
-//      def loop(quot: List[Term[C]], rem: PolySparse[C]): (PolySparse[C], PolySparse[C]) =
-//        if (!rem.isZero && rem.degree >= rdegree) {
-//          val c0 = rem.maxOrderTermCoeff / rmaxCoeff
-//          val e0 = rem.degree - rdegree
-//          loop(Term(c0, e0) :: quot, subtractScaled(rem, c0, e0, rhs))
-//        } else {
-//          val len = quot.size
-//          (inflate(quot, 0, new Array[Int](len), new Array[C](len)), rem)
-//        }
- 
-//      loop(Nil, lhs)
-//    }
-//  }

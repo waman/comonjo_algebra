@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use num::{complex::c64, pow::Pow, One, Rational64, Zero};
 
-use crate::{dense, sparse, polynomial::Polynomial};
+use crate::{dense, poly::{IntoCoeffsIterator, Polynomial}, sparse};
 
 fn zero() -> Polynomial<i64> { Polynomial::<i64>::zero() }
 fn one() -> Polynomial<i64> { Polynomial::<i64>::one() }
@@ -155,28 +155,36 @@ fn test_degree_zero_one_constant(){
 }
 
 #[test]
-fn test_iter_methods(){
+fn test_coeffs_iter_methods(){
     fn test(p: Polynomial<i64>, exp: Vec<i64>){
-        let non_zero_exp: HashMap<usize, i64> = exp.clone().into_iter().enumerate().filter(|(_, c)|*c != 0).collect();
+        let nonzero_exp: HashMap<usize, i64> = exp.clone().into_iter().enumerate().filter(|(_, c)|*c != 0).collect();
 
-        // coeffs_iter()
-        let cs0: Vec<i64> = p.coeffs_iter().map(|c| match c {
+        // into_iter() for Polynomial
+        let cs0: HashMap<usize, i64> = p.clone().nonzero_coeffs().collect();
+        assert_eq!(cs0, nonzero_exp);
+
+        // nonzero_coeffs() for Polynomial (= into_iter())
+        let cs1: HashMap<usize, i64> = p.clone().nonzero_coeffs().collect();
+        assert_eq!(cs1, nonzero_exp);
+
+        // coeffs() for Polynomial
+        let cs2: Vec<i64> = p.clone().coeffs().collect();
+        assert_eq!(cs2, exp);
+
+        // into_iter() for &Polynomial
+        let cs3: HashMap<usize, i64> = (&p).into_iter().map(|(e, c)|(e, *c)).collect();
+        assert_eq!(cs3, nonzero_exp);
+
+        // nonzero_coeffs() for &Polynomial (= into_iter())
+        let cs4: HashMap<usize, i64> = (&p).nonzero_coeffs().map(|(e, c)|(e, *c)).collect();
+        assert_eq!(cs4, nonzero_exp);
+
+        // coeffs() for &Polynomial
+        let cs5: Vec<i64> = (&p).coeffs().map(|c| match c {
             Some(c) => *c,
             None => 0,
         }).collect();
-        assert_eq!(cs0, exp);
-
-        // non_zero_coeffs_iter
-        let cs1: HashMap<usize, i64> = p.non_zero_coeffs_iter().map(|(e, c)|(e, *c)).collect();
-        assert_eq!(cs1, non_zero_exp);
-
-        // into_coeffs_iter()
-        let cs2: Vec<i64> = p.clone().into_coeffs_iter().collect();
-        assert_eq!(cs2, exp);
-
-        // into_non_zero_coeffs_iter()
-        let cs3: HashMap<usize, i64> = p.into_non_zero_coeffs_iter().collect();
-        assert_eq!(cs3, non_zero_exp);
+        assert_eq!(cs5, exp);
     }
 
     let v = vec![1, 2, 0, 3, 0, 4, 0, 0, 5];

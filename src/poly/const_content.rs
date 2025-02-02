@@ -1,4 +1,4 @@
-use crate::{algebra::algebra::Ring, polynomial::Polynomial};
+use crate::{algebra::Ring, poly::Polynomial};
 
 #[derive(Clone)]
 pub struct ConstContent<C>(pub(crate) C);
@@ -24,6 +24,6 @@ impl<C> ConstContent<C> where C: Ring {
 impl<C> ConstContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
-        Polynomial::Constant(ConstContent((&self.0).neg()))
+        Polynomial::Constant(ConstContent((&self.0).neg_ref()))
     }
 }

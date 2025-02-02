@@ -3,7 +3,7 @@ use std::{borrow::Cow, collections::HashMap, fmt::Display, ops::{Add, Div, Mul, 
 use num::{One, Zero};
 use once_cell::sync::Lazy;
 
-use crate::algebra::algebra::{AdditiveGroup, AdditiveMonoid, AdditiveSemigroup, Field, Monoid, Semigroup};
+use crate::algebra::{AdditiveGroup, AdditiveMonoid, AdditiveSemigroup, Field, Monoid, Semigroup};
 
 static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 

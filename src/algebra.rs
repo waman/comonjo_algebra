@@ -14,7 +14,7 @@ type Complex32 = Complex<f32>;
 type Complex64 = Complex<f64>;
 
 pub trait Semigroup: Mul<Self, Output=Self> where Self: Sized {
-    fn mul(&self, other: &Self) -> Self;
+    fn mul_ref(&self, other: &Self) -> Self;
 }
 
 macro_rules! impl_semigroup {
@@ -22,7 +22,7 @@ macro_rules! impl_semigroup {
         $(
             impl Semigroup for $t {
                 #[inline]
-                fn mul(&self, other: &Self) -> Self { self * other }
+                fn mul_ref(&self, other: &Self) -> Self { self * other }
             }
         )*
     };
@@ -36,7 +36,7 @@ impl_algebra!(Monoid; usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, 
     BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
 pub trait Group: Monoid + Div<Self, Output=Self> {
-    fn div(&self, other: &Self) -> Self;
+    fn div_ref(&self, other: &Self) -> Self;
 }
 
 macro_rules! impl_group {
@@ -44,7 +44,7 @@ macro_rules! impl_group {
         $(
             impl Group for $t {
                 #[inline]
-                fn div(&self, other: &Self) -> Self { self / other }
+                fn div_ref(&self, other: &Self) -> Self { self / other }
             }
         )*
     };
@@ -54,7 +54,7 @@ impl_group!(f32, f64, Rational32, Rational64, BigRational, Complex32, Complex64)
 
 
 pub trait AdditiveSemigroup: Add<Self, Output=Self> where Self: Sized {
-    fn add(&self, other: &Self) -> Self;
+    fn add_ref(&self, other: &Self) -> Self;
 }
 
 macro_rules! impl_additive_semigroup {
@@ -62,7 +62,7 @@ macro_rules! impl_additive_semigroup {
         $(
             impl AdditiveSemigroup for $t {
                 #[inline]
-                fn add(&self, other: &Self) -> Self { self + other }
+                fn add_ref(&self, other: &Self) -> Self { self + other }
             }
         )*
     };
@@ -76,8 +76,8 @@ impl_algebra!(AdditiveMonoid; usize, u8, u16, u32, u64, u128, isize, i8, i16, i3
     BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
 pub trait AdditiveGroup: AdditiveMonoid + Neg<Output=Self> + Sub<Self, Output=Self> {
-    fn neg(&self) -> Self;
-    fn sub(&self, other: &Self) -> Self;
+    fn neg_ref(&self) -> Self;
+    fn sub_ref(&self, other: &Self) -> Self;
 
 }
 
@@ -86,10 +86,10 @@ macro_rules! impl_additive_group {
         $(
             impl AdditiveGroup for $t {
                 #[inline]
-                fn neg(&self) -> Self { -self }
+                fn neg_ref(&self) -> Self { -self }
                 
                 #[inline]
-                fn sub(&self, other: &Self) -> Self { self - other }
+                fn sub_ref(&self, other: &Self) -> Self { self - other }
             }
         )*
     };
@@ -108,9 +108,11 @@ impl_algebra!(Ring; isize, i8, i16, i32, i64, i128, f32, f64,
     BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
 
-pub trait EuclideanRing: Ring + Eq + Div<Self, Output=Self> + Rem<Self, Output=Self> {
-    fn div(&self, other: &Self) -> Self;
-    fn rem(&self, other: &Self) -> Self;
+pub trait EuclideanRing: Ring + Div<Self, Output=Self> + Rem<Self, Output=Self> {
+    fn div_ref(&self, other: &Self) -> Self;
+    fn rem_ref(&self, other: &Self) -> Self;
+    fn div_rem(self, other: Self) -> (Self, Self);
+    fn div_rem_ref(&self, other: &Self) -> (Self, Self);
 }
 
 macro_rules! impl_euclidean_ring {
@@ -118,10 +120,20 @@ macro_rules! impl_euclidean_ring {
         $(
             impl EuclideanRing for $t {
                 #[inline]
-                fn div(&self, other: &Self) -> Self { self / other }
+                fn div_ref(&self, other: &Self) -> Self { self / other }
 
                 #[inline]
-                fn rem(&self, other: &Self) -> Self { self % other }
+                fn rem_ref(&self, other: &Self) -> Self { self % other }
+
+                #[inline]
+                fn div_rem(self, other: Self) -> (Self, Self) { 
+                    (&self).div_rem_ref(&other)
+                }
+
+                #[inline]
+                fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
+                    (self / other, self % other) 
+                }
             }
         )*
     };

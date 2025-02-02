@@ -1,10 +1,62 @@
-use std::{collections::{BTreeMap, btree_map}, fmt::{Debug, Display}, iter::Enumerate, vec, ops::*, slice::Iter};
+pub(crate) mod const_content;
+pub(crate) mod dense_content;
+pub(crate) mod sparse_content;
+pub(crate) mod term;
 
+use std::{collections::{BTreeMap, btree_map}, fmt::{Debug, Display}, iter::Enumerate, vec, ops::*, slice::Iter};
 use num::{pow::Pow, traits::{ConstOne, ConstZero}, One, Zero};
 
-use crate::{algebra::algebra::{Field, Ring, Semiring}, poly::{const_content::ConstContent, dense_content::*, sparse_content::*, term::Term}};
+use const_content::ConstContent;
+use dense_content::DenseContent;
+use sparse_content::SparseContent;
+use term::Term;
 
-/// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>
+use crate::algebra::{AdditiveGroup, AdditiveMonoid, AdditiveSemigroup, Monoid, Ring, Semigroup, Semiring};
+
+/// Polynomial type.
+/// 
+/// Refer to spire's 
+/// <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>.
+/// 
+/// <code>Polynomial</code>'s <code>into_iter()</code> method returns <code>Iterator</code> that iterates nonzero coefficients. 
+/// <code>Polynomial</code> and <code>&Polynomial</code> implement the <code>IntoIterator</code> trait respectively,
+/// so those methods behave differently:
+/// 
+///     # use comonjo_algebra::poly::Polynomial;
+///     # use comonjo_algebra::dense;
+/// 
+///     let p = dense![4, 5, 0, 6];  // 4 + 5x + 6x³
+/// 
+///     // &Polynomial
+///     let mut ite0 = (&p).into_iter();
+///     assert_eq!(ite0.next(), Some((0, &4)));
+///     assert_eq!(ite0.next(), Some((1, &5)));
+///     assert_eq!(ite0.next(), Some((3, &6)));
+///     assert_eq!(ite0.next(), None);
+/// 
+///     // Polynomial
+///     let mut ite1 = p.into_iter();
+///     assert_eq!(ite1.next(), Some((0, 4)));
+///     assert_eq!(ite1.next(), Some((1, 5)));
+///     assert_eq!(ite1.next(), Some((3, 6)));
+///     assert_eq!(ite1.next(), None);
+/// 
+/// To iterate coefficients including zero, import <code>IntoCoeffsIterator</code> and
+/// use <code>coeffs()</code> methods:
+/// 
+///     # use comonjo_algebra::poly::Polynomial;
+///     # use comonjo_algebra::dense;
+///     use comonjo_algebra::poly::IntoCoeffsIterator;
+/// 
+///     let p = dense![4, 5, 0, 6];  // 4 + 5x + 6x³
+///     let mut ite = p.coeffs();
+///     assert_eq!(ite.next(), Some(4));
+///     assert_eq!(ite.next(), Some(5));
+///     assert_eq!(ite.next(), Some(0));
+///     assert_eq!(ite.next(), Some(6));
+///     assert_eq!(ite.next(), None);
+/// 
+/// <code>nonzero_coeffs()</code> methods are equivalent to <code>into_iter()</code>.
 pub enum Polynomial<C> where C: Semiring {
 
     Zero(),
@@ -165,6 +217,18 @@ impl<C> Polynomial<C> where C: Semiring {
             Polynomial::Sparse(sc) => sc.nth(n),
         }
     }
+
+    //   def map[D: Semiring: Eq: ClassTag](f: C => D): Polynomial[D] =
+    //     mapTerms { case Term(c, n) => Term(f(c), n) }
+    // pub fn map_nonzero<F>(self, f: F) -> Polynomial<C> where F: Fn(usize, C) -> C {
+    //     match self {
+    //         Polynomial::Zero() => todo!(),
+    //         Polynomial::Constant(const_content) => todo!(),
+    //         Polynomial::Dense(dense_content) => todo!(),
+    //         Polynomial::Sparse(sparse_content) => todo!(),
+    //     }
+    //     todo!()
+    // }
      
     /// Return dense expression of this polynomial if this is sparse, otherwise (zero or constant) self.
     pub fn to_dense(self) -> Polynomial<C> {
@@ -199,55 +263,6 @@ impl<C> Polynomial<C> where C: Semiring {
         }
     }
 
-    //********** Iteration **********/
-
-    /// Iterate coefficients of non zero terms.
-    /// Return <code>impl Iterator<Item=(usize, &C)></code>.
-    pub fn non_zero_coeffs_iter<'a>(&'a self) -> NonZeroCoeffsIter<'a, C> {
-        match self {
-            Polynomial::Zero() => NonZeroCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => NonZeroCoeffsIter::Constant(Some(&cc.0)),
-            Polynomial::Dense(dc) => NonZeroCoeffsIter::Dense(dc.0.iter().enumerate()),
-            Polynomial::Sparse(sc) => NonZeroCoeffsIter::Sparse(sc.0.iter()),
-        }
-    }
-
-    /// Return <code>impl Iterator<Item=C></code>.
-    pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
-        match self {
-            Polynomial::Zero() => IntoCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
-            Polynomial::Dense(dc) => IntoCoeffsIter::Dense(dc.0.into_iter()),
-            Polynomial::Sparse(sc) => {
-                let mut map_iter = sc.0.into_iter();
-                IntoCoeffsIter::Sparse { index: 0, current: map_iter.next(), map_iter }
-            },
-        }
-    } 
-    
-    /// Return <code>impl Iterator<Item=Option<Option<&C>>></code>.
-    pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
-        match self {
-            Polynomial::Zero() => CoeffsIter::Zero(),
-            Polynomial::Constant(cc) => CoeffsIter::Constant(Some(Some(&cc.0))),
-            Polynomial::Dense(dc) => CoeffsIter::Dense(dc.0.iter()),
-            Polynomial::Sparse(sc) => {
-                let mut map_iter = sc.0.iter();
-                CoeffsIter::Sparse{ index: 0, current: map_iter.next(), map_iter}
-            },
-        }
-    }
-
-    /// Return <code>impl Iterator<Item=(usize, C)></code>.
-    pub fn into_non_zero_coeffs_iter(self) -> IntoNonZeroCoeffsIter<C> {
-        match self {
-            Polynomial::Zero() => IntoNonZeroCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => IntoNonZeroCoeffsIter::Constant(Some(cc.0)),
-            Polynomial::Dense(dc) => IntoNonZeroCoeffsIter::Dense(dc.0.into_iter().enumerate()),
-            Polynomial::Sparse(sc) => IntoNonZeroCoeffsIter::Sparse(sc.0.into_iter()),
-        }
-    }
-
 
     // the following methods are used?
     pub fn max_order_term_coeff(&self) -> Option<&C> {
@@ -262,7 +277,7 @@ impl<C> Polynomial<C> where C: Semiring {
         let mut es = Vec::with_capacity(n);
         let mut cs = Vec::with_capacity(n);
 
-        self.non_zero_coeffs_iter().for_each(|(e, c)| {
+        self.nonzero_coeffs().for_each(|(e, c)| {
             es.push(e);
             cs.push(c);
         });
@@ -361,7 +376,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
         match self {
             d @ Polynomial::Dense(_) => {
                 let mut map = BTreeMap::new();
-                for (i, e) in d.non_zero_coeffs_iter() {
+                for (i, e) in d.nonzero_coeffs() {
                     map.insert(i, e.clone());  // note e is not zero
                 }
                 Polynomial::<C>::sparse_from_map(map)
@@ -371,7 +386,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     }
 
     pub fn terms<'a>(&'a self) -> impl Iterator<Item=Term<'a, C>> {
-        self.non_zero_coeffs_iter().map(|(e, c)| Term::from_ref(e, c))
+        self.nonzero_coeffs().map(|(e, c)| Term::from_ref(e, c))
     }
 
     pub fn max_term<'a>(&'a self) -> Term<'a, C> {
@@ -439,7 +454,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     //    */
     //   def compose(y: Polynomial[C])(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
     //     var polynomial: Polynomial[C] = Polynomial.zero[C]
-    //     foreachNonZero { (e, c) =>
+    //     foreachNonzero { (e, c) =>
     //       val z: Polynomial[C] = y.pow(e) :* c
     //       polynomial = polynomial + z
     //     }
@@ -499,50 +514,128 @@ impl<C> Debug for Polynomial<C> where C: Semiring + Clone + Display {
 }
 
 //********** Iterator **********
-/// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
-pub enum CoeffsIter<'a, C> {
-    Zero(),
-    Constant(Option<Option<&'a C>>),
-    Dense(Iter<'a, C>),
-    Sparse{
-        index: usize,
-        current: Option<(&'a usize, &'a C)>,
-        map_iter: btree_map::Iter<'a, usize, C>,
-    },
-}
+/// Iterate nonzero coefficients
+impl<C> IntoIterator for Polynomial<C> where C: Semiring {
+    type Item = (usize, C);
+    type IntoIter = IntoNonzeroCoeffsIter<C>;
 
-impl<'a, C> Iterator for CoeffsIter<'a, C> {
-
-    type Item = Option<&'a C>;
-
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Return <code>impl Iterator<Item=(usize, C)></code>.
+    fn into_iter(self) -> Self::IntoIter {
         match self {
-            CoeffsIter::Zero() => None,
-            CoeffsIter::Constant(value) => value.take(),
-            CoeffsIter::Dense(vec_iter) => 
-                match vec_iter.next() {
-                    Some(c) => Some(Some(c)),
-                    None => None,
-                } ,
-            CoeffsIter::Sparse{ index, current, map_iter } => 
-                if let Some(c) = current {
-                    let result = if c.0 == index { 
-                        let r = Some(c.1);
-                        *current = map_iter.next();
-                        r
-                    } else {
-                        None
-                    };
-                    *index += 1;
-                    Some(result)
-                } else {
-                    return None;
-                },
+            Polynomial::Zero() => IntoNonzeroCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => IntoNonzeroCoeffsIter::Constant(Some(cc.0)),
+            Polynomial::Dense(dc) => IntoNonzeroCoeffsIter::Dense(dc.0.into_iter().enumerate()),
+            Polynomial::Sparse(sc) => IntoNonzeroCoeffsIter::Sparse(sc.0.into_iter()),
         }
     }
 }
 
-pub enum IntoCoeffsIter<C> {
+pub enum IntoNonzeroCoeffsIter<C> where C: Semiring {
+    Zero(),
+    Constant(Option<C>),
+    Dense(Enumerate<vec::IntoIter<C>>),
+    Sparse(btree_map::IntoIter<usize, C>),
+}
+
+impl<C> Iterator for IntoNonzeroCoeffsIter<C> where C: Semiring {
+
+    type Item = (usize, C);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            IntoNonzeroCoeffsIter::Zero() => None,
+            IntoNonzeroCoeffsIter::Constant(value) => 
+                match value.take() {
+                    Some(c) => Some((0, c)),
+                    None => None,
+                },
+            IntoNonzeroCoeffsIter::Dense(vec_iter) => 
+                loop {
+                    match vec_iter.next() {
+                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
+                        None => return None,
+                    }
+                },
+            IntoNonzeroCoeffsIter::Sparse(map_iter) => map_iter.next(),
+        }
+    }
+}
+
+/// Iterate reference of nonzero coefficient
+impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
+    type Item = (usize, &'a C);
+    type IntoIter = NonzeroCoeffsIter<'a, C>;
+
+    /// Iterate nonzero coefficients.
+    /// Return <code>impl Iterator<Item=(usize, &C)></code>.
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Polynomial::Zero() => NonzeroCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => NonzeroCoeffsIter::Constant(Some(&cc.0)),
+            Polynomial::Dense(dc) => NonzeroCoeffsIter::Dense(dc.0.iter().enumerate()),
+            Polynomial::Sparse(sc) => NonzeroCoeffsIter::Sparse(sc.0.iter()),
+        }
+    }
+}
+
+pub enum NonzeroCoeffsIter<'a, C> where C: Semiring {
+    Zero(),
+    Constant(Option<&'a C>),
+    Dense(Enumerate<Iter<'a, C>>),
+    Sparse(btree_map::Iter<'a, usize, C>),
+}
+
+impl<'a, C> Iterator for NonzeroCoeffsIter<'a, C> where C: Semiring {
+
+    type Item = (usize, &'a C);
+
+    fn next(&mut self) -> Option<Self::Item> {
+        match self {
+            NonzeroCoeffsIter::Zero() => None,
+            NonzeroCoeffsIter::Constant(value) => 
+                match value.take() {
+                    Some(c) => Some((0, c)),
+                    None => None,
+                },
+            NonzeroCoeffsIter::Dense(vec_iter) => 
+                loop {
+                    match vec_iter.next() {
+                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
+                        None => return None,
+                    }
+                },
+            NonzeroCoeffsIter::Sparse(map_iter) => map_iter.next().map(|(e, c)| (*e, c)),
+        }
+    }
+}
+
+pub trait IntoCoeffsIterator: IntoIterator where Self: Sized, Self::IntoCoeffsIter: Iterator<Item=Self::Coeff>{
+    type Coeff;
+    type IntoCoeffsIter;
+
+    fn coeffs(self) -> Self::IntoCoeffsIter;
+    fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
+}
+
+impl<C> IntoCoeffsIterator for Polynomial<C> where C: Semiring {
+    type Coeff = C;
+    type IntoCoeffsIter = IntoCoeffsIter<C>;
+
+    /// Return <code>impl Iterator<Item=C></code>.
+    fn coeffs(self) -> Self::IntoCoeffsIter {
+        match self {
+            Polynomial::Zero() => IntoCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
+            Polynomial::Dense(dc) => IntoCoeffsIter::Dense(dc.0.into_iter()),
+            Polynomial::Sparse(sc) => {
+                let mut map_iter = sc.0.into_iter();
+                IntoCoeffsIter::Sparse { index: 0, current: map_iter.next(), map_iter }
+            },
+        }
+    }
+}
+
+pub enum IntoCoeffsIter<C> where C: Semiring {
     Zero(),
     Constant(Option<C>),
     Dense(vec::IntoIter<C>),
@@ -553,7 +646,7 @@ pub enum IntoCoeffsIter<C> {
     },
 }
 
-impl<C> Iterator for IntoCoeffsIter<C> where C: Zero {
+impl<C> Iterator for IntoCoeffsIter<C> where C: Semiring {
 
     type Item = C;
 
@@ -584,64 +677,65 @@ impl<C> Iterator for IntoCoeffsIter<C> where C: Zero {
     }
 }
 
-pub enum NonZeroCoeffsIter<'a, C> {
-    Zero(),
-    Constant(Option<&'a C>),
-    Dense(Enumerate<Iter<'a, C>>),
-    Sparse(btree_map::Iter<'a, usize, C>),
-}
+impl<'a, C> IntoCoeffsIterator for &'a Polynomial<C> where C: Semiring {
+    
+    type Coeff = Option<&'a C>;
 
-impl<'a, C> Iterator for NonZeroCoeffsIter<'a, C> where C: Zero {
+    type IntoCoeffsIter = CoeffsIter<'a, C>;
 
-    type Item = (usize, &'a C);
-
-    fn next(&mut self) -> Option<Self::Item> {
+    /// Return <code>impl Iterator<Item=Option<Option<&C>>></code>.
+    fn coeffs(self) -> Self::IntoCoeffsIter {
         match self {
-            NonZeroCoeffsIter::Zero() => None,
-            NonZeroCoeffsIter::Constant(value) => 
-                match value.take() {
-                    Some(c) => Some((0, c)),
-                    None => None,
-                },
-            NonZeroCoeffsIter::Dense(vec_iter) => 
-                loop {
-                    match vec_iter.next() {
-                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
-                        None => return None,
-                    }
-                },
-            NonZeroCoeffsIter::Sparse(map_iter) => map_iter.next().map(|(e, c)| (*e, c)),
+            Polynomial::Zero() => CoeffsIter::Zero(),
+            Polynomial::Constant(cc) => CoeffsIter::Constant(Some(Some(&cc.0))),
+            Polynomial::Dense(dc) => CoeffsIter::Dense(dc.0.iter()),
+            Polynomial::Sparse(sc) => {
+                let mut map_iter = sc.0.iter();
+                CoeffsIter::Sparse{ index: 0, current: map_iter.next(), map_iter}
+            },
         }
     }
 }
 
-pub enum IntoNonZeroCoeffsIter<C> {
+/// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
+pub enum CoeffsIter<'a, C> where C: Semiring {
     Zero(),
-    Constant(Option<C>),
-    Dense(Enumerate<vec::IntoIter<C>>),
-    Sparse(btree_map::IntoIter<usize, C>),
+    Constant(Option<Option<&'a C>>),
+    Dense(Iter<'a, C>),
+    Sparse{
+        index: usize,
+        current: Option<(&'a usize, &'a C)>,
+        map_iter: btree_map::Iter<'a, usize, C>,
+    },
 }
 
-impl<C> Iterator for IntoNonZeroCoeffsIter<C> where C: Zero {
+impl<'a, C> Iterator for CoeffsIter<'a, C> where C: Semiring {
 
-    type Item = (usize, C);
+    type Item = Option<&'a C>;
 
     fn next(&mut self) -> Option<Self::Item> {
         match self {
-            IntoNonZeroCoeffsIter::Zero() => None,
-            IntoNonZeroCoeffsIter::Constant(value) => 
-                match value.take() {
-                    Some(c) => Some((0, c)),
+            CoeffsIter::Zero() => None,
+            CoeffsIter::Constant(value) => value.take(),
+            CoeffsIter::Dense(vec_iter) => 
+                match vec_iter.next() {
+                    Some(c) => Some(Some(c)),
                     None => None,
+                } ,
+            CoeffsIter::Sparse{ index, current, map_iter } => 
+                if let Some(c) = current {
+                    let result = if c.0 == index { 
+                        let r = Some(c.1);
+                        *current = map_iter.next();
+                        r
+                    } else {
+                        None
+                    };
+                    *index += 1;
+                    Some(result)
+                } else {
+                    return None;
                 },
-            IntoNonZeroCoeffsIter::Dense(vec_iter) => 
-                loop {
-                    match vec_iter.next() {
-                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
-                        None => return None,
-                    }
-                },
-            IntoNonZeroCoeffsIter::Sparse(map_iter) => map_iter.next(),
         }
     }
 }
@@ -723,7 +817,7 @@ impl<C> ConstOne for Polynomial<C> where C: Semiring + Clone + ConstOne {
     const ONE: Self = Polynomial::Constant(ConstContent(C::ONE));
 }
 
-//********** Euclidean Ring Operations **********
+//********** Operator Overloads **********
 impl<C> Neg for Polynomial<C> where C: Ring {
 
     type Output = Polynomial<C>;
@@ -762,9 +856,9 @@ impl<C> Add for Polynomial<C> where C: Semiring {
             (Polynomial::Zero(), rhs) => rhs,
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 + rhs.0),
             (lhs @ Polynomial::Dense(_), rhs) | 
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => add_dense(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_content::add_dense(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => add_sparse(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_content::add_sparse(lhs, rhs),
         }
     }
 }
@@ -778,11 +872,11 @@ impl<'a, 'b, C> Add<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
             (lhs, Polynomial::Zero()) => lhs.clone(),
             (Polynomial::Zero(), rhs) => rhs.clone(),
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
-                Polynomial::constant((&lhs.0).add(&rhs.0)),
+                Polynomial::constant((&lhs.0).add_ref(&rhs.0)),
             (lhs @ Polynomial::Dense(_), rhs) | 
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => add_dense_ref(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_content::add_dense_ref(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => add_sparse_ref(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_content::add_sparse_ref(lhs, rhs),
         }
     }
 }
@@ -798,9 +892,9 @@ impl<C> Sub for Polynomial<C> where C: Ring {
             (Polynomial::Zero(), rhs) => -rhs,
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 - rhs.0),
             (lhs @ Polynomial::Dense(_), rhs) | 
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => sub_dense(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_content::sub_dense(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sub_sparse(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_content::sub_sparse(lhs, rhs),
         }
     }
 }
@@ -814,11 +908,11 @@ impl<'a, C> Sub for &'a Polynomial<C> where C: Ring + Clone {
             (lhs, Polynomial::Zero()) => lhs.clone(),
             (Polynomial::Zero(), rhs) => -rhs,
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
-                Polynomial::constant((&lhs.0).sub(&rhs.0)),
+                Polynomial::constant((&lhs.0).sub_ref(&rhs.0)),
             (lhs @ Polynomial::Dense(_), rhs) | 
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => sub_dense_ref(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_content::sub_dense_ref(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sub_sparse_ref(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_content::sub_sparse_ref(lhs, rhs),
         }
     }
 }
@@ -834,9 +928,9 @@ impl<C> Mul for Polynomial<C> where C: Semiring + Clone {
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 * rhs.0),
             (lhs @ Polynomial::Dense(_), rhs) | 
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => mul_dense(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_content::mul_dense(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => mul_sparse(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_content::mul_sparse(lhs, rhs),
         }
     }
 }
@@ -850,96 +944,86 @@ impl<'a, C> Mul for &'a Polynomial<C> where C: Semiring + Clone {
             (_, Polynomial::Zero()) |
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
-                Polynomial::constant((&lhs.0).mul(&rhs.0)),
+                Polynomial::constant((&lhs.0).mul_ref(&rhs.0)),
             (lhs @ Polynomial::Dense(_), rhs) | 
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => mul_dense_ref(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_content::mul_dense_ref(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) |
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => mul_sparse_ref(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_content::mul_sparse_ref(lhs, rhs),
         }
     }
 }
 
-// impl<C: Ring> Polynomial<C> {
+// impl<C> Polynomial<C> where C: Field + Clone {
 
-//     pub fn euclidean_fn(&self) -> BigUint {
-//         BigUint::from(self.degree())
-//     }
+//     pub fn euclidean_fn(&self) -> usize { self.degree() }
 
-//     pub fn quot_mod(self, other: Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) {
-//         if other.is_zero() { }
-//         match self {
-//             Polynomial::Zero() => self,
-//             Polynomial::Constant(cc) => match other {
 
-//             },
-//             Polynomial::Dense(dc) => todo!(),
-//             Polynomial::Sparse(sc) => todo!(),
-//         }
+// //   override def equotmod(x: Polynomial[C], y: Polynomial[C]): (Polynomial[C], Polynomial[C]) = {
+// //     require(!y.isZero, "Can't divide by polynomial of zero!")
+// //     (x: @unchecked) match {
+// //       case xd: poly.PolyDense[C] => poly.PolyDense.quotmodDense(xd, y)
+// //       case xs: poly.PolySparse[C] =>
+// //         val ys = (y: @unchecked) match {
+// //           case yd: poly.PolyDense[C]   => poly.PolySparse.dense2sparse(yd)
+// //           case ys1: poly.PolySparse[C] => ys1
+// //         }
+// //         poly.PolySparse.quotmodSparse(xs, ys)
+// //     }
+// //   }
+// // }
+
+//     fn div_rem_euc(&self, other: &Self) -> (Self, Self) {
 //         match (self, other) {
-//             (_, Polynomial::Zero()) =>  panic!("Can't divide by polynomial of zero!"),
-//             (Polynomial::Zero(), _) => Polynomial::Zero(),
-//             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => (Polynomial::constant(lhs.0 / rhs.0), Polynomial::Zero()),
-//             (lhs @ Polynomial::Dense(_), rhs) | 
-//             (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => mul_dense(lhs, rhs),
-//             (lhs @ Polynomial::Sparse(_), rhs) |
-//             (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => mul_sparse(lhs, rhs),
+//             (_, Polynomial::Zero()) => panic!("Can't divide by polynomial of zero!"),
+//             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
+//             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) =>
+//                 (Polynomial::constant((&lhs.0).div_ref(&rhs.0)), Polynomial::Zero()),
+//             (lhs @ Polynomial::Constant(_), rhs) => (Polynomial::Zero(), lhs.clone()),
+//             (lhs @ Polynomial::Dense(_), Polynomial::Constant(rhs)) => dense_content::div_rem_by_c_dense_ref(lhs, &rhs.0),
+//             (lhs @ Polynomial::Dense(_), rhs) => dense_content::div_rem_dense_ref(lhs, rhs),
+//             (lhs @ Polynomial::Sparse(_), Polynomial::Constant(rhs)) => sparse_content::div_rem_by_c_sparse_ref(lhs, &rhs.0),
+//             (lhs @ Polynomial::Sparse(_), rhs) => sparse_content::div_rem_sparse_ref(lhs, rhs),
 //         }
-//     }
 
-//     // pub fn equot
+//     }
 // }
 
-//   def euclideanFunction(x: Polynomial[C]): BigInt = x.degree
-//   def equot(x: Polynomial[C], y: Polynomial[C]): Polynomial[C] = equotmod(x, y)._1
-//   def emod(x: Polynomial[C], y: Polynomial[C]): Polynomial[C] = equotmod(x, y)._2
-//   override def equotmod(x: Polynomial[C], y: Polynomial[C]): (Polynomial[C], Polynomial[C]) = {
-//     require(!y.isZero, "Can't divide by polynomial of zero!")
-//     (x: @unchecked) match {
-//       case xd: poly.PolyDense[C] => poly.PolyDense.quotmodDense(xd, y)
-//       case xs: poly.PolySparse[C] =>
-//         val ys = (y: @unchecked) match {
-//           case yd: poly.PolyDense[C]   => poly.PolySparse.dense2sparse(yd)
-//           case ys1: poly.PolySparse[C] => ys1
-//         }
-//         poly.PolySparse.quotmodSparse(xs, ys)
-//     }
-//   }
+// impl<C> Div for Polynomial<C> where C: Field + Clone {
+
+//     type Output = Polynomial<C>;
+
+//     fn div(self, other: Self) -> Self::Output { (&self).div_rem_euc(&other).0 }
 // }
-impl<C> Div for Polynomial<C> where C: Field {
 
-    type Output = Polynomial<C>;
+// impl<'a, C> Div for &'a Polynomial<C> where C: Field + Clone {
 
-    fn div(self, other: Self) -> Self::Output {
-        todo!()
-    }
-}
+//     type Output = Polynomial<C>;
 
-impl<'a, C> Div for &'a Polynomial<C> where C: Field + Clone {
+//     fn div(self, other: Self) -> Self::Output { self.div_rem_euc(other).0 }
+// }
 
-    type Output = Polynomial<C>;
+// impl<C> Rem for Polynomial<C> where C: Field + Clone {
 
-    fn div(self, other: Self) -> Self::Output {
-        todo!()
-    }
-}
+//     type Output = Polynomial<C>;
+    
+//     fn rem(self, other: Self) -> Self::Output { (&self).div_rem_euc(&other).1 }
+// }
 
-impl<C> Rem for Polynomial<C> where C: Field {
+// impl<'a, C> Rem for &'a Polynomial<C> where C: Field + Clone {
 
-    type Output = Polynomial<C>;
+//     type Output = Polynomial<C>;
 
-    fn rem(self, other: Self) -> Self::Output {
-        todo!()
-    }
-}
+//     fn rem(self, other: Self) -> Self::Output { self.div_rem_euc(other).1 }
+// }
 
-impl<'a, C> Rem for &'a Polynomial<C> where C: Field + Clone {
+// impl<C> Euclid for Polynomial<C> where C: Field + Clone {
 
-    type Output = Polynomial<C>;
-
-    fn rem(self, other: Self) -> Self::Output {
-        todo!()
-    }
-}
+//     fn div_euclid(&self, other: &Self) -> Self { self / other }
+    
+//     fn rem_euclid(&self, other: &Self) -> Self { self % other }
+    
+//     fn div_rem_euclid(&self, other: &Self) -> (Self, Self) { self.div_rem_euc(other) }
+// }
 
 fn calc_pow<C>(base: &Polynomial<C>, p: u32, extra: &Polynomial<C>) -> Polynomial<C> where C: Semiring + Clone {
     if p == 1 {
@@ -1031,7 +1115,7 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 //     // with the derivatives of the individual terms. This let's us save a whole
 //     // bunch of allocations in a clean way.
 //     val coeffs: Array[C] = this.coeffsArray.clone()
-//     this.foreachNonZero { (deg, c) =>
+//     this.foreachNonzero { (deg, c) =>
 //       var i = 1 // Leading factor in factorial in denominator of Taylor series.
 //       var d = deg - 1 // The degree of the current derivative of this term.
 //       var m = SafeLong(1L) // The multiplier of our derivative
@@ -1058,7 +1142,7 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 //   def signVariations(implicit ring: Semiring[C], order: Order[C], signed: Signed[C]): Int = {
 //     var prevSign: Sign = Signed.Zero
 //     var variations = 0
-//     foreachNonZero { (_, c) =>
+//     foreachNonzero { (_, c) =>
 //       val sign = signed.sign(c)
 //       if (Signed.Zero != prevSign && sign != prevSign) {
 //         variations += 1
@@ -1075,9 +1159,6 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 //     val Term(_, k) = minTerm
 //     mapTerms { case Term(c, n) => Term(c, n - k) }
 //   }
-
-//   def map[D: Semiring: Eq: ClassTag](f: C => D): Polynomial[D] =
-//     mapTerms { case Term(c, n) => Term(f(c), n) }
 
 //   def mapTerms[D: Semiring: Eq: ClassTag](f: Term[C] => Term[D]): Polynomial[D] =
 //     Polynomial(termsIterator.map(f))
@@ -1121,3 +1202,40 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 //       } else n
 //     loop(0)
 //   }
+
+
+impl<C> Semigroup for Polynomial<C> where C: Semiring + Clone {
+    fn mul_ref(&self, other: &Self) -> Self { self * other }
+}
+impl<C> Monoid for Polynomial<C> where C: Semiring + Clone {}
+
+impl<C> AdditiveSemigroup for Polynomial<C> where C: Semiring + Clone {
+    fn add_ref(&self, other: &Self) -> Self { self + other }
+}
+impl<C> AdditiveMonoid for Polynomial<C> where C: Semiring + Clone {}
+impl<C> AdditiveGroup for Polynomial<C> where C: Ring + Clone {
+    fn neg_ref(&self) -> Self { -self }
+    fn sub_ref(&self, other: &Self) -> Self { self - other }
+}
+
+impl<C> Semiring for Polynomial<C> where C: Ring + Clone {}
+
+impl<C> Ring for Polynomial<C> where C: Ring + Clone{}
+
+// impl<C> EuclideanRing for Polynomial<C> where C: Field + Clone {
+//     #[inline]
+//     fn div_ref(&self, other: &Self) -> Self { self / other }
+
+//     #[inline]
+//     fn rem_ref(&self, other: &Self) -> Self { self % other }
+
+//     #[inline]
+//     fn div_rem(self, other: Self) -> (Self, Self) { 
+//         (&self).div_rem_ref(&other)
+//     }
+
+//     #[inline]
+//     fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
+//         self.div_rem_euclid(other)
+//     }
+// } 
