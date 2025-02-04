@@ -18,7 +18,8 @@ use crate::algebra::{AdditiveGroup, AdditiveMonoid, AdditiveSemigroup, Monoid, R
 /// Refer to spire's 
 /// <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala">Polynomial</a>.
 /// 
-/// <code>Polynomial</code>'s <code>into_iter()</code> method returns <code>Iterator</code> that iterates nonzero coefficients. 
+/// <code>Polynomial</code>'s <code>into_iter()</code> method returns <code>Iterator</code> that iterates nonzero coefficients
+/// (with its term's degree). 
 /// <code>Polynomial</code> and <code>&Polynomial</code> implement the <code>IntoIterator</code> trait respectively,
 /// so those methods behave differently:
 /// 
@@ -614,6 +615,8 @@ pub trait IntoCoeffsIterator: IntoIterator where Self: Sized, Self::IntoCoeffsIt
     type IntoCoeffsIter;
 
     fn coeffs(self) -> Self::IntoCoeffsIter;
+    
+    #[inline]
     fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
 }
 
