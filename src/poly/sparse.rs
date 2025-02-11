@@ -17,6 +17,16 @@ impl<C> SparseContent<C> where C: Semiring {
         self.0.get(&n)
     }
 
+    pub fn map<F>(self, f: F) -> Polynomial<C> where F: Fn(usize, C) -> C {
+        let m: BTreeMap<usize, C> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
+        Polynomial::sparse_from_map(m)
+    }
+
+    pub fn map_ref<F>(&self, f: F) -> Polynomial<C> where F: Fn(usize, &C) -> C {
+        let m: BTreeMap<usize, C> = self.0.iter().map(|(i, c)| (*i, f(*i, c))).collect();
+        Polynomial::sparse_from_map(m)
+    }
+
     pub fn reductum(&self) -> Polynomial<C> {
         todo!()
     }

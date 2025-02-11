@@ -15,6 +15,20 @@ impl<C> DenseContent<C> where C: Semiring {
         self.0.get(n)
     }
 
+    pub fn map<F>(self, f: F) -> Polynomial<C> where F: Fn(usize, C) -> C {
+        let v: Vec<C> = self.0.into_iter().enumerate().map(|(i, c)|
+            if c.is_zero() { c } else { f(i, c) }
+        ).collect();
+        Polynomial::dense_from_vec(v)
+    }
+
+    pub fn map_ref<F>(&self, f: F) -> Polynomial<C> where F: Fn(usize, &C) -> C {
+        let v: Vec<C> = self.0.iter().enumerate().map(|(i, c)|
+            if c.is_zero() { C::zero() } else { f(i, c) }
+        ).collect();
+        Polynomial::dense_from_vec(v)
+    }
+
     pub fn reductum(&self) -> Polynomial<C> {
         todo!()
     }

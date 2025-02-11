@@ -2,7 +2,7 @@ use std::collections::HashMap;
 
 use num::{complex::c64, pow::Pow, One, Rational64, Zero};
 
-use crate::{dense, poly::{IntoCoeffsIterator, Polynomial}, sparse};
+use crate::{dense, poly::{iter::IntoCoeffsIterator, Polynomial}, sparse};
 
 fn zero() -> Polynomial<i64> { Polynomial::<i64>::zero() }
 fn one() -> Polynomial<i64> { Polynomial::<i64>::one() }
