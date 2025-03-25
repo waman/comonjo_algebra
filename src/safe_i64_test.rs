@@ -4,7 +4,7 @@ use num::pow::Pow;
 use num::{BigInt, Integer, ToPrimitive};
 use num::traits::Zero;
 use num_bigint::RandomBits;
-use rand::prelude::Distribution;
+use rand::distributions::Distribution;
 
 use crate::safe_i64::SafeI64;
 
@@ -51,7 +51,7 @@ fn test_is_primitive(){
                 assert!(SafeI64::from_integer(x).is_primitive());
                 assert!(SafeI64::from(i).is_primitive());
             }
-            None => 
+            _ => 
                 assert!(!SafeI64::from_integer(x).is_primitive()), 
         }
     }

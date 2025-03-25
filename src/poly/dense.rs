@@ -1,6 +1,8 @@
-use crate::{algebra::{Ring, Semiring}, poly::Polynomial};
+use std::collections::BTreeMap;
 
-use super::IntoCoeffsIterator;
+use crate::{algebra::{Field, Ring, Semiring}, poly::Polynomial};
+
+use super::CoeffsAccessor;
 
 #[derive(Clone)]
 pub struct DenseContent<C>(pub(crate) Vec<C>);
@@ -15,18 +17,29 @@ impl<C> DenseContent<C> where C: Semiring {
         self.0.get(n)
     }
 
-    pub fn map<F>(self, f: F) -> Polynomial<C> where F: Fn(usize, C) -> C {
-        let v: Vec<C> = self.0.into_iter().enumerate().map(|(i, c)|
-            if c.is_zero() { c } else { f(i, c) }
+    pub fn map<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+        let v: Vec<D> = self.0.into_iter().enumerate().map(|(i, c)|
+            if c.is_zero() { D::zero() } else { f(i, c) }
         ).collect();
         Polynomial::dense_from_vec(v)
     }
 
-    pub fn map_ref<F>(&self, f: F) -> Polynomial<C> where F: Fn(usize, &C) -> C {
-        let v: Vec<C> = self.0.iter().enumerate().map(|(i, c)|
-            if c.is_zero() { C::zero() } else { f(i, c) }
+    pub fn map_ref<D, F>(&self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &C) -> D {
+        let v: Vec<D> = self.0.iter().enumerate().map(|(i, c)|
+            if c.is_zero() { D::zero() } else { f(i, c) }
         ).collect();
         Polynomial::dense_from_vec(v)
+    }
+
+    pub(crate) fn to_map(mut self) -> BTreeMap<usize, C> {
+        let mut map = BTreeMap::new();
+        while let Some(c) = self.0.pop() {
+            if !c.is_zero() {
+                map.insert(self.0.len(), c);
+            }
+        }
+        debug_assert!(self.0.is_empty());
+        map
     }
 
     pub fn reductum(&self) -> Polynomial<C> {
@@ -49,7 +62,7 @@ impl<C> DenseContent<C> where C: Semiring {
 impl<C> DenseContent<C> where C: Ring {
 
     pub fn neg(self) -> Polynomial<C> {
-        let v: Vec<C> = self.0.into_iter().map(|e|-e).collect();
+        let v: Vec<C> = self.0.into_iter().map(|c|-c).collect();
         Polynomial::Dense(DenseContent(v))
     }
 }
@@ -57,7 +70,7 @@ impl<C> DenseContent<C> where C: Ring {
 impl<C> DenseContent<C> where C: Ring + Clone {
 
     pub fn neg_ref(&self) -> Polynomial<C> {
-        let v: Vec<C> = self.0.iter().map(|e|e.neg_ref()).collect();
+        let v: Vec<C> = self.0.iter().map(|c|c.neg_ref()).collect();
         Polynomial::Dense(DenseContent(v))
     }
 }
@@ -68,7 +81,7 @@ fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
     if x >= y { (x, y, true) } else { (y, x, false) }
 }
 
-pub(crate) fn add_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+pub(crate) fn add_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
         where C: Semiring {
 
     let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
@@ -91,7 +104,7 @@ pub(crate) fn add_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn add_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+pub(crate) fn add_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
         where C: Semiring + Clone {
 
     let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
@@ -122,7 +135,7 @@ pub(crate) fn add_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomi
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn sub_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
+pub(crate) fn sub_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
         where C: Ring {
 
     let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
@@ -148,7 +161,7 @@ pub(crate) fn sub_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn sub_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
         where C: Ring + Clone {
 
     let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
@@ -185,12 +198,12 @@ pub(crate) fn sub_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomi
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn mul_dense<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
+pub(crate) fn mul_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
         where C: Semiring + Clone {
-    mul_dense_ref(&lhs, &rhs)
+    mul_ref(&lhs, &rhs)
 }
 
-pub(crate) fn mul_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
+pub(crate) fn mul_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Semiring + Clone {
 
     let deg = lhs.degree() + rhs.degree();
@@ -214,54 +227,88 @@ pub(crate) fn mul_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomi
     Polynomial::dense_from_vec(v)
 }
 
-// pub(crate) fn div_rem_by_c_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b C) -> (Polynomial<C>, Polynomial<C>) 
+pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) 
+        where C: Field + Clone {
+
+    let d_rhs = rhs.degree();
+    let n = u.len() - d_rhs;  // = lhs.degree() + 1 - rhs.degree()
+    let v0: &C = rhs.max_order_term_coeff().unwrap();
+    let mut q: Vec<C> = Vec::with_capacity(n);
+
+    for _ in 0..n {
+        let u_last: C = u.pop().unwrap();
+        if u_last.is_zero() {
+            q.push(C::zero());
+        } else {
+            let q0: C = u_last.div_ref(v0);
+            let offset = u.len() - d_rhs;  // the last of u is already popped
+            for (i, c_rhs) in rhs.nonzero_coeffs() {
+                if i == d_rhs { break; }
+                let c_lhs = u.get_mut(offset + i).unwrap();
+                *c_lhs = c_lhs.sub_ref(&(c_rhs.mul_ref(&q0)));
+            }
+            q.push(q0);
+        }
+    }
+
+    q.reverse();
+    (Polynomial::dense_from_vec(q), Polynomial::dense_from_vec(u))
+}
+
+// pub(crate) fn div_rem_val<C>(lhs: Polynomial<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) 
 //         where C: Field + Clone {
 
+//     let n = lhs.degree() - rhs.degree();
+//     let v0: &C = rhs.max_order_term_coeff().unwrap();
+//     let mut q: Vec<C> = Vec::with_capacity(n);
+//     let mut u: Vec<C> = lhs.to_vec();
+
+//     for _ in 0..n {
+//         let u_last: &C = &u.pop().unwrap();
+//         let q0: C = u_last.div_ref(v0);
+//         let u_offset = u.len() - rhs.degree();  // the last of u is already popped
+//         for (i, c) in rhs.nonzero_coeffs().filter(|e|e.0 != rhs.degree()) {
+//             let del = c.mul_ref(&q0);
+//             match u.get_mut(u_offset + i) {
+//                 Some(c) => {
+//                     *c = c.sub_ref(&del);
+//                 },
+//                 None => panic!(),
+//             }
+//         }
+//         q.push(q0);
+//     }
+
+//     q.reverse();
+//     (Polynomial::dense_from_vec(q), Polynomial::dense_from_vec(u))
 // }
 
-// pub(crate) fn div_rem_dense_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) 
+// pub(crate) fn div_rem_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) 
 //         where C: Field + Clone {
 
-//             // final private[math] def quotmodDense[@sp(Double) C: Field: Eq: ClassTag](lhs: PolyDense[C],
-//             //                                                                          rhs: Polynomial[C]
-//             // ): (Polynomial[C], Polynomial[C]) = {
-//             //   def zipSum(lcs: Array[C], rcs: Array[C]): Array[C] =
-//             //     (lcs + rcs).tail
-            
-//             //   def polyFromCoeffsLE(cs: Array[C]): Polynomial[C] =
-//             //     Polynomial.dense(cs)
-            
-//             //   def polyFromCoeffsBE(cs: Array[C]): Polynomial[C] = {
-//             //     val ncs = cs.dropWhile(_ === Field[C].zero)
-//             //     Polynomial.dense(ncs.reverse)
-//             //   }
-            
-//             //   @tailrec def eval(q: Array[C], u: Array[C], n: Int): (Polynomial[C], Polynomial[C]) = {
-//             //     if (u.isEmpty || n < 0) {
-//             //       (polyFromCoeffsLE(q), polyFromCoeffsBE(u))
-//             //     } else {
-//             //       val v0 = if (rhs.isZero) Field[C].zero else rhs.maxOrderTermCoeff
-//             //       val q0 = u(0) / v0
-//             //       val uprime = zipSum(u, rhs.coeffsArray.reverse.map(_ * -q0))
-//             //       eval(Array(q0) ++ q, uprime, n - 1)
-//             //     }
-//             //   }
-            
-//             //   val cs = rhs.coeffsArray
-//             //   if (cs.length == 0) {
-//             //     throw new ArithmeticException("/ by zero polynomial")
-//             //   } else if (cs.length == 1) {
-//             //     val c = cs(0)
-//             //     val q = Polynomial.dense(lhs.coeffs.map(_ / c))
-//             //     val r = Polynomial.dense(new Array[C](0))
-//             //     (q, r)
-//             //   } else {
-//             //     eval(new Array[C](0), lhs.coeffs.reverse, lhs.degree - rhs.degree)
-//             //   }
-//             // }
-            
-//             // }
+//     let n = lhs.degree() - rhs.degree();
+//     let v0: &C = rhs.max_order_term_coeff().unwrap();
+//     let mut q: Vec<C> = Vec::with_capacity(n);
+//     let mut u: Vec<C> = lhs.to_vec();
 
+//     for _ in 0..n {
+//         let u_last: &C = &u.pop().unwrap();
+//         let q0: C = u_last.div_ref(v0);
+//         let u_offset = u.len() - rhs.degree();  // the last of u is already popped
+//         for (i, c) in rhs.nonzero_coeffs().filter(|e|e.0 != rhs.degree()) {
+//             let del = c.mul_ref(&q0);
+//             match u.get_mut(u_offset + i) {
+//                 Some(c) => {
+//                     *c = c.sub_ref(&del);
+//                 },
+//                 None => panic!(),
+//             }
+//         }
+//         q.push(q0);
+//     }
+
+//     q.reverse();
+//     (Polynomial::dense_from_vec(q), Polynomial::dense_from_vec(u))
 // }
 
 // def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {

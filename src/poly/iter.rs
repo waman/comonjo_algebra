@@ -2,7 +2,9 @@ use std::{collections::btree_map, iter::Enumerate, slice::Iter, vec};
 
 use crate::algebra::Semiring;
 
-use super::{CoeffsIter, Polynomial};
+fn const_iter_size_hint<'a, C>(c: &'a Option<C>) -> (usize, Option<usize>) {
+    if c.is_some() { (1, Some(1)) } else { (0, Some(0)) }
+}
 
 pub enum IntoNonzeroCoeffsIter<C> where C: Semiring {
     Zero(),
@@ -26,11 +28,20 @@ impl<C> Iterator for IntoNonzeroCoeffsIter<C> where C: Semiring {
             IntoNonzeroCoeffsIter::Dense(vec_iter) => 
                 loop {
                     match vec_iter.next() {
-                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
+                        Some((i, c)) =>  if !c.is_zero() { return Some((i, c)); },
                         None => return None,
                     }
                 },
             IntoNonzeroCoeffsIter::Sparse(map_iter) => map_iter.next(),
+        }
+    }
+    
+    fn size_hint(&self) -> (usize, Option<usize>) { 
+        match self {
+            IntoNonzeroCoeffsIter::Zero() => (0, Some(0)),
+            IntoNonzeroCoeffsIter::Constant(c) => const_iter_size_hint(c),
+            IntoNonzeroCoeffsIter::Dense(ite) => ite.size_hint(),
+            IntoNonzeroCoeffsIter::Sparse(ite) => ite.size_hint(),
         }
     }
 }
@@ -57,39 +68,20 @@ impl<'a, C> Iterator for NonzeroCoeffsIter<'a, C> where C: Semiring {
             NonzeroCoeffsIter::Dense(vec_iter) => 
                 loop {
                     match vec_iter.next() {
-                        Some((e, c)) =>  if !c.is_zero() { return Some((e, c)); },
+                        Some((i, c)) =>  if !c.is_zero() { return Some((i, c)); },
                         None => return None,
                     }
                 },
-            NonzeroCoeffsIter::Sparse(map_iter) => map_iter.next().map(|(e, c)| (*e, c)),
+            NonzeroCoeffsIter::Sparse(map_iter) => map_iter.next().map(|(i, c)| (*i, c)),
         }
     }
-}
-
-pub trait IntoCoeffsIterator: IntoIterator where Self: Sized, Self::IntoCoeffsIter: Iterator<Item=Self::Coeff>{
-    type Coeff;
-    type IntoCoeffsIter;
-
-    fn coeffs(self) -> Self::IntoCoeffsIter;
-
-    #[inline]
-    fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
-}
-
-impl<C> IntoCoeffsIterator for Polynomial<C> where C: Semiring {
-    type Coeff = C;
-    type IntoCoeffsIter = IntoCoeffsIter<C>;
-
-    /// Return <code>impl Iterator<Item=C></code>.
-    fn coeffs(self) -> Self::IntoCoeffsIter {
+    
+    fn size_hint(&self) -> (usize, Option<usize>) { 
         match self {
-            Polynomial::Zero() => IntoCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
-            Polynomial::Dense(dc) => IntoCoeffsIter::Dense(dc.0.into_iter()),
-            Polynomial::Sparse(sc) => {
-                let mut map_iter = sc.0.into_iter();
-                IntoCoeffsIter::Sparse { index: 0, current: map_iter.next(), map_iter }
-            },
+            NonzeroCoeffsIter::Zero() => (0, Some(0)),
+            NonzeroCoeffsIter::Constant(c) => const_iter_size_hint(c),
+            NonzeroCoeffsIter::Dense(ite) => ite.size_hint(),
+            NonzeroCoeffsIter::Sparse(ite) => ite.size_hint(),
         }
     }
 }
@@ -101,7 +93,7 @@ pub enum IntoCoeffsIter<C> where C: Semiring {
     Sparse{
         index: usize,
         current: Option<(usize, C)>,
-        map_iter: btree_map::IntoIter<usize, C>
+        map_iter: btree_map::IntoIter<usize, C>,
     },
 }
 
@@ -114,7 +106,7 @@ impl<C> Iterator for IntoCoeffsIter<C> where C: Semiring {
             IntoCoeffsIter::Zero() => None,
             IntoCoeffsIter::Constant(value) => value.take(),
             IntoCoeffsIter::Dense(vec_iter) =>  vec_iter.next(),
-            IntoCoeffsIter::Sparse{ index, current, map_iter } => {
+            IntoCoeffsIter::Sparse{ index, current, map_iter, .. } => {
                 let result = match current {
                     Some(c) => 
                         if c.0 == *index {
@@ -134,24 +126,65 @@ impl<C> Iterator for IntoCoeffsIter<C> where C: Semiring {
             },
         }
     }
+    
+    fn size_hint(&self) -> (usize, Option<usize>) { 
+        match self {
+            IntoCoeffsIter::Zero() => (0, Some(0)),
+            IntoCoeffsIter::Constant(c) => const_iter_size_hint(c),
+            IntoCoeffsIter::Dense(ite) => ite.size_hint(),
+            IntoCoeffsIter::Sparse { map_iter, .. } => map_iter.size_hint(),
+        }
+    }
 }
 
-impl<'a, C> IntoCoeffsIterator for &'a Polynomial<C> where C: Semiring {
-    
-    type Coeff = Option<&'a C>;
+/// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
+pub enum CoeffsIter<'a, C> where C: Semiring {
+    Zero(),
+    Constant(Option<Option<&'a C>>),
+    Dense(Iter<'a, C>),
+    Sparse{
+        index: usize,
+        current: Option<(&'a usize, &'a C)>,
+        map_iter: btree_map::Iter<'a, usize, C>,
+    },
+}
 
-    type IntoCoeffsIter = CoeffsIter<'a, C>;
+impl<'a, C> Iterator for CoeffsIter<'a, C> where C: Semiring {
 
-    /// Return <code>impl Iterator<Item=Option<Option<&C>>></code>.
-    fn coeffs(self) -> Self::IntoCoeffsIter {
+    type Item = Option<&'a C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
         match self {
-            Polynomial::Zero() => CoeffsIter::Zero(),
-            Polynomial::Constant(cc) => CoeffsIter::Constant(Some(Some(&cc.0))),
-            Polynomial::Dense(dc) => CoeffsIter::Dense(dc.0.iter()),
-            Polynomial::Sparse(sc) => {
-                let mut map_iter = sc.0.iter();
-                CoeffsIter::Sparse{ index: 0, current: map_iter.next(), map_iter}
-            },
+            CoeffsIter::Zero() => None,
+            CoeffsIter::Constant(value) => value.take(),
+            CoeffsIter::Dense(vec_iter) => 
+                match vec_iter.next() {
+                    Some(c) => Some(Some(c)),
+                    None => None,
+                } ,
+            CoeffsIter::Sparse{ index, current, map_iter, .. } => 
+                if let Some(c) = current {
+                    let result = if c.0 == index { 
+                        let r = Some(c.1);
+                        *current = map_iter.next();
+                        r
+                    } else {
+                        None
+                    };
+                    *index += 1;
+                    Some(result)
+                } else {
+                    return None;
+                },
+        }
+    }
+    
+    fn size_hint(&self) -> (usize, Option<usize>) { 
+        match self {
+            CoeffsIter::Zero() => (0, Some(0)),
+            CoeffsIter::Constant(_) => (1, Some(1)),
+            CoeffsIter::Dense(ite) => ite.size_hint(),
+            CoeffsIter::Sparse { map_iter, .. } => map_iter.size_hint(),
         }
     }
 }
