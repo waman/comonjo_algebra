@@ -1,8 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{algebra::{Field, Ring, Semiring}, poly::Polynomial};
-
-use super::CoeffsAccessor;
+use crate::{algebra::{Field, Ring, Semiring}, poly::*};
 
 #[derive(Clone)]
 pub struct SparseContent<C>(pub(crate) BTreeMap<usize, C>);
@@ -57,23 +55,7 @@ impl<C> SparseContent<C> where C: Semiring {
     }
 }
 
-impl<C> SparseContent<C> where C: Ring {
-
-    pub fn neg(self) -> Polynomial<C> {
-        let map: BTreeMap<usize, C> = self.0.into_iter().map(|(i, c)|(i, -c)).collect();
-        Polynomial::Sparse(SparseContent(map))
-    }
-}
-
-impl<C> SparseContent<C> where C: Ring + Clone {
-
-    pub fn neg_ref(&self) -> Polynomial<C> {
-        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)|(*i, c.neg_ref())).collect();
-        Polynomial::Sparse(SparseContent(map))
-    }
-}
-
-pub(crate) fn add_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+pub(crate) fn add_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
         where C: Semiring {
 
     let mut map = BTreeMap::new();
@@ -89,7 +71,8 @@ pub(crate) fn add_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C
         let y = y_next.unwrap();
 
         if x.0 == y.0 {
-            map.insert(x.0, x.1 + y.1);
+            let sum = x.1 + y.1;
+            if !sum.is_zero() { map.insert(x.0, sum); }
 
             x_next = lhs_iter.next();
             y_next = rhs_iter.next();
@@ -122,7 +105,7 @@ pub(crate) fn add_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C
     Polynomial::sparse_from_map(map)
 } 
 
-pub(crate) fn add_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
+pub(crate) fn add_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Semiring + Clone {
 
     let mut map = BTreeMap::new();
@@ -138,7 +121,108 @@ pub(crate) fn add_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>)
         let y = y_next.unwrap();
 
         if x.0 == y.0 {
-            map.insert(x.0, x.1.clone() + y.1.clone());
+            let sum = x.1 + y.1;
+            if !sum.is_zero() { map.insert(x.0, sum); }
+
+            x_next = lhs_iter.next();
+            y_next = rhs_iter.next();
+            if x_next.is_none() || y_next.is_none() { break; }
+
+        } else if x.0 < y.0 {
+            map.insert(x.0, x.1);
+
+            x_next = lhs_iter.next();
+            y_next = Some(y);
+            if x_next.is_none() { break; }
+
+        } else {  // x.0 > y.0
+            map.insert(y.0, y.1.clone());
+            
+            x_next = Some(x);
+            y_next = rhs_iter.next();
+            if y_next.is_none() { break; }
+        }
+    }
+
+    if let Some(x) = x_next {
+        map.insert(x.0, x.1);
+        map.extend(lhs_iter);
+    } else if let Some(y) = y_next {
+        map.insert(y.0, y.1.clone());
+        map.extend(rhs_iter.map(|(i, c)| (i, c.clone())));
+    }
+
+    Polynomial::sparse_from_map(map)
+} 
+
+pub(crate) fn add_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+        where C: Semiring + Clone {
+
+    let mut map = BTreeMap::new();
+
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
+
+    let mut x_next = lhs_iter.next();
+    let mut y_next = rhs_iter.next();
+
+    loop {
+        let x = x_next.unwrap();
+        let y = y_next.unwrap();
+
+        if x.0 == y.0 {
+            let sum = x.1.ref_add(y.1);
+            if !sum.is_zero() { map.insert(x.0, sum); }
+
+            x_next = lhs_iter.next();
+            y_next = rhs_iter.next();
+            if x_next.is_none() || y_next.is_none() { break; }
+
+        } else if x.0 < y.0 {
+            map.insert(x.0, x.1.clone());
+
+            x_next = lhs_iter.next();
+            y_next = Some(y);
+            if x_next.is_none() { break; }
+
+        } else {  // x.0 > y.0
+            map.insert(y.0, y.1);
+            
+            x_next = Some(x);
+            y_next = rhs_iter.next();
+            if y_next.is_none() { break; }
+        }
+    }
+
+    if let Some(x) = x_next {
+        map.insert(x.0, x.1.clone());
+        map.extend(lhs_iter.map(|(i, c)| (i, c.clone())));
+    } else if let Some(y) = y_next {
+        map.insert(y.0, y.1);
+        map.extend(rhs_iter);
+    }
+
+    Polynomial::sparse_from_map(map)
+} 
+
+pub(crate) fn add_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
+        where C: Semiring + Clone {
+
+    let mut map = BTreeMap::new();
+
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
+
+    let mut x_next = lhs_iter.next();
+    let mut y_next = rhs_iter.next();
+
+    loop {
+        let x = x_next.unwrap();
+        let y = y_next.unwrap();
+
+        if x.0 == y.0 {
+            let sum = x.1.ref_add(y.1);
+            if !sum.is_zero() { map.insert(x.0, sum); }
 
             x_next = lhs_iter.next();
             y_next = rhs_iter.next();
@@ -171,7 +255,8 @@ pub(crate) fn add_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>)
     Polynomial::sparse_from_map(map)
 } 
 
-pub(crate) fn sub_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+
+pub(crate) fn sub_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
         where C: Ring {
 
     let mut map = BTreeMap::new();
@@ -187,7 +272,8 @@ pub(crate) fn sub_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C
         let y = y_next.unwrap();
 
         if x.0 == y.0 {
-            map.insert(x.0, x.1 - y.1);
+            let dif = x.1 - y.1;
+            if !dif.is_zero() { map.insert(x.0, dif); }
 
             x_next = lhs_iter.next();
             y_next = rhs_iter.next();
@@ -201,7 +287,7 @@ pub(crate) fn sub_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C
             if x_next.is_none() { break; }
 
         } else {  // x.0 > y.0
-            map.insert(y.0, y.1);
+            map.insert(y.0, -y.1);
             
             x_next = Some(x);
             y_next = rhs_iter.next();
@@ -214,13 +300,13 @@ pub(crate) fn sub_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C
         map.extend(lhs_iter);
     } else if let Some(y) = y_next {
         map.insert(y.0, -y.1);
-        map.extend(rhs_iter.map(|c|(c.0, -c.1)));
+        map.extend(rhs_iter.map(|(i, c)| (i, -c)));
     }
 
     Polynomial::sparse_from_map(map)
 } 
 
-pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
+pub(crate) fn sub_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Ring + Clone {
 
     let mut map = BTreeMap::new();
@@ -236,7 +322,58 @@ pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>)
         let y = y_next.unwrap();
 
         if x.0 == y.0 {
-            map.insert(x.0, x.1.clone() - y.1.clone());
+            let dif = x.1 - y.1;
+            if !dif.is_zero() { map.insert(x.0, dif); }
+
+            x_next = lhs_iter.next();
+            y_next = rhs_iter.next();
+            if x_next.is_none() || y_next.is_none() { break; }
+
+        } else if x.0 < y.0 {
+            map.insert(x.0, x.1);
+
+            x_next = lhs_iter.next();
+            y_next = Some(y);
+            if x_next.is_none() { break; }
+
+        } else {  // x.0 > y.0
+            map.insert(y.0, y.1.ref_neg());
+            
+            x_next = Some(x);
+            y_next = rhs_iter.next();
+            if y_next.is_none() { break; }
+        }
+    }
+
+    if let Some(x) = x_next {
+        map.insert(x.0, x.1);
+        map.extend(lhs_iter);
+    } else if let Some(y) = y_next {
+        map.insert(y.0, y.1.ref_neg());
+        map.extend(rhs_iter.map(|(i, c)| (i, c.ref_neg())));
+    }
+
+    Polynomial::sparse_from_map(map)
+} 
+
+pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+        where C: Ring + Clone {
+
+    let mut map = BTreeMap::new();
+
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
+
+    let mut x_next = lhs_iter.next();
+    let mut y_next = rhs_iter.next();
+
+    loop {
+        let x = x_next.unwrap();
+        let y = y_next.unwrap();
+
+        if x.0 == y.0 {
+            let dif = x.1.ref_sub(y.1);
+            if !dif.is_zero() { map.insert(x.0, dif); }
 
             x_next = lhs_iter.next();
             y_next = rhs_iter.next();
@@ -250,7 +387,57 @@ pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>)
             if x_next.is_none() { break; }
 
         } else {  // x.0 > y.0
-            map.insert(y.0, y.1.clone());
+            map.insert(y.0, -y.1);
+            
+            x_next = Some(x);
+            y_next = rhs_iter.next();
+            if y_next.is_none() { break; }
+        }
+    }
+
+    if let Some(x) = x_next {
+        map.insert(x.0, x.1.clone());
+        map.extend(lhs_iter.map(|(i, c)| (i, c.clone())));
+    } else if let Some(y) = y_next {
+        map.insert(y.0, -y.1);
+        map.extend(rhs_iter.map(|(i, c)| (i, -c)));
+    }
+
+    Polynomial::sparse_from_map(map)
+} 
+
+pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
+        where C: Ring + Clone {
+
+    let mut map = BTreeMap::new();
+
+    let mut lhs_iter = lhs.nonzero_coeffs();
+    let mut rhs_iter = rhs.nonzero_coeffs();
+
+    let mut x_next = lhs_iter.next();
+    let mut y_next = rhs_iter.next();
+
+    loop {
+        let x = x_next.unwrap();
+        let y = y_next.unwrap();
+
+        if x.0 == y.0 {
+            let dif = x.1.ref_sub(y.1);
+            if !dif.is_zero() { map.insert(x.0, dif); }
+
+            x_next = lhs_iter.next();
+            y_next = rhs_iter.next();
+            if x_next.is_none() || y_next.is_none() { break; }
+
+        } else if x.0 < y.0 {
+            map.insert(x.0, x.1.clone());
+
+            x_next = lhs_iter.next();
+            y_next = Some(y);
+            if x_next.is_none() { break; }
+
+        } else {  // x.0 > y.0
+            map.insert(y.0, y.1.ref_neg());
             
             x_next = Some(x);
             y_next = rhs_iter.next();
@@ -262,28 +449,23 @@ pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>)
         map.insert(x.0, x.1.clone());
         map.extend(lhs_iter.map(|(e, c)|(e, c.clone())));
     } else if let Some(y) = y_next {
-        map.insert(y.0, -y.1.clone());
-        map.extend(rhs_iter.map(|(e, c)|(e, -c.clone())));
+        map.insert(y.0, y.1.ref_neg());
+        map.extend(rhs_iter.map(|(e, c)|(e, c.ref_neg())));
     }
 
     Polynomial::sparse_from_map(map)
 } 
 
-pub(crate) fn mul_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
-        where C: Semiring + Clone {
-    mul_ref(&lhs, &rhs)
-}
-
-pub(crate) fn mul_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
+pub(crate) fn mul<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Semiring + Clone {
     let mut map: BTreeMap<usize, C> = BTreeMap::new();
 
     for (i, x) in lhs.nonzero_coeffs() {
         for (j, y) in rhs.nonzero_coeffs() {
             let k = i + j;
-            let z = x.clone() * y.clone();
+            let z = x.ref_mul(y);
             match map.get_mut(&k){
-                Some(c) => *c = c.clone() + z,
+                Some(c) => *c = c.ref_add(z),
                 None => { map.insert(k, z); },
             }
         }
@@ -304,12 +486,12 @@ pub(crate) fn div_rem<C>(mut u: BTreeMap<usize, C>, rhs: &Polynomial<C>) -> (Pol
         if i_last < d_rhs { break; }
         let c_last = u.remove(&i_last).unwrap();
 
-        let q0: C = c_last.div_ref(v0);
+        let q0: C = c_last.ref_div(v0);
         let offset = i_last - d_rhs;  // the last of u is already removed
         for (i, c_rhs) in rhs.nonzero_coeffs() {
             if i == d_rhs { break; }
             let e = u.entry(offset + i).or_insert(C::zero());
-            *e = e.sub_ref(&(c_rhs.mul_ref(&q0)));
+            *e = e.ref_sub(c_rhs.ref_mul(&q0));
         }
         q.insert(i_last - d_rhs, q0);
     }

@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use crate::{algebra::{Field, Ring, Semiring}, poly::Polynomial};
 
-use super::CoeffsAccessor;
+use super::CoeffsIterator;
 
 #[derive(Clone)]
 pub struct DenseContent<C>(pub(crate) Vec<C>);
@@ -57,31 +57,84 @@ impl<C> DenseContent<C> where C: Semiring {
     pub fn integral(&self) -> Polynomial<C> {
         todo!()
     }
+
+    // pub fn add_dense(mut self, mut other: DenseContent<C>) -> Polynomial<C> {
+    //     // if self.degree() >= other.degree() {
+    //     //     let mut iteref_rhs = other.0.iter().enumerate();
+    //     //     for (i, c_lhs) in self.0.iteref_mut().enumerate() {
+
+    //     //     }
+    //     //     let mut lhs_iter = lhs.coeffs();
+    //     //     let mut rhs_iter = rhs.coeffs();
+        
+    //     //     for _ in 0..=d_min {
+    //     //         match (lhs_iter.next(), rhs_iter.next()) {
+    //     //             (Some(x), Some(y)) => v.push(x + y),
+    //     //             _ => panic!(),
+    //     //         }
+    //     //     }
+        
+    //     //     let rest_iter = if lhs_is_higher { lhs_iter } else { rhs_iter };
+    //     //     v.extend(rest_iter);
+        
+    //     //     Polynomial::dense_from_vec(v)
+
+    //     // }
+    //     todo!()
+    // }
+
+    // pub fn add_val(mut self, mut other: Polynomial<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn add_ref<'b>(mut self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn ref_add_dense(&self, mut other: DenseContent<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn ref_add_sparse(&self, mut other: Polynomial<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn ref_add_ref<'b>(&self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+
+    // pub fn sub_dense(mut self, mut other: DenseContent<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn sub_sparse(mut self, mut other: SparseContent<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn sub_ref<'b>(mut self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn ref_sub_dense(&self, mut other: DenseContent<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn ref_sub_sparse(&self, mut other: Polynomial<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn ref_sub_ref<'b>(&self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
+    //     todo!()
+    // }
 }
 
-impl<C> DenseContent<C> where C: Ring {
-
-    pub fn neg(self) -> Polynomial<C> {
-        let v: Vec<C> = self.0.into_iter().map(|c|-c).collect();
-        Polynomial::Dense(DenseContent(v))
-    }
-}
-
-impl<C> DenseContent<C> where C: Ring + Clone {
-
-    pub fn neg_ref(&self) -> Polynomial<C> {
-        let v: Vec<C> = self.0.iter().map(|c|c.neg_ref()).collect();
-        Polynomial::Dense(DenseContent(v))
-    }
-}
-
-
-/// Return (max, min, first_arg_is_higher)
+/// Return (max, min, left_is_higher)
 fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
     if x >= y { (x, y, true) } else { (y, x, false) }
 }
 
-pub(crate) fn add_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+pub(crate) fn add_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
         where C: Semiring {
 
     let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
@@ -104,7 +157,14 @@ pub(crate) fn add_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn add_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+fn clone_coeff<'a, C>(op_c: Option<&'a C>) -> C where C: Semiring + Clone {
+    match op_c {
+        Some(c) => c.clone(),
+        _ => C::zero(),
+    }
+}
+
+pub(crate) fn add_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Semiring + Clone {
 
     let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
@@ -116,8 +176,66 @@ pub(crate) fn add_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>)
 
     for _ in 0..=d_min {
         match (lhs_iter.next(), rhs_iter.next()) {
-            (Some(some_x), Some(some_y)) => match (some_x, some_y) {
-                (Some(x), Some(y)) => v.push(x.add_ref(y)),
+            (Some(x), Some(op_y)) => match op_y {
+                Some(y) => v.push(x + y),
+                _ => v.push(x),
+            },
+            _ => panic!(),
+        }
+    }
+
+    if lhs_is_higher { 
+        v.extend(lhs_iter); 
+    } else {
+        v.extend(rhs_iter.map(clone_coeff));
+    }
+
+    Polynomial::dense_from_vec(v)
+}
+
+pub(crate) fn add_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
+        where C: Semiring + Clone {
+
+    let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.coeffs();
+    let mut rhs_iter = rhs.coeffs();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(op_x), Some(y)) => match op_x {
+                Some(x) => v.push(x.ref_add(y)),
+                _ => v.push(y),
+            },
+            _ => panic!(),
+        }
+    }
+
+    if lhs_is_higher { 
+        v.extend(lhs_iter.map(clone_coeff));
+    } else {
+        v.extend(rhs_iter); 
+    }
+
+    Polynomial::dense_from_vec(v)
+}
+
+pub(crate) fn add_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+        where C: Semiring + Clone {
+
+    let (d_max, d_min, lhs_is_higher) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.coeffs();
+    let mut rhs_iter = rhs.coeffs();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(op_x), Some(op_y)) => match (op_x, op_y) {
+                (Some(x), Some(y)) => v.push(x.ref_add(y)),
                 (Some(x), None) => v.push(x.clone()),
                 (None, Some(y)) => v.push(y.clone()),
                 (None, None) => v.push(C::zero()),
@@ -127,15 +245,12 @@ pub(crate) fn add_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>)
     }
 
     let rest_iter = if lhs_is_higher { lhs_iter } else { rhs_iter };
-    v.extend(rest_iter.map(|c| match c {
-        Some(x) => x.clone(),
-        None => C::zero(),
-    }));
+    v.extend(rest_iter.map(clone_coeff));
 
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn sub_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
+pub(crate) fn sub_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
         where C: Ring {
 
     let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
@@ -161,7 +276,72 @@ pub(crate) fn sub_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+fn neg_coeff<'a, C>(op_c: Option<&'a C>) -> C where C: Ring + Clone {
+    match op_c {
+        Some(c) => c.ref_neg(),
+        _ => C::zero(),
+    }
+}
+
+pub(crate) fn sub_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
+        where C: Ring + Clone {
+
+    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.coeffs();
+    let mut rhs_iter = rhs.coeffs();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(x), Some(op_y)) => match op_y {
+                Some(y) => v.push(x.ref_sub(y)),
+                _ => v.push(x),
+            },
+            _ => panic!(),
+        }
+    }
+
+    if lhs_is_longer {
+        v.extend(lhs_iter);
+    } else {
+        v.extend(rhs_iter.map(neg_coeff));
+    }
+
+    Polynomial::dense_from_vec(v)
+}
+
+pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
+        where C: Ring + Clone {
+
+    let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
+
+    let mut v: Vec<C> = Vec::with_capacity(d_max);
+
+    let mut lhs_iter = lhs.coeffs();
+    let mut rhs_iter = rhs.coeffs();
+
+    for _ in 0..=d_min {
+        match (lhs_iter.next(), rhs_iter.next()) {
+            (Some(op_x), Some(y)) => match op_x {
+                Some(x) => v.push(x.ref_sub(y)),
+                _ => v.push(-y),
+            },
+            _ => panic!(),
+        }
+    }
+
+    if lhs_is_longer {
+        v.extend(lhs_iter.map(clone_coeff));
+    } else {
+        v.extend(rhs_iter.map(|c|-c));
+    }
+
+    Polynomial::dense_from_vec(v)
+}
+
+pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
         where C: Ring + Clone {
 
     let (d_max, d_min, lhs_is_longer) = max_min(lhs.degree(), rhs.degree());
@@ -174,7 +354,7 @@ pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>)
     for _ in 0..=d_min {
         match (lhs_iter.next(), rhs_iter.next()) {
             (Some(some_x), Some(some_y)) => match (some_x, some_y) {
-                (Some(x), Some(y)) => v.push(x.clone() - y.clone()),
+                (Some(x), Some(y)) => v.push(x.ref_sub(y)),
                 (Some(x), None) => v.push(x.clone()),
                 (None, Some(y)) => v.push(y.clone()),
                 (None, None) => v.push(C::zero()),
@@ -190,7 +370,7 @@ pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>)
         }));
     } else {
         v.extend(rhs_iter.map(|c| match c {
-            Some(x) => -x.clone(),
+            Some(x) => x.ref_neg(),
             None => C::zero(),
         }));
     }
@@ -198,12 +378,7 @@ pub(crate) fn sub_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>)
     Polynomial::dense_from_vec(v)
 }
 
-pub(crate) fn mul_val<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
-        where C: Semiring + Clone {
-    mul_ref(&lhs, &rhs)
-}
-
-pub(crate) fn mul_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
+pub(crate) fn mul<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Semiring + Clone {
 
     let deg = lhs.degree() + rhs.degree();
@@ -212,9 +387,9 @@ pub(crate) fn mul_ref<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>)
     for (i, x) in lhs.nonzero_coeffs() {
         for (j, y) in rhs.nonzero_coeffs() {
             let k = i + j;
-            let z = x.clone() * y.clone();
+            let z = x.ref_mul(y);
             match v.get_mut(k) {
-                Some(c) => *c = c.clone() + z,
+                Some(c) => *c = c.ref_add(z),
                 None => {
                     let n = v.len();
                     for _ in 0..(k-n) { v.push(C::zero()) }
@@ -240,12 +415,12 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
         if u_last.is_zero() {
             q.push(C::zero());
         } else {
-            let q0: C = u_last.div_ref(v0);
+            let q0: C = u_last.ref_div(v0);
             let offset = u.len() - d_rhs;  // the last of u is already popped
             for (i, c_rhs) in rhs.nonzero_coeffs() {
                 if i == d_rhs { break; }
                 let c_lhs = u.get_mut(offset + i).unwrap();
-                *c_lhs = c_lhs.sub_ref(&(c_rhs.mul_ref(&q0)));
+                *c_lhs = c_lhs.ref_sub(c_rhs.ref_mul(&q0));
             }
             q.push(q0);
         }
@@ -259,7 +434,7 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
 //         where C: Field + Clone {
 
 //     let n = lhs.degree() - rhs.degree();
-//     let v0: &C = rhs.max_order_term_coeff().unwrap();
+//     let v0: &C = rhs.max_orderef_term_coeff().unwrap();
 //     let mut q: Vec<C> = Vec::with_capacity(n);
 //     let mut u: Vec<C> = lhs.to_vec();
 
@@ -287,7 +462,7 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
 //         where C: Field + Clone {
 
 //     let n = lhs.degree() - rhs.degree();
-//     let v0: &C = rhs.max_order_term_coeff().unwrap();
+//     let v0: &C = rhs.max_orderef_term_coeff().unwrap();
 //     let mut q: Vec<C> = Vec::with_capacity(n);
 //     let mut u: Vec<C> = lhs.to_vec();
 

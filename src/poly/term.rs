@@ -1,9 +1,8 @@
-use std::{borrow::Cow, collections::HashMap, fmt::Display, ops::{Add, Div, Mul, Neg}};
+use std::{borrow::Cow, collections::HashMap, fmt::Display};
 
-use num::{One, Zero};
 use once_cell::sync::Lazy;
 
-use crate::algebra::{AdditiveGroup, AdditiveMonoid, AdditiveSemigroup, Field, Monoid, Semigroup};
+use crate::algebra::Semiring;
 
 static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 
@@ -19,13 +18,63 @@ fn to_superscript(p: usize) -> String {
     p.to_string().chars().map(|c|(*MAPPING_TO_SUPERSCRIPTS)[&c]).collect()
 }
 
+pub(crate) fn term_to_string<C>(exp: usize, coeff: &C) -> String where C: Semiring + Display {
+
+    let coeff_str = format!("{}", coeff);
+
+    if coeff.is_zero() || coeff_str == "0" {
+        "".to_string()
+
+    } else if coeff.is_one() || coeff_str == "1" {
+        match exp {
+            0 => " + 1".to_string(),
+            1 => " + x".to_string(),
+            _ => format!(" + x{}", to_superscript(exp)),
+        }
+
+    } else if coeff_str == "-1" {
+        match exp {
+            0 => " - 1".to_string(),
+            1 => " - x".to_string(),
+            _ => format!(" - x{}", to_superscript(exp)),
+        }
+
+    } else {
+        if coeff_str.chars().all(|c| "0123456789-.Ee".contains(c)) {
+            let exp_str = match exp {
+                0 => "".to_string(),
+                1 => "x".to_string(),
+                _ => format!("x{}", to_superscript(exp))
+            };
+
+            if coeff_str.starts_with("-") {
+                format!("{}{}", coeff_str.replace("-", " - "), exp_str)
+
+            } else {
+                format!(" + {}{}", coeff_str, exp_str)
+            }
+
+        } else {
+            match exp {
+                0 => if coeff_str.starts_with("-") {
+                    format!(" + ({})", coeff)
+                } else {
+                    format!(" + {}", coeff)  // this sign may be removed
+                },
+                1 => format!(" + ({})x", coeff),
+                _ => format!(" + ({})x{}", coeff, to_superscript(exp)),
+            }       
+        }
+    }
+}
+
 /// Refer to spire's <a href="https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/poly/Term.scala">Term</a>
-pub struct Term<'a, C> where C: Clone {
+pub struct Term<'a, C> where C: Semiring + Clone {
     pub(crate) exp: usize,
     pub(crate) coeff: Cow<'a, C>,
 }
 
-impl<'a, C> Term<'a, C> where C: Clone {
+impl<'a, C> Term<'a, C> where C: Semiring + Clone {
 
     pub fn from_ref(exp: usize, coeff: &'a C) -> Term<'a, C> {
         Term { exp, coeff: Cow::Borrowed(coeff) }
@@ -34,73 +83,39 @@ impl<'a, C> Term<'a, C> where C: Clone {
     pub fn from_value(exp: usize, coeff: C) -> Term<'a, C> {
         Term { exp, coeff: Cow::Owned(coeff) }
     }
-}
-
-impl<'a, C> Term<'a, C> where C: Semigroup + Clone {
 
     pub fn is_index_zero(&self) -> bool {
         self.exp == 0
     }
 
-    // don't use www
-    pub fn eval(self, x: C) -> C {
-        if self.exp == 0 { return self.coeff.into_owned(); }
-        let mut x_n = x.clone();
-        for _ in 0..(self.exp-1) { x_n = x_n * x.clone() }
-        self.coeff.into_owned() * x_n
-    }
+    // 
+    // pub fn eval(self, x: C) -> C {
+    //     // if self.exp == 0 { return self.coeff.into_owned(); }
+    //     // let mut x_n = x.clone();
+    //     // for _ in 0..(self.exp-1) { x_n = x_n * x.clone() }
+    //     // self.coeff.into_owned() * x_n
+
+    //     fn calc_pow<C>(base: C, p: u32, extra: C) -> C where C: Semiring + Clone {
+    //         if p == 1 {
+    //             base * extra
+    //         } else {
+    //             let next_extra = if (p & 1) == 1 { base * extra } else { extra.clone() };
+    //             calc_pow(base * base, p >> 1, next_extra)
+    //         }
+    //     }
+
+    //     match self.exp {
+    //         0 => C::one(),
+    //         1 => self.coeff,
+    //         _ => calc_pow(self.coeff, self.exp-1, self.coeff)
+    //     }
+    // }
 }
 
-impl<'a, C> Term<'a, C> where C: Zero + PartialEq + One + Clone + Display {
+impl<'a, C> Term<'a, C> where C: Semiring + Clone + Display {
 
     pub fn to_string(&self) -> String {
-    
-        let coeff_str = format!("{}", self.coeff);
-    
-        if self.coeff.is_zero() || coeff_str == "0" {
-            "".to_string()
-    
-        } else if self.coeff.is_one() || coeff_str == "1" {
-            match self.exp {
-                0 => " + 1".to_string(),
-                1 => " + x".to_string(),
-                _ => format!(" + x{}", to_superscript(self.exp)),
-            }
-    
-        } else if coeff_str == "-1" {
-            match self.exp {
-                0 => " - 1".to_string(),
-                1 => " - x".to_string(),
-                _ => format!(" - x{}", to_superscript(self.exp)),
-            }
-    
-        } else {
-            if coeff_str.chars().all(|c| "0123456789-.Ee".contains(c)) {
-                let exp_str = match self.exp {
-                    0 => "".to_string(),
-                    1 => "x".to_string(),
-                    _ => format!("x{}", to_superscript(self.exp))
-                };
-    
-                if coeff_str.starts_with("-") {
-                    format!("{}{}", coeff_str.replace("-", " - "), exp_str)
-    
-                } else {
-                    format!(" + {}{}", coeff_str, exp_str)
-                }
-    
-            } else {
-                match self.exp {
-                    0 => if coeff_str.starts_with("-") {
-                        format!(" + ({})", self.coeff)
-                    } else {
-                        format!(" + {}", self.coeff)  // this sign may be removed
-                    },
-                    1 => format!(" + ({})x", self.coeff),
-                    _ => format!(" + ({})x{}", self.coeff, to_superscript(self.exp)),
-                }       
-            }
-        }
+        term_to_string(self.exp, self.coeff.as_ref())
     }
 }
 
@@ -128,75 +143,75 @@ impl<'a, C> Term<'a, C> where C: Zero + PartialEq + One + Clone + Display {
 //     }
 // }
 
-impl<'a, C> From<(usize, &'a C)> for Term<'a, C> where C: Clone {
+impl<'a, C> From<(usize, &'a C)> for Term<'a, C> where C: Semiring + Clone {
 
     fn from(value: (usize, &'a C)) -> Self {
         Term::from_ref(value.0, value.1)
     }
 }
 
-impl<'a, C> From<(usize, C)> for Term<'a, C> where C: Clone {
+impl<'a, C> From<(usize, C)> for Term<'a, C> where C: Semiring + Clone {
 
     fn from(value: (usize, C)) -> Self {
         Term::from_value(value.0, value.1)
     }
 }
 
-impl<'a, C> Zero for Term<'a, C> where C: AdditiveMonoid + Clone {
+// impl<'a, C> Zero for Term<'a, C> where C: Semiring + Clone {
 
-    fn zero() -> Self {
-        Term::from_value(0, C::zero())
-    }
+//     fn zero() -> Self {
+//         Term::from_value(0, C::zero())
+//     }
 
-    fn is_zero(&self) -> bool {
-        self.coeff.is_zero()
-    }
-}
+//     fn is_zero(&self) -> bool {
+//         self.coeff.is_zero()
+//     }
+// }
 
-impl<'a, C> One for Term<'a, C> where C: Monoid + Clone {
+// impl<'a, C> One for Term<'a, C> where C: Semiring + Clone {
 
-    fn one() -> Self {
-        Term::from_value(0, C::one())
-    }
-}
+//     fn one() -> Self {
+//         Term::from_value(0, C::one())
+//     }
+// }
 
-impl<'a, C> Neg for Term<'a, C> where C: AdditiveGroup + Clone {
+// impl<'a, C> Neg for Term<'a, C> where C: Semiring + Clone {
 
-    type Output = Term<'a, C>;
+//     type Output = Term<'a, C>;
 
-    fn neg(self) -> Self::Output {
-        Term::from_value(self.exp, -self.coeff.into_owned())
-    }
-}
+//     fn neg(self) -> Self::Output {
+//         Term::from_value(self.exp, -self.coeff.into_owned())
+//     }
+// }
 
-impl<'a, C> Add for Term<'a, C> where C: AdditiveSemigroup + Clone {
+// impl<'a, C> Add for Term<'a, C> where C: AdditiveSemigroup + Clone {
 
-    type Output = Term<'a, C>;
+//     type Output = Term<'a, C>;
 
-    fn add(self, other: Self) -> Self::Output {
-        if self.exp == other.exp {
-            Term::from_value(self.exp, self.coeff.into_owned() + other.coeff.into_owned())
-        } else {
-            panic!("can't add terms of degree {} and ${}", self.exp, other.exp)
-        }
+//     fn add(self, other: Self) -> Self::Output {
+//         if self.exp == other.exp {
+//             Term::from_value(self.exp, self.coeff.into_owned() + other.coeff.into_owned())
+//         } else {
+//             panic!("can't add terms of degree {} and ${}", self.exp, other.exp)
+//         }
         
-    }
-}
+//     }
+// }
 
-impl<'a, C> Mul for Term<'a, C> where C: Semigroup + Clone{
+// impl<'a, C> Mul for Term<'a, C> where C: Semigroup + Clone{
 
-    type Output = Term<'a, C>;
+//     type Output = Term<'a, C>;
 
-    fn mul(self, other: Self) -> Self::Output {
-        Term::from_value(self.exp + other.exp, self.coeff.into_owned() * other.coeff.into_owned())
-    }
-}
+//     fn mul(self, other: Self) -> Self::Output {
+//         Term::from_value(self.exp + other.exp, self.coeff.into_owned() * other.coeff.into_owned())
+//     }
+// }
 
-impl<'a, C> Div<C> for Term<'a, C> where C: Field + Clone {
+// impl<'a, C> Div<C> for Term<'a, C> where C: Field + Clone {
 
-    type Output = Term<'a, C>;
+//     type Output = Term<'a, C>;
 
-    fn div(self, rhs: C) -> Self::Output {
-        Term::from_value(self.exp, self.coeff.into_owned() / rhs)
-    }
-}
+//     fn div(self, rhs: C) -> Self::Output {
+//         Term::from_value(self.exp, self.coeff.into_owned() / rhs)
+//     }
+// }
