@@ -107,7 +107,9 @@ fn test_debug(){
         (one(), "Polynomial::<i64>::Constant[(1)]"),
         (cst(2),  "Polynomial::<i64>::Constant[(2)]"),
         (dense![1, 2, 3],  "Polynomial::<i64>::Dense[1 + 2x + 3x²]"),
+        (dense![-1, -2, -3],  "Polynomial::<i64>::Dense[-1 - 2x - 3x²]"),
         (sparse![(0, 1), (1, 2), (2, 3)],   "Polynomial::<i64>::Sparse[1 + 2x + 3x²]"),
+        (sparse![(0, -1), (1, -2), (2, -3)],   "Polynomial::<i64>::Sparse[-1 - 2x - 3x²]"),
     ];
 
     for entry in table {
@@ -271,8 +273,11 @@ fn p2() -> Polynomial<i64> { dense![4, 0, 0, 5, 0, 0, 0, 6] }
 /// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
 fn p3() -> Polynomial<i64> { dense![1, 0, 0, 0, 2] }
 
-/// 4x³ (= dense![[0, 0, 0, 4]])
-fn p4() -> Polynomial<i64> { dense![0, 0, 0, 4] }
+/// 6x³ (= dense![[0, 0, 0, 6]])
+fn p4() -> Polynomial<i64> { dense![0, 0, 0, 6] }
+
+/// 5x + 7x⁴ (= dense![[0, 5, 0, 0, 7]])
+fn p5() -> Polynomial<i64> { dense![0, 5, 0, 0, 7] }
 
 fn get_impls<'a, C>(x: &'a Polynomial<C>) -> Vec<Polynomial<C>> where C: Semiring + Clone {
     if x.degree() == 0 {
@@ -306,7 +311,8 @@ fn test_neg(){
         (p1(), dense![-4, -5, 0, -6, -7]),
         (p2(), dense![-4, 0, 0, -5, 0, 0, 0, -6]),
         (p3(), dense![-1, 0, 0, 0, -2]),
-        (p4(), dense![0, 0, 0, -4]),
+        (p4(), dense![0, 0, 0, -6]),
+        (p5(), dense![0, -5, 0, 0, -7]),
     ];
 
     for entry in table {
@@ -342,7 +348,7 @@ fn test_add(){
         (zero(), p1(), dense![4, 5, 0, 6, 7]),
         (zero(), p2(), dense![4, 0, 0, 5, 0, 0, 0, 6]),
         (zero(), p3(), dense![1, 0, 0, 0, 2]),
-        (zero(), p4(), dense![0, 0, 0, 4]),
+        (zero(), p4(), dense![0, 0, 0, 6]),
         
         (one(), one(), cst(2)),
         (one(), cst(3), cst(4)),
@@ -350,7 +356,7 @@ fn test_add(){
         (one(), p1(), dense![5, 5, 0, 6, 7]),
         (one(), p2(), dense![5, 0, 0, 5, 0, 0, 0, 6]),
         (one(), p3(), dense![2, 0, 0, 0, 2]),
-        (one(), p4(), dense![1, 0, 0, 4]),
+        (one(), p4(), dense![1, 0, 0, 6]),
         
         (cst(5), cst(3), cst(8)),
         (cst(5), cst(-5), zero()),  // result be zero
@@ -358,20 +364,22 @@ fn test_add(){
         (cst(5), p1(), dense![9, 5, 0, 6, 7]),
         (cst(5), p2(), dense![9, 0, 0, 5, 0, 0, 0, 6]),
         (cst(5), p3(), dense![6, 0, 0, 0, 2]),
-        (cst(5), p4(), dense![5, 0, 0, 4]),
+        (cst(5), p4(), dense![5, 0, 0, 6]),
         
         (cst(-4), cst(3), cst(-1)),
         (cst(-4), p0(), dense![-3, 2, 3]),
         (cst(-4), p1(), dense![0, 5, 0, 6, 7]),
         (cst(-4), p2(), dense![0, 0, 0, 5, 0, 0, 0, 6]),
         (cst(-4), p3(), dense![-3, 0, 0, 0, 2]),
-        (cst(-4), p4(), dense![-4, 0, 0, 4]),
+        (cst(-4), p4(), dense![-4, 0, 0, 6]),
         
         (p1(), -p1(), zero()),                    // result be zero
         (p1(), dense![-1, -5, 0, -6, -7], cst(3)), // result be const
         (p0(), p1(), dense![5, 7, 3, 6, 7]),
         (p1(), p2(), dense![8, 5, 0, 11, 7, 0, 0, 6]),
-        (p3(), p4(), dense![1, 0, 0, 4, 2]),
+        (p3(), p4(), dense![1, 0, 0, 6, 2]),
+        (p1(), -p4(), dense![4, 5, 0, 0, 7]),
+        (p1(), -p5(), dense![4, 0, 0, 6]),
     ];
 
     for entry in table {
@@ -407,7 +415,7 @@ fn test_sub(){
         (zero(), p1(), dense![-4, -5, 0, -6, -7]),
         (zero(), p2(), dense![-4, 0, 0, -5, 0, 0, 0, -6]),
         (zero(), p3(), dense![-1, 0, 0, 0, -2]),
-        (zero(), p4(), dense![0, 0, 0, -4]),
+        (zero(), p4(), dense![0, 0, 0, -6]),
         
         (one(), one(), zero()),
         (one(), cst(3), cst(-2)),
@@ -415,7 +423,7 @@ fn test_sub(){
         (one(), p1(), dense![-3, -5, 0, -6, -7]),
         (one(), p2(), dense![-3, 0, 0, -5, 0, 0, 0, -6]),
         (one(), p3(), dense![0, 0, 0, 0, -2]),
-        (one(), p4(), dense![1, 0, 0, -4]),
+        (one(), p4(), dense![1, 0, 0, -6]),
         
         (cst(5), cst(3), cst(2)),
         (cst(5), cst(5), zero()),  // result be zero
@@ -423,7 +431,7 @@ fn test_sub(){
         (cst(5), p1(), dense![1, -5, 0, -6, -7]),
         (cst(5), p2(), dense![1, 0, 0, -5, 0, 0, 0, -6]),
         (cst(5), p3(), dense![4, 0, 0, 0, -2]),
-        (cst(5), p4(), dense![5, 0, 0, -4]),
+        (cst(5), p4(), dense![5, 0, 0, -6]),
         
         (cst(4), p1(), dense![0, -5, 0, -6, -7]),
         (cst(4), p2(), dense![0, 0, 0, -5, 0, 0, 0, -6]),
@@ -432,7 +440,9 @@ fn test_sub(){
         (p0(), dense![-2, 2, 3], cst(3)), // result be const
         (p0(), p1(), dense![-3, -3, 3, -6, -7]),
         (p1(), p2(), dense![0, 5, 0, 1, 7, 0, 0, -6]),
-        (p3(), p4(), dense![1, 0, 0, -4, 2]),
+        (p3(), p4(), dense![1, 0, 0, -6, 2]),
+        (p1(), p4(), dense![4, 5, 0, 0, 7]),
+        (p1(), p5(), dense![4, 0, 0, 6]),
     ];
 
     for entry in table {
@@ -510,7 +520,7 @@ fn test_div_rem(){
     /// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
     fn pr3() -> PolyR64 { to_poly_r64(p3()) }
 
-    /// 4x³ (= dense![[0, 0, 0, 4]])
+    /// 6x³ (= dense![[0, 0, 0, 6]])
     fn pr4() -> PolyR64 { to_poly_r64(p4()) }
 
     fn pr1_div_3() -> PolyR64 { dense![r(4, 3), r(5, 3), ri(0), r(6, 3), r(7, 3)] }
@@ -521,7 +531,7 @@ fn test_div_rem(){
     fn pr2_div_pr3() -> PolyR64 { to_poly_r64(dense![0, 0, 0, 3]) }
     fn pr2_rem_pr3() -> PolyR64 { to_poly_r64(dense![4, 0, 0, 2]) }
     
-    fn pr2_div_pr4() -> PolyR64 { dense![r(5, 4), ri(0), ri(0), ri(0), r(3, 2)] }
+    fn pr2_div_pr4() -> PolyR64 { dense![r(5, 6), ri(0), ri(0), ri(0), ri(1)] }
     fn pr2_rem_pr4() -> PolyR64 { dense![ri(4)] }
 
 
