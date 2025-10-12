@@ -5,7 +5,7 @@ pub mod term;
 
 use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::*};
 use iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter};
-use num::{pow::Pow, traits::{ConstOne, ConstZero, Euclid}, One, Zero};
+use num::{complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}, BigInt, BigRational, One, Rational32, Rational64, Zero};
 
 use dense::DenseContent;
 use sparse::SparseContent;
@@ -479,9 +479,21 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     
     //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
     //     this.map(f).apply(x)
+
+    /// Compose this polynomial with another.
+    pub fn compose(self, y: Polynomial<C>) -> Polynomial<C> {
+        let mut acc = Polynomial::Zero();
+
+        for (i, c) in self.nonzero_coeffs() {
+            let z = (&y).pow(i as u32).scale_by_left(&c);
+            acc = acc + z;
+        }
+
+        acc
+    }
     
     //   /**
-    //    * Compose this polynomial with another.
+    //    * 
     //    */
     //   def compose(y: Polynomial[C])(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
     //     var polynomial: Polynomial[C] = Polynomial.zero[C]
@@ -491,7 +503,6 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     //     }
     //     polynomial
     //   }
-
 
     
     //   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
@@ -1016,10 +1027,19 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
             (_, Polynomial::Zero()) |
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0.ref_mul(&rhs.0)),
-            (Polynomial::Constant(lhs), rhs) => rhs.map_ref(|_, c| lhs.0.ref_mul(c)),
-            (lhs, Polynomial::Constant(rhs)) => lhs.map_ref(|_, c| c.ref_mul(&rhs.0)),
+            (Polynomial::Constant(lhs), rhs) => rhs.scale_by_left(&lhs.0),
+            (lhs, Polynomial::Constant(rhs)) => lhs * &rhs.0,
             (lhs @ Polynomial::Dense(_), rhs) => dense::mul(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(lhs, rhs),
+        }
+    }
+
+    /// Multiply <code>k</code> by left to all coefficients of <code>self</code>.
+    fn scale_by_left(&self, k: &C) -> Polynomial<C> {
+        if k.is_zero() {
+            Polynomial::Zero()
+        } else {
+            self.map_ref(|_, c| k.ref_mul(c))
         }
     }
 }
@@ -1028,36 +1048,28 @@ impl<C> Mul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, other: Self) -> Self::Output {
-        (&self).mul_ref(&other)
-    }
+    fn mul(self, other: Self) -> Self::Output { (&self).mul_ref(&other) }
 }
 
 impl<'b, C> Mul<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, other: &'b Self) -> Self::Output {
-        (&self).mul_ref(other)
-    }
+    fn mul(self, other: &'b Self) -> Self::Output { (&self).mul_ref(other) }
 }
 
 impl<'a, C> Mul<Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, other: Polynomial<C>) -> Self::Output {
-        self.mul_ref(&other)
-    }
+    fn mul(self, other: Polynomial<C>) -> Self::Output { self.mul_ref(&other) }
 }
 
 impl<'a, 'b, C> Mul<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
     
-    fn mul(self, other: &'b Polynomial<C>) -> Polynomial<C> {
-        self.mul_ref(other)
-    }
+    fn mul(self, other: &'b Polynomial<C>) -> Polynomial<C> { self.mul_ref(other) }
 }
 
 impl<C> RefMul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
@@ -1069,6 +1081,81 @@ impl<'b, C> RefMul<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clon
     #[inline]
     fn ref_mul(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self * other }
 }
+
+//********** Mul (Scalar) **********/
+impl<C> Mul<C> for Polynomial<C> where C: Semiring + Clone {
+
+    type Output = Polynomial<C>;
+
+    fn mul(self, k: C) -> Self::Output { self * &k }
+}
+
+impl<'b, C> Mul<&'b C> for Polynomial<C> where C: Semiring + Clone {
+
+    type Output = Polynomial<C>;
+
+    fn mul(self, k: &'b C) -> Self::Output { &self * k }
+}
+
+impl<'a, C> Mul<C> for &'a Polynomial<C> where C: Semiring + Clone {
+
+    type Output = Polynomial<C>;
+
+    fn mul(self, k: C) -> Self::Output { self * &k }
+}
+
+impl<'a, 'b, C> Mul<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
+
+    type Output = Polynomial<C>;
+    
+    fn mul(self, k: &'b C) -> Polynomial<C> {
+        if k.is_zero() {
+            Polynomial::Zero()
+        } else {
+            self.map_ref(|_, c| c.ref_mul(k))
+        }
+    }
+}
+
+macro_rules! impl_scale_by_left {
+    ( $( $t:ident ),* ) => {
+        $(
+
+            impl Mul<Polynomial<$t>> for $t {
+
+                type Output = Polynomial<$t>;
+
+                fn mul(self, poly: Polynomial<$t>) -> Self::Output { &self * &poly }
+            }
+
+            impl<'b> Mul<&'b Polynomial<$t>> for $t {
+
+                type Output = Polynomial<$t>;
+
+                fn mul(self, poly: &'b Polynomial<$t>) -> Self::Output { &self * poly }
+            }
+
+            impl<'a> Mul<Polynomial<$t>> for &'a $t {
+
+                type Output = Polynomial<$t>;
+
+                fn mul(self, poly: Polynomial<$t>) -> Self::Output { self * &poly }
+            }
+
+            impl<'a, 'b> Mul<&'b Polynomial<$t>> for &'a $t {
+
+                type Output = Polynomial<$t>;
+
+                fn mul(self, poly: &'b Polynomial<$t>) -> Self::Output {
+                    poly.scale_by_left(self)
+                }
+            }
+        )*
+    };
+}
+
+impl_scale_by_left!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
+        BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
 //********** Div & Rem **********/
 impl<C> Polynomial<C> where C: Field + Clone {
@@ -1223,6 +1310,7 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
     }
 }
 
+// operator priority is problem...
 // impl<C: Ring + Clone> BitXor<u32> for Polynomial<C> {
 
 //     type Output = Polynomial<C>;
@@ -1240,6 +1328,9 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 //         self.pow(power)
 //     }
 // }
+
+
+
 
 //   /**
 //    * Shift this polynomial along the x-axis by `h`, so that `this(x + h) == this.shift(h).apply(x)`. This is equivalent

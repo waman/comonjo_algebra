@@ -470,8 +470,8 @@ fn test_mul(){
         }
     }
 
-    fn exp_0_mul_1() -> Polynomial<i64> { dense![4, 13, 22, 21, 19, 32, 21] }
-    fn exp_2_mul_3() -> Polynomial<i64> { sparse![(0, 4), (3, 5), (4, 8), (7, 16), (11, 12)] }
+    fn exp_p0_mul_p1() -> Polynomial<i64> { dense![4, 13, 22, 21, 19, 32, 21] }
+    fn exp_p2_mul_p3() -> Polynomial<i64> { sparse![(0, 4), (3, 5), (4, 8), (7, 16), (11, 12)] }
 
     let table = [
         (zero(), zero(), zero()),
@@ -483,15 +483,60 @@ fn test_mul(){
         (one(), cst(3), cst(3)),
         (one(), p0(),   p0()),
         
-        (cst(5), cst(3),      cst(15)),
-        (cst(5), p0(),  dense![5, 10, 15]),
-        (cst(5), p2(), sparse![(0, 20), (3, 25), (7, 30)]),
+        (cst(5), cst(3), cst(15)),
+        (cst(5), p0(),   dense![5, 10, 15]),
+        (cst(5), p2(),   sparse![(0, 20), (3, 25), (7, 30)]),
         
-        (p1(), zero(),      zero()),
-        (p1(), one(),       p1()),
-        (p1(), cst(3),      dense![12, 15, 0, 18, 21]),
-        (p0(), p1(),  exp_0_mul_1()),
-        (p2(), p3(),  exp_2_mul_3()),
+        (p1(), zero(), zero()),
+        (p1(), one(),  p1()),
+        (p1(), cst(3), dense![12, 15, 0, 18, 21]),
+        (p0(), p1(),   exp_p0_mul_p1()),
+        (p2(), p3(),   exp_p2_mul_p3()),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
+#[test]
+fn test_mul_by_c(){
+
+    fn test(x: Polynomial<i64>, y: i64, exp: Polynomial<i64>){
+
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, y: i64, exp: &'b Polynomial<i64>){
+            assert_eq!(x * &y, *exp);
+            assert_eq!(x.clone() * &y, *exp);
+            assert_eq!(x * y, *exp);
+            assert_eq!(x.clone() * y, *exp);
+
+            assert_eq!(&y * x, *exp);
+            assert_eq!(&y * x.clone(), *exp);
+            assert_eq!(y * x, *exp);
+            assert_eq!(y * x.clone(), *exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, y, &exp);
+        }
+    }
+
+    let table = [
+        (zero(), 0,  zero()),
+        (zero(), 3,  zero()),
+        (zero(), -4, zero()),
+        
+        (one(), 0,  zero()),
+        (one(), 3,  cst(3)),
+        (one(), -4, cst(-4)),
+        
+        (cst(5), 0,  zero()),
+        (cst(5), 3,  cst(15)),
+        (cst(5), -4, cst(-20)),
+        
+        (p1(), 0, zero()),
+        (p1(), 3, dense![12, 15, 0, 18, 21]),
+        (p1(), -4, dense![-16, -20, 0, -24, -28]),
     ];
 
     for entry in table {
