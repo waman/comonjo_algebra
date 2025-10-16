@@ -318,9 +318,20 @@ impl<C> Polynomial<C> where C: Semiring {
     }
 
     //********** Some factory methods **********/
-    pub fn x() -> Polynomial<C> {
-        sparse![(1, C::one())]
-    }
+    /// <code>x</code>
+    pub fn x() -> Polynomial<C> { sparse![(1, C::one())] }
+
+    /// <code>x²</code>
+    pub fn x2() -> Polynomial<C> { sparse![(2, C::one())] }
+
+    /// <code>x³</code>
+    pub fn x3() -> Polynomial<C> { sparse![(3, C::one())] }
+
+    /// <code>x⁴</code>
+    pub fn x4() -> Polynomial<C> { sparse![(4, C::one())] }
+
+    /// <code>x⁵</code>
+    pub fn x5() -> Polynomial<C> { sparse![(5, C::one())] }
 
     pub fn two_x() -> Polynomial<C> {
         sparse![(1, C::one() + C::one())]
@@ -480,29 +491,40 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
     //     this.map(f).apply(x)
 
+    fn scale_by_left(self, k: &C) -> Polynomial<C> {
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self }
+        self.map(|_, c| k.ref_mul(c))
+    }
+
+    fn ref_scale_by_left(&self, k: &C) -> Polynomial<C> {
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self.clone() }
+        self.map_ref(|_, c| k.ref_mul(c))
+    }
+
     /// Compose this polynomial with another.
-    pub fn compose(self, y: Polynomial<C>) -> Polynomial<C> {
-        let mut acc = Polynomial::Zero();
+    pub fn compose<'a>(&self, y: &'a Polynomial<C>) -> Polynomial<C> {
+        match (self, y) {
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (lhs @ Polynomial::Constant(_), _) => lhs.clone(),
+            (lhs, Polynomial::Zero()) => match lhs.nth(0) {
+                Some(c) => Polynomial::constant(c.clone()),
+                _ => Polynomial::Zero(),
+            }
+            (lhs, rhs) => {
+                let mut acc = Polynomial::Zero();
 
-        for (i, c) in self.nonzero_coeffs() {
-            let z = (&y).pow(i as u32).scale_by_left(&c);
-            acc = acc + z;
+                for (i, c) in lhs.nonzero_coeffs() {
+                    let z = rhs.pow(i as u32).scale_by_left(c);
+                    acc = acc + z;
+                }
+
+                acc
+            }
         }
-
-        acc
     }
     
-    //   /**
-    //    * 
-    //    */
-    //   def compose(y: Polynomial[C])(implicit ring: Rig[C], eq: Eq[C]): Polynomial[C] = {
-    //     var polynomial: Polynomial[C] = Polynomial.zero[C]
-    //     foreachNonzero { (e, c) =>
-    //       val z: Polynomial[C] = y.pow(e) :* c
-    //       polynomial = polynomial + z
-    //     }
-    //     polynomial
-    //   }
 
     
     //   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
@@ -1019,57 +1041,92 @@ impl<'b, C> RefSub<&'b Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
 
 
 //********** Mul **********/
-impl<C> Polynomial<C> where C: Semiring + Clone {
-
-    #[inline]
-    fn mul_ref<'b>(&self, other: &'b Polynomial<C>) -> Polynomial<C> {
-        match (self, other) {
-            (_, Polynomial::Zero()) |
-            (Polynomial::Zero(), _) => Polynomial::Zero(),
-            (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0.ref_mul(&rhs.0)),
-            (Polynomial::Constant(lhs), rhs) => rhs.scale_by_left(&lhs.0),
-            (lhs, Polynomial::Constant(rhs)) => lhs * &rhs.0,
-            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(lhs, rhs),
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(lhs, rhs),
-        }
-    }
-
-    /// Multiply <code>k</code> by left to all coefficients of <code>self</code>.
-    fn scale_by_left(&self, k: &C) -> Polynomial<C> {
-        if k.is_zero() {
-            Polynomial::Zero()
-        } else {
-            self.map_ref(|_, c| k.ref_mul(c))
-        }
-    }
-}
-
 impl<C> Mul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, other: Self) -> Self::Output { (&self).mul_ref(&other) }
+    fn mul(self, other: Self) -> Self::Output {
+        match (self, other) {
+            (_, Polynomial::Zero()) |
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (Polynomial::Constant(lhs), rhs) => {
+                if lhs.0.is_one() { return rhs }
+                rhs.map(|_, c| lhs.0.ref_mul(c))
+            },
+            (lhs, Polynomial::Constant(rhs)) => {
+                if rhs.0.is_one() { return lhs }
+                lhs.map(|_, c| c * &rhs.0)
+            },
+            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(&lhs, &rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(&lhs, &rhs),
+        }
+    }
 }
 
 impl<'b, C> Mul<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, other: &'b Self) -> Self::Output { (&self).mul_ref(other) }
+    fn mul(self, other: &'b Self) -> Self::Output {
+        match (self, other) {
+            (_, Polynomial::Zero()) |
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (Polynomial::Constant(lhs), rhs) => {
+                if lhs.0.is_one() { return rhs.clone() }
+                rhs.map_ref(|_, c| lhs.0.ref_mul(c))
+            },
+            (lhs, Polynomial::Constant(rhs)) => {
+                if rhs.0.is_one() { return lhs }
+                lhs.map(|_, c| c * &rhs.0)
+            },
+            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(&lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(&lhs, rhs),
+        }
+    }
 }
 
 impl<'a, C> Mul<Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, other: Polynomial<C>) -> Self::Output { self.mul_ref(&other) }
+    fn mul(self, other: Polynomial<C>) -> Self::Output {
+        match (self, other) {
+            (_, Polynomial::Zero()) |
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (Polynomial::Constant(lhs), rhs) => {
+                if lhs.0.is_one() { return rhs }
+                rhs.map(|_, c| lhs.0.ref_mul(c))
+            },
+            (lhs, Polynomial::Constant(rhs)) => {
+                if rhs.0.is_one() { return lhs.clone() }
+                lhs.map_ref(|_, c| c.ref_mul(&rhs.0))
+            },
+            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(lhs, &rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(lhs, &rhs),
+        }
+    }
 }
 
 impl<'a, 'b, C> Mul<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
     
-    fn mul(self, other: &'b Polynomial<C>) -> Polynomial<C> { self.mul_ref(other) }
+    fn mul(self, other: &'b Polynomial<C>) -> Polynomial<C> {
+        match (self, other) {
+            (_, Polynomial::Zero()) |
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (Polynomial::Constant(lhs), rhs) => {
+                if lhs.0.is_one() { return rhs.clone() }
+                rhs.map_ref(|_, c| lhs.0.ref_mul(c))
+            },
+            (lhs, Polynomial::Constant(rhs)) => {
+                if rhs.0.is_one() { return lhs.clone() }
+                lhs.map_ref(|_, c| c.ref_mul(&rhs.0))
+            },
+            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(lhs, rhs),
+        }
+    }
 }
 
 impl<C> RefMul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
@@ -1094,7 +1151,11 @@ impl<'b, C> Mul<&'b C> for Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
-    fn mul(self, k: &'b C) -> Self::Output { &self * k }
+    fn mul(self, k: &'b C) -> Self::Output {
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self }
+        self.map(|_, c| c.ref_mul(k))
+    }
 }
 
 impl<'a, C> Mul<C> for &'a Polynomial<C> where C: Semiring + Clone {
@@ -1109,11 +1170,9 @@ impl<'a, 'b, C> Mul<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
     type Output = Polynomial<C>;
     
     fn mul(self, k: &'b C) -> Polynomial<C> {
-        if k.is_zero() {
-            Polynomial::Zero()
-        } else {
-            self.map_ref(|_, c| c.ref_mul(k))
-        }
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self.clone() }
+        self.map_ref(|_, c| c.ref_mul(k))
     }
 }
 
@@ -1125,30 +1184,28 @@ macro_rules! impl_scale_by_left {
 
                 type Output = Polynomial<$t>;
 
-                fn mul(self, poly: Polynomial<$t>) -> Self::Output { &self * &poly }
+                fn mul(self, poly: Polynomial<$t>) -> Self::Output { poly.scale_by_left(&self) }
             }
 
             impl<'b> Mul<&'b Polynomial<$t>> for $t {
 
                 type Output = Polynomial<$t>;
 
-                fn mul(self, poly: &'b Polynomial<$t>) -> Self::Output { &self * poly }
+                fn mul(self, poly: &'b Polynomial<$t>) -> Self::Output { poly.ref_scale_by_left(&self) }
             }
 
             impl<'a> Mul<Polynomial<$t>> for &'a $t {
 
                 type Output = Polynomial<$t>;
 
-                fn mul(self, poly: Polynomial<$t>) -> Self::Output { self * &poly }
+                fn mul(self, poly: Polynomial<$t>) -> Self::Output { poly.scale_by_left(self) }
             }
 
             impl<'a, 'b> Mul<&'b Polynomial<$t>> for &'a $t {
 
                 type Output = Polynomial<$t>;
 
-                fn mul(self, poly: &'b Polynomial<$t>) -> Self::Output {
-                    poly.scale_by_left(self)
-                }
+                fn mul(self, poly: &'b Polynomial<$t>) -> Self::Output { poly.ref_scale_by_left(self) }
             }
         )*
     };

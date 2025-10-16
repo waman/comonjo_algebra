@@ -651,72 +651,117 @@ test_divide_by_zero!(test_divide_sparse_by_zero, sparse![(0, ri(1)), (1, ri(2)),
 
 #[test]
 fn test_pow(){
+
     fn test(x: Polynomial<i64>, p: u32, exp: Polynomial<i64>){
-        let ref_x = &x;
-        assert_eq!(ref_x.pow(p), exp);
-        assert_eq!(x.pow(p), exp);
+
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, p: u32, exp: &'b Polynomial<i64>){
+            assert_eq!(x.pow(p), *exp);
+            assert_eq!(x.clone().pow(p), *exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, p, &exp);
+        }
     }
 
-    let p = dense![4, 5, 6];
-    let p2 = p.clone() * p.clone();
-    let p5 = p2.clone() * p2.clone() * p.clone();
-
     let table = [
-        (zero(),                          0, one()),  // ok?
-        (one(),                           0, one()),
-        (cst(3),                          0, one()),
-        (dense![4, 5, 6],                 0, one()),
-        (sparse![(0, 4), (1, 5), (2, 6)], 0, one()),
+        (zero(), 0, one()),  // ok? In rust, 0_u32.pow(0) == 1
+        (zero(), 1, zero()),
+        (zero(), 2, zero()),
+        (zero(), 5, zero()),
 
-        (zero(),                          1, zero()),
-        (one(),                           1, one()),
-        (cst(3),                          1, cst(3)),
-        (dense![4, 5, 6],                 1, dense![4, 5, 6]),
-        (sparse![(0, 4), (1, 5), (2, 6)], 1, dense![4, 5, 6]),
+        (one(), 0, one()),
+        (one(), 1, one()),
+        (one(), 2, one()),
+        (one(), 5, one()),
 
-        (zero(),                          2, zero()),
-        (one(),                           2, one()),
-        (cst(3),                          2, cst(9)),
-        (dense![4, 5, 6],                 2, dense![16, 40, 73, 60, 36]),
-        (sparse![(0, 4), (1, 5), (2, 6)], 2, dense![16, 40, 73, 60, 36]),
+        (cst(3), 0, one()),
+        (cst(3), 1, cst(3)),
+        (cst(3), 2, cst(9)),
+        (cst(3), 5, cst(243)),
 
-        (zero(),                          5, zero()),
-        (one(),                           5, one()),
-        (cst(3),                          5, cst(243)),
-        (dense![4, 5, 6],                 5, p5.clone()),
-        (sparse![(0, 4), (1, 5), (2, 6)], 5, p5),
+        (p2(), 0, one()),
+        (p2(), 1, p2()),
+        (p2(), 2, p2() * p2()),
+        (p2(), 5, p2() * p2() * p2() * p2() * p2()),
     ];
 
     for entry in table {
         test(entry.0, entry.1, entry.2);
     }
 }
+#[test]
+fn test_compose(){
 
-// #[test]
-// fn test_neg_performance(){
+    fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
 
-//     fn gen_vec(order: usize, rng: &mut ThreadRng) -> Vec<i64> {
-//         let mut v: Vec<i64> = Vec::with_capacity(order + 1);
-//         for _ in 0..=order {
-//             v.push(rng.gen());
-//         }
-//         v
-//     }
+        fn test_op<'a, 'b, 'c>(x: &'a Polynomial<i64>, y: &'b Polynomial<i64>, exp: &'c Polynomial<i64>){
+            assert_eq!(x.compose(y), *exp);
+        }
 
-//     let mut rng = rand::thread_rng();
-//     const N: usize = 1000;
+        for x_ in get_impls(&x) {
+            for y_ in get_impls(&y) {
+                test_op(&x_, &y_, &exp);
+            }
+        }
+    }
 
-//     let vv0: Vec<Vec<i64>> = (0..N).map(move|_| gen_vec(20, &mut rng)).collect();
-//     let ps0: Vec<Polynomial<i64>> = vv0.iter().map(|v|Polynomial::dense_from_vec(v.clone())).collect();
-//     let ps1: Vec<Polynomial<i64>> = vv0.into_iter().map(|v| Polynomial::dense_from_vec(v.into_iter().map(|e|-e).collect())).collect();
-//     let mut ps2 = Vec::with_capacity(N);
+    let table = [
+        (zero(), zero(),           zero()),
+        (zero(), one(),            zero()),
+        (zero(), cst(3),           zero()),
+        (zero(), Polynomial::x(),  zero()),
+        (zero(), Polynomial::x2(), zero()),
+        (zero(), p0(),             zero()),
+        
+        (one(), zero(),           one()),
+        (one(), one(),            one()),
+        (one(), cst(3),           one()),
+        (one(), Polynomial::x(),  one()),
+        (one(), Polynomial::x2(), one()),
+        (one(), p0(),             one()),
+        
+        (cst(5), zero(),           cst(5)),
+        (cst(5), one(),            cst(5)),
+        (cst(5), cst(3),           cst(5)),
+        (cst(5), Polynomial::x(),  cst(5)),
+        (cst(5), Polynomial::x2(), cst(5)),
+        (cst(5), p0(),             cst(5)),
 
-//     let now = Instant::now();
-//     for p in ps0 {
-//         ps2.push(-p)
-//     }
-//     let elapsed_time = now.elapsed();
+        (Polynomial::x(), zero(),          zero()),
+        (Polynomial::x(), one(),           one()),
+        (Polynomial::x(), cst(3),          cst(3)),
+        (Polynomial::x(), Polynomial::x(), Polynomial::x()),
+        (Polynomial::x(), Polynomial::x2(), Polynomial::x2()),
+        (Polynomial::x(), p0(),            p0()),
+        (Polynomial::x(), p4(),            p4()),
 
-//     ps1.iter().zip(ps2.iter()).for_each(|(p1, p2)| assert_eq!(p1, p2));
-//     println!("Running slow_function() took {} microseconds.", elapsed_time.as_micros());
-// }
+        (Polynomial::x2(), zero(),           zero()),
+        (Polynomial::x2(), one(),            one()),
+        (Polynomial::x2(), cst(3),           cst(9)),
+        (Polynomial::x2(), Polynomial::x(),  Polynomial::x2()),
+        (Polynomial::x2(), Polynomial::x2(), Polynomial::x4()),
+        (Polynomial::x2(), p0(),             p0().pow(2)),
+        (Polynomial::x2(), p4(),             p4().pow(2)),
+        
+        (p1(), zero(),           cst(4)),
+        (p1(), one(),            cst(4 + 5 + 6 + 7)),
+        (p1(), cst(3),           cst(4 + 5 * 3 + 6 * 3*3*3 + 7 * 3*3*3*3)),
+        (p1(), Polynomial::x(),  p1()),
+        (p1(), Polynomial::x2(), dense![4, 0, 5, 0, 0, 0, 6, 0, 7]),
+        (p1(), p0(),             cst(4) + 5 * p0() + 6 * p0().pow(3) + 7 * p0().pow(4)),
+        (p1(), p4(),             cst(4) + 5 * p4() + 6 * p4().pow(3) + 7 * p4().pow(4)),
+
+        (p4(), zero(),           zero()),
+        (p4(), one(),            cst(6)),
+        (p4(), cst(3),           cst(162)),
+        (p4(), Polynomial::x(),  p4()),
+        (p4(), Polynomial::x2(), 6_i64 * Polynomial::x().pow(6)),
+        (p4(), p0(),             6_i64 * p0().pow(3)),
+        (p4(), p4(),             6_i64 * p4().pow(3)),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
