@@ -551,7 +551,7 @@ fn test_div_rem(){
     fn cst_r(n: i64, d: i64) -> PolyR64 { Polynomial::constant(r(n, d)) }
     fn cst_i(i: i64) -> PolyR64 { Polynomial::constant(ri(i)) }
 
-    fn to_poly_r64(p: Polynomial<i64>) -> PolyR64 { p.map(|_, c| ri(c)) }
+    fn to_poly_r64(p: Polynomial<i64>) -> PolyR64 { p.map_nonzero(|_, c| ri(c)) }
     
     /// 1 + 2x + 3x² (= dense![[1, 2, 3]])
     fn pr0() -> PolyR64 { to_poly_r64(p0()) }
