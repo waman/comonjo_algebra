@@ -2,14 +2,6 @@ use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
 use num::{traits::{One, Zero}, BigInt, BigRational, BigUint, Complex, Rational32, Rational64};
 
-macro_rules! impl_algebra {
-    ( $al:tt ; $( $t:ident ),* ) => {
-        $(
-            impl $al for $t {}
-        )*
-    };
-}
-
 type Complex32 = Complex<f32>;
 type Complex64 = Complex<f64>;
 
@@ -55,21 +47,22 @@ macro_rules! impl_ref_traits {
 }
 
 macro_rules! impl_semigroup {
-    ( $( $t:ident ),* ) => {
-        $(
-            impl_ref_traits!($t, RefMul, ref_mul, mul);
+    ( $t:ident ) => {
+        impl_ref_traits!($t, RefMul, ref_mul, mul);
 
-            impl Semigroup for $t {}
-        )*
+        impl Semigroup for $t {}
     };
 }
 
-impl_semigroup!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64, 
-    BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
-
 pub trait Monoid: Semigroup + PartialEq + One {}
-impl_algebra!(Monoid; usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64, 
-    BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
+
+macro_rules! impl_monoid {
+    ( $t:ident ) => {
+        impl_semigroup!($t);
+
+        impl Monoid for $t {}
+    };
+}
 
 pub trait Group: Monoid +
         Div<Self, Output=Self> +
@@ -77,18 +70,15 @@ pub trait Group: Monoid +
         RefDiv<Self> + 
         for<'b> RefDiv<&'b Self> where Self: Sized {}
 
-macro_rules! impl_group {
-    ( $( $t:ident ),* ) => {
-        $(
-            impl_ref_traits!($t, RefDiv, ref_div, div);
+// macro_rules! impl_group {
+//     ( $t:ident ) => {
+//         impl_monoid!($t);
 
-            impl Group for $t {}
-        )*
-    };
-}
+//         impl_ref_traits!($t, RefDiv, ref_div, div);
 
-impl_group!(f32, f64, Rational32, Rational64, BigRational, Complex32, Complex64);
-
+//         impl Group for $t {}
+//     };
+// }
 
 pub trait AdditiveSemigroup: 
         Add<Self, Output=Self> +
@@ -97,21 +87,22 @@ pub trait AdditiveSemigroup:
         for<'b> RefAdd<&'b Self> where Self: Sized {}
 
 macro_rules! impl_additive_semigroup {
-    ( $( $t:ident ),* ) => {
-        $(
-            impl_ref_traits!($t, RefAdd, ref_add, add);
+    ( $t:ident ) => {
+        impl_ref_traits!($t, RefAdd, ref_add, add);
 
-            impl AdditiveSemigroup for $t {}
-        )*
+        impl AdditiveSemigroup for $t {}
     };
 }
 
-impl_additive_semigroup!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64, 
-    BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
-
 pub trait AdditiveMonoid: AdditiveSemigroup + Zero {}
-impl_algebra!(AdditiveMonoid; usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64, 
-    BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
+
+macro_rules! impl_additive_monoid {
+    ( $t:ident ) => {
+        impl_additive_semigroup!($t);
+
+        impl AdditiveMonoid for $t {}
+    };
+}
 
 pub trait AdditiveGroup: AdditiveMonoid + 
         Neg<Output=Self> +
@@ -120,33 +111,59 @@ pub trait AdditiveGroup: AdditiveMonoid +
         RefSub<Self> + 
         for<'b> RefSub<&'b Self> where Self: Sized {
     fn ref_neg(&self) -> Self;
-
 }
 
-macro_rules! impl_additive_group {
+// macro_rules! impl_additive_group {
+//     ( t:ident ) => {
+//         impl_additive_monoid!($t);
+
+//         impl_ref_traits!($t, RefSub, ref_sub, sub);
+
+//         impl AdditiveGroup for $t {
+//             #[inline]
+//             fn ref_neg(&self) -> Self { -self }
+//         }
+//     };
+// }
+
+pub trait Semiring: Monoid + AdditiveMonoid {}
+
+macro_rules! impl_semiring {
+    ( $t:ident ) => {
+        impl_monoid!($t);
+
+        impl_additive_monoid!($t);
+
+        impl Semiring for $t {}
+    };
+}
+
+macro_rules! impl_semirings {
     ( $( $t:ident ),* ) => {
         $(
-            impl_ref_traits!($t, RefSub, ref_sub, sub);
-
-            impl AdditiveGroup for $t {
-                #[inline]
-                fn ref_neg(&self) -> Self { -self }
-            }
+            impl_semiring!($t);
         )*
     };
 }
 
-impl_additive_group!(isize, i8, i16, i32, i64, i128, f32, f64, 
-    BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
-
-
-pub trait Semiring: Monoid + AdditiveMonoid {}
-impl_algebra!(Semiring; usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
-        BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
+impl_semirings!(usize, u8, u16, u32, u64, u128, BigUint);
 
 pub trait Ring: Semiring + AdditiveGroup {}
-impl_algebra!(Ring; isize, i8, i16, i32, i64, i128, f32, f64,
-    BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
+
+macro_rules! impl_ring {
+    ( $t:ident ) => {
+        impl_semiring!($t);
+        
+        impl_ref_traits!($t, RefSub, ref_sub, sub);
+
+        impl AdditiveGroup for $t {
+            #[inline]
+            fn ref_neg(&self) -> Self { -self }
+        }
+
+        impl Ring for $t {}
+    };
+}
 
 
 pub trait EuclideanRing: Ring + 
@@ -165,28 +182,57 @@ pub trait EuclideanRing: Ring +
 }
 
 macro_rules! impl_euclidean_ring {
+    ( $t:ident ) => {
+        impl_ring!($t);
+
+        impl_ref_traits!($t, RefDiv, ref_div, div);
+        impl_ref_traits!($t, RefRem, ref_rem, rem);
+
+        impl EuclideanRing for $t {
+            #[inline]
+            fn div_rem(self, other: Self) -> (Self, Self) { 
+                (&self).div_rem_ref(&other)
+            }
+
+            #[inline]
+            fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
+                (self / other, self % other) 
+            }
+        }
+    };
+}
+
+macro_rules! impl_euclidean_rings {
     ( $( $t:ident ),* ) => {
         $(
-            impl_ref_traits!($t, RefDiv, ref_div, div);
-            impl_ref_traits!($t, RefRem, ref_rem, rem);
-
-            impl EuclideanRing for $t {
-                #[inline]
-                fn div_rem(self, other: Self) -> (Self, Self) { 
-                    (&self).div_rem_ref(&other)
-                }
-
-                #[inline]
-                fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
-                    (self / other, self % other) 
-                }
-            }
+            impl_euclidean_ring!($t);
         )*
     };
 }
 
-impl_euclidean_ring!(isize, i8, i16, i32, i64, i128, BigInt);
+impl_euclidean_rings!(isize, i8, i16, i32, i64, i128, BigInt);
 
 
 pub trait Field: Ring + Group{}
-impl_algebra!(Field; f32, f64, Rational32, Rational64, BigRational, Complex32, Complex64);
+
+macro_rules! impl_field {
+    ( $t:ident ) => {
+        impl_ring!($t);
+
+        impl_ref_traits!($t, RefDiv, ref_div, div);
+
+        impl Group for $t {}
+
+        impl Field for $t {}
+    };
+}
+
+macro_rules! impl_fields {
+    ( $( $t:ident ),* ) => {
+        $(
+            impl_field!($t);
+        )*
+    };
+}
+
+impl_fields!(f32, f64, Rational32, Rational64, BigRational, Complex32, Complex64);

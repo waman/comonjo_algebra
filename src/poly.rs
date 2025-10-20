@@ -1757,9 +1757,14 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 
 
 
+//********** Utility Functions *********/
+/// Return (max, min, left_is_higher)
+fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
+    if x >= y { (x, y, true) } else { (y, x, false) }
+}
 
 
-
+//********** Implementation of Algebra *********/
 impl<C> Semigroup for Polynomial<C> where C: Semiring + Clone {}
 impl<C> Monoid for Polynomial<C> where C: Semiring + Clone {}
 
@@ -1778,7 +1783,7 @@ impl<C> EuclideanRing for Polynomial<C> where C: Field + Clone {
 
     #[inline]
     fn div_rem(self, other: Self) -> (Self, Self) { 
-        (&self).div_rem_ref(&other)
+        self.div_rem_euclid(&other)
     }
 
     #[inline]
@@ -1786,10 +1791,3 @@ impl<C> EuclideanRing for Polynomial<C> where C: Field + Clone {
         self.div_rem_euclid(other)
     }
 } 
-
-
-
-/// Return (max, min, left_is_higher)
-fn max_min(x: usize, y: usize) -> (usize, usize, bool) {
-    if x >= y { (x, y, true) } else { (y, x, false) }
-}
