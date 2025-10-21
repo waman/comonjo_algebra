@@ -1781,13 +1781,11 @@ impl<C> Ring for Polynomial<C> where C: Ring + Clone{}
 
 impl<C> EuclideanRing for Polynomial<C> where C: Field + Clone {
 
-    #[inline]
     fn div_rem(self, other: Self) -> (Self, Self) { 
         self.div_rem_euclid(&other)
     }
 
-    #[inline]
-    fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
+    fn ref_div_rem(&self, other: &Self) -> (Self, Self) {
         self.div_rem_euclid(other)
     }
 } 

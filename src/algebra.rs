@@ -1,6 +1,6 @@
 use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
 
-use num::{traits::{One, Zero}, BigInt, BigRational, BigUint, Complex, Rational32, Rational64};
+use num::{traits::{One, Zero, Euclid}, BigInt, BigRational, BigUint, Complex, Rational32, Rational64};
 
 type Complex32 = Complex<f32>;
 type Complex64 = Complex<f64>;
@@ -178,7 +178,7 @@ pub trait EuclideanRing: Ring +
         for<'b> RefRem<&'b Self> where Self: Sized {
 
     fn div_rem(self, other: Self) -> (Self, Self);
-    fn div_rem_ref(&self, other: &Self) -> (Self, Self);
+    fn ref_div_rem(&self, other: &Self) -> (Self, Self);
 }
 
 macro_rules! impl_euclidean_ring {
@@ -189,14 +189,13 @@ macro_rules! impl_euclidean_ring {
         impl_ref_traits!($t, RefRem, ref_rem, rem);
 
         impl EuclideanRing for $t {
-            #[inline]
+
             fn div_rem(self, other: Self) -> (Self, Self) { 
-                (&self).div_rem_ref(&other)
+                self.ref_div_rem(&other)
             }
 
-            #[inline]
-            fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
-                (self / other, self % other) 
+            fn ref_div_rem(&self, other: &Self) -> (Self, Self) {
+                Euclid::div_rem_euclid(self, other) 
             }
         }
     };

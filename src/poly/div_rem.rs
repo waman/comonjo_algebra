@@ -52,7 +52,7 @@ impl<'b, C> Div<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
 
     type Output = Polynomial<C>;
 
-    fn div(self, other: &'b Polynomial<C>) -> Self::Output { (&self).div_rem_ref(other).0 }
+    fn div(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).0 }
 }
 
 impl<'a, C> Div<Polynomial<C>> for &'a Polynomial<C> where C: Field + Clone {
@@ -91,7 +91,7 @@ impl<'b, C> Rem<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
 
     type Output = Polynomial<C>;
 
-    fn rem(self, other: &'b Polynomial<C>) -> Self::Output { (&self).div_rem_ref(other).1 }
+    fn rem(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).1 }
 }
 
 impl<'a, C> Rem<Polynomial<C>> for &'a Polynomial<C> where C: Field + Clone {
