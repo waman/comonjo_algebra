@@ -387,6 +387,52 @@ fn test_add(){
     }
 }
 
+// #[test]
+// fn test_add_c(){
+
+
+//     fn test(x: Polynomial<i64>, y: i64, exp: Polynomial<i64>){
+
+//         fn test_op<'a, 'b>(x: &'a Polynomial<i64>, y: i64, exp: &'b Polynomial<i64>){
+//             assert_eq!(x + &y, *exp);
+//             assert_eq!(x.clone() + &y, *exp);
+//             assert_eq!(x + y, *exp);
+//             assert_eq!(x.clone() + y, *exp);
+
+//             assert_eq!(&y + x, *exp);
+//             assert_eq!(&y + x.clone(), *exp);
+//             assert_eq!(y + x, *exp);
+//             assert_eq!(y + x.clone(), *exp);
+//         }
+
+//         for x_ in get_impls(&x) {
+//             test_op(&x_, y, &exp);
+//         }
+//     }
+
+//     let table = [
+//         (zero(), 0,  zero()),
+//         (zero(), 3,  cst(3)),
+//         (zero(), -4, cst(-4)),
+        
+//         (one(), 0,  one()),
+//         (one(), 3,  cst(4)),
+//         (one(), -4, cst(-3)),
+        
+//         (cst(5), 0,  cst(5)),
+//         (cst(5), 3,  cst(8)),
+//         (cst(5), -5, zero()),
+        
+//         (p1(), 0, p1()),
+//         (p1(), 3, dense![7, 5, 0, 6, 7]),
+//         (p1(), -4, dense![0, 5, 0, 6, 7]),
+//     ];
+
+//     for entry in table {
+//         test(entry.0, entry.1, entry.2);
+//     }
+// }
+
 #[test]
 fn test_sub(){
 
