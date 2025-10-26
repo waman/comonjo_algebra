@@ -310,6 +310,7 @@ fn test_neg(){
         (zero(), zero()),
         (one(),  cst(-1)),
         (cst(5), cst(-5)),
+        (cst(-4), cst(4)),
 
         (p0(), dense![-1, -2, -3]),
         (p1(), dense![-4, -5, 0, -6, -7]),
@@ -332,8 +333,8 @@ fn test_add(){
         fn test_op<'a, 'b, 'c>(x: &'a Polynomial<i64>, y: &'b Polynomial<i64>, exp: &'c Polynomial<i64>){
             assert_eq!(x + y, *exp);
             assert_eq!(x.clone() + y, *exp);
-            // assert_eq!(x + y.clone(), *exp);
-            // assert_eq!(x.clone() + y.clone(), *exp);
+            assert_eq!(x + y.clone(), *exp);
+            assert_eq!(x.clone() + y.clone(), *exp);
         }
 
         for x_ in get_impls(&x) {
@@ -346,21 +347,12 @@ fn test_add(){
 
     let table = [
         (zero(), zero(), zero()),
-        (zero(), one(), one()),
         (zero(), cst(3), cst(3)),
         (zero(), p0(), dense![1, 2, 3]),
         (zero(), p1(), dense![4, 5, 0, 6, 7]),
         (zero(), p2(), dense![4, 0, 0, 5, 0, 0, 0, 6]),
         (zero(), p3(), dense![1, 0, 0, 0, 2]),
         (zero(), p4(), dense![0, 0, 0, 6]),
-        
-        (one(), one(), cst(2)),
-        (one(), cst(3), cst(4)),
-        (one(), p0(), dense![2, 2, 3]),
-        (one(), p1(), dense![5, 5, 0, 6, 7]),
-        (one(), p2(), dense![5, 0, 0, 5, 0, 0, 0, 6]),
-        (one(), p3(), dense![2, 0, 0, 0, 2]),
-        (one(), p4(), dense![1, 0, 0, 6]),
         
         (cst(5), cst(3), cst(8)),
         (cst(5), cst(-5), zero()),  // result be zero
@@ -391,51 +383,51 @@ fn test_add(){
     }
 }
 
-// #[test]
-// fn test_add_c(){
+#[test]
+fn test_add_c(){
 
+    fn test(x: Polynomial<i64>, y: i64, exp: Polynomial<i64>){
 
-//     fn test(x: Polynomial<i64>, y: i64, exp: Polynomial<i64>){
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, y: i64, exp: &'b Polynomial<i64>){
+            assert_eq!(x + &y, *exp);
+            assert_eq!(x.clone() + &y, *exp);
+            assert_eq!(x + y, *exp);
+            assert_eq!(x.clone() + y, *exp);
 
-//         fn test_op<'a, 'b>(x: &'a Polynomial<i64>, y: i64, exp: &'b Polynomial<i64>){
-//             assert_eq!(x + &y, *exp);
-//             assert_eq!(x.clone() + &y, *exp);
-//             assert_eq!(x + y, *exp);
-//             assert_eq!(x.clone() + y, *exp);
+            assert_eq!(&y + x, *exp);
+            assert_eq!(&y + x.clone(), *exp);
+            assert_eq!(y + x, *exp);
+            assert_eq!(y + x.clone(), *exp);
+        }
 
-//             assert_eq!(&y + x, *exp);
-//             assert_eq!(&y + x.clone(), *exp);
-//             assert_eq!(y + x, *exp);
-//             assert_eq!(y + x.clone(), *exp);
-//         }
+        for x_ in get_impls(&x) {
+            test_op(&x_, y, &exp);
+        }
+    }
 
-//         for x_ in get_impls(&x) {
-//             test_op(&x_, y, &exp);
-//         }
-//     }
-
-//     let table = [
-//         (zero(), 0,  zero()),
-//         (zero(), 3,  cst(3)),
-//         (zero(), -4, cst(-4)),
+    let table = [
+        (zero(), 0,  zero()),
+        (zero(), 3,  cst(3)),
+        (zero(), -4, cst(-4)),
         
-//         (one(), 0,  one()),
-//         (one(), 3,  cst(4)),
-//         (one(), -4, cst(-3)),
+        (cst(5), 0,  cst(5)),
+        (cst(5), 3,  cst(8)),
+        (cst(5), -5, zero()),
         
-//         (cst(5), 0,  cst(5)),
-//         (cst(5), 3,  cst(8)),
-//         (cst(5), -5, zero()),
+        (cst(-4), 0,  cst(-4)),
+        (cst(-4), 4,  zero()),
+        (cst(-4), -5, cst(-9)),
         
-//         (p1(), 0, p1()),
-//         (p1(), 3, dense![7, 5, 0, 6, 7]),
-//         (p1(), -4, dense![0, 5, 0, 6, 7]),
-//     ];
+        (p1(), 0, p1()),
+        (p1(), 3, dense![7, 5, 0, 6, 7]),
+        (p1(), -4, dense![0, 5, 0, 6, 7]),
+    ];
 
-//     for entry in table {
-//         test(entry.0, entry.1, entry.2);
-//     }
-// }
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
 
 #[test]
 fn test_sub(){
@@ -459,21 +451,13 @@ fn test_sub(){
 
     let table = [
         (zero(), zero(), zero()),
-        (zero(), one(), cst(-1)),
         (zero(), cst(3), cst(-3)),
+        (zero(), cst(-4), cst(4)),
         (zero(), p0(), dense![-1, -2, -3]),
         (zero(), p1(), dense![-4, -5, 0, -6, -7]),
         (zero(), p2(), dense![-4, 0, 0, -5, 0, 0, 0, -6]),
         (zero(), p3(), dense![-1, 0, 0, 0, -2]),
         (zero(), p4(), dense![0, 0, 0, -6]),
-        
-        (one(), one(), zero()),
-        (one(), cst(3), cst(-2)),
-        (one(), p0(), dense![0, -2, -3]),
-        (one(), p1(), dense![-3, -5, 0, -6, -7]),
-        (one(), p2(), dense![-3, 0, 0, -5, 0, 0, 0, -6]),
-        (one(), p3(), dense![0, 0, 0, 0, -2]),
-        (one(), p4(), dense![1, 0, 0, -6]),
         
         (cst(5), cst(3), cst(2)),
         (cst(5), cst(5), zero()),  // result be zero
@@ -501,6 +485,54 @@ fn test_sub(){
 }
 
 #[test]
+fn test_sub_c(){
+
+    fn test(x: Polynomial<i64>, y: i64, exp: Polynomial<i64>){
+
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, y: i64, exp: &'b Polynomial<i64>){
+            assert_eq!(x - &y, *exp);
+            assert_eq!(x.clone() - &y, *exp);
+            assert_eq!(x - y, *exp);
+            assert_eq!(x.clone() - y, *exp);
+
+            let exp_neg = &(-exp);
+            assert_eq!(&y - x, *exp_neg);
+            assert_eq!(&y - x.clone(), *exp_neg);
+            assert_eq!(y - x, *exp_neg);
+            assert_eq!(y - x.clone(), *exp_neg);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, y, &exp);
+        }
+    }
+
+    let table = [
+        (zero(), 0,  zero()),
+        (zero(), 3,  cst(-3)),
+        (zero(), -4, cst(4)),
+        
+        (cst(5), 0,  cst(5)),
+        (cst(5), 3,  cst(2)),
+        (cst(5), -4, cst(9)),
+        
+        (cst(-4), 0,  cst(-4)),
+        (cst(-4), 3,  cst(-7)),
+        (cst(-4), -4, zero()),
+        
+        (p1(), 0, p1()),
+        (p1(), 3, dense![1, 5, 0, 6, 7]),
+        (p1(), 4, dense![0, 5, 0, 6, 7]),
+        (p1(), -4, dense![8, 5, 0, 6, 7]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
+
+#[test]
 fn test_mul(){
 
     fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
@@ -524,22 +556,31 @@ fn test_mul(){
     fn exp_p2_mul_p3() -> Polynomial<i64> { sparse![(0, 4), (3, 5), (4, 8), (7, 16), (11, 12)] }
 
     let table = [
-        (zero(), zero(), zero()),
-        (zero(), one(),  zero()),
-        (zero(), cst(3), zero()),
-        (zero(), p0(),   zero()),
+        (zero(), zero(),  zero()),
+        (zero(), one(),   zero()),
+        (zero(), cst(3),  zero()),
+        (zero(), cst(-4), zero()),
+        (zero(), p0(),    zero()),
         
-        (one(), one(),  one()),
-        (one(), cst(3), cst(3)),
-        (one(), p0(),   p0()),
+        (one(), one(),   one()),
+        (one(), cst(3),  cst(3)),
+        (one(), cst(-4), cst(-4)),
+        (one(), p0(),    p0()),
         
         (cst(5), cst(3), cst(15)),
+        (cst(5), cst(-4), cst(-20)),
         (cst(5), p0(),   dense![5, 10, 15]),
         (cst(5), p2(),   sparse![(0, 20), (3, 25), (7, 30)]),
+        
+        (cst(-4), cst(3), cst(-12)),
+        (cst(-4), cst(-5), cst(20)),
+        (cst(-4), p0(),   dense![-4, -8, -12]),
+        (cst(-4), p2(),   sparse![(0, -16), (3, -20), (7, -24)]),
         
         (p1(), zero(), zero()),
         (p1(), one(),  p1()),
         (p1(), cst(3), dense![12, 15, 0, 18, 21]),
+        (p1(), cst(-4), dense![-16, -20, 0, -24, -28]),
         (p0(), p1(),   exp_p0_mul_p1()),
         (p2(), p3(),   exp_p2_mul_p3()),
     ];
@@ -576,13 +617,13 @@ fn test_mul_by_c(){
         (zero(), 3,  zero()),
         (zero(), -4, zero()),
         
-        (one(), 0,  zero()),
-        (one(), 3,  cst(3)),
-        (one(), -4, cst(-4)),
-        
         (cst(5), 0,  zero()),
         (cst(5), 3,  cst(15)),
         (cst(5), -4, cst(-20)),
+        
+        (cst(-4), 0,  zero()),
+        (cst(-4), 3,  cst(-12)),
+        (cst(-4), -4, cst(16)),
         
         (p1(), 0, zero()),
         (p1(), 3, dense![12, 15, 0, 18, 21]),
@@ -613,6 +654,7 @@ fn test_div_rem(){
     fn pr4() -> PolyR64 { to_poly_r64(p4()) }
 
     fn pr1_div_3() -> PolyR64 { dense![r(4, 3), r(5, 3), ri(0), r(6, 3), r(7, 3)] }
+    fn pr1_div_m4() -> PolyR64 { dense![ri(-1), r(-5, 4), ri(0), r(-3, 2), r(-7, 4)] }
 
     fn pr1_div_pr0() -> PolyR64 { dense![r(-29, 27), r(4, 9), r(7, 3)] }
     fn pr1_rem_pr0() -> PolyR64 { dense![r(137, 27), r(181, 27)] }
@@ -650,25 +692,27 @@ fn test_div_rem(){
     }
 
     let table = [
-        (zero(), one(),    zero(), zero()),
-        (zero(), cst(ri(3)), zero(), zero()),
-        (zero(), pr0(),    zero(), zero()),
-           
-        (one(), one(),    one(),       zero()),
-        (one(), cst(ri(3)), cst(r(1, 3)), zero()),
-        (one(), pr0(),    zero(),      one()),
+        (zero(), one(),       zero(), zero()),
+        (zero(), cst(ri(3)),  zero(), zero()),
+        (zero(), cst(ri(-4)), zero(), zero()),
+        (zero(), pr0(),       zero(), zero()),
         
         (cst(ri(5)), one(),      cst(ri(5)),   zero()),  
         (cst(ri(5)), cst(ri(3)), cst(r(5, 3)), zero()),
         (cst(ri(5)), pr0(),      zero(),       cst(ri(5))),
         
-        (pr1(),         one(),      pr1(),         zero()),
-        (pr1(),         cst(ri(3)), pr1_div_3(),   zero()),
-        (pr1(),         pr0(),      pr1_div_pr0(), pr1_rem_pr0()),
-        (pr2() * pr3(), pr3(),      pr2(),         zero()),
-        (pr2() * pr3(), pr2(),      pr3(),         zero()),
-        (pr2(),         pr3(),      pr2_div_pr3(), pr2_rem_pr3()),
-        (pr2(),         pr4(),      pr2_div_pr4(), pr2_rem_pr4()),
+        (cst(ri(-4)), one(),      cst(ri(-4)),   zero()),  
+        (cst(ri(-4)), cst(ri(3)), cst(r(-4, 3)), zero()),
+        (cst(ri(-4)), pr0(),      zero(),        cst(ri(-4))),
+        
+        (pr1(),         one(),       pr1(),         zero()),
+        (pr1(),         cst(ri(3)),  pr1_div_3(),   zero()),
+        (pr1(),         cst(ri(-4)), pr1_div_m4(),  zero()),
+        (pr1(),         pr0(),       pr1_div_pr0(), pr1_rem_pr0()),
+        (pr2() * pr3(), pr3(),       pr2(),         zero()),
+        (pr2() * pr3(), pr2(),       pr3(),         zero()),
+        (pr2(),         pr3(),       pr2_div_pr3(), pr2_rem_pr3()),
+        (pr2(),         pr4(),       pr2_div_pr4(), pr2_rem_pr4()),
     ];
 
     for entry in table {
@@ -700,11 +744,11 @@ fn test_div_by_c(){
         (zero(), ri(3),  zero()),
         (zero(), ri(-4), zero()),
         
-        (one(), ri(3),  cst(r(1, 3))),
-        (one(), ri(-4), cst(r(-1, 4))),
-        
         (cst(ri(5)), ri(3),  cst(r(5, 3))),
         (cst(ri(5)), ri(-4), cst(r(-5, 4))),
+        
+        (cst(ri(-4)), ri(3),  cst(r(-4, 3))),
+        (cst(ri(-4)), ri(-4), cst(ri(1))),
         
         (pr1(), ri(3), dense![r(4, 3), r(5, 3), ri(0), ri(2), r(7, 3)]),
         (pr1(), ri(-4), dense![ri(-1), r(-5, 4), ri(0), r(-3, 2), r(-7, 4)]),
@@ -733,10 +777,10 @@ macro_rules! test_div_by_zero {
     };
 }
 
-test_div_by_zero!(test_div_zero_by_poly_zero, test_div_zero_by_zero, Polynomial::<Rational64>::zero());
-test_div_by_zero!(test_div_one_by_poly_zero, test_div_one_by_zero, Polynomial::<Rational64>::one());
-test_div_by_zero!(test_div_const_by_poly_zero, test_div_const_by_zero, Polynomial::constant(ri(5)));
-test_div_by_zero!(test_div_dense_by_poly_zero, test_div_dense_by_zero, dense![ri(1), ri(2), ri(3)]);
+test_div_by_zero!(test_div_zero_by_poly_zero,   test_div_zero_by_zero,   Polynomial::<Rational64>::zero());
+test_div_by_zero!(test_div_one_by_poly_zero,    test_div_one_by_zero,    Polynomial::<Rational64>::one());
+test_div_by_zero!(test_div_const_by_poly_zero,  test_div_const_by_zero,  Polynomial::constant(ri(5)));
+test_div_by_zero!(test_div_dense_by_poly_zero,  test_div_dense_by_zero,  dense![ri(1), ri(2), ri(3)]);
 test_div_by_zero!(test_div_sparse_by_poly_zero, test_div_sparse_by_zero, sparse![(0, ri(1)), (1, ri(2)), (2, ri(3))]);
 
 #[test]
@@ -769,6 +813,11 @@ fn test_pow(){
         (cst(3), 1, cst(3)),
         (cst(3), 2, cst(9)),
         (cst(3), 5, cst(243)),
+
+        (cst(-4), 0, one()),
+        (cst(-4), 1, cst(-4)),
+        (cst(-4), 2, cst(16)),
+        (cst(-4), 5, cst(-1024)),
 
         (p2(), 0, one()),
         (p2(), 1, p2()),
@@ -839,8 +888,8 @@ fn test_compose(){
         (p1(), cst(3),           cst(4 + 5 * 3 + 6 * 3*3*3 + 7 * 3*3*3*3)),
         (p1(), Polynomial::x(),  p1()),
         (p1(), Polynomial::x2(), dense![4, 0, 5, 0, 0, 0, 6, 0, 7]),
-        (p1(), p0(),             cst(4) + 5 * p0() + 6 * p0().pow(3) + 7 * p0().pow(4)),
-        (p1(), p4(),             cst(4) + 5 * p4() + 6 * p4().pow(3) + 7 * p4().pow(4)),
+        (p1(), p0(),             4 + 5 * p0() + 6 * p0().pow(3) + 7 * p0().pow(4)),
+        (p1(), p4(),             4 + 5 * p4() + 6 * p4().pow(3) + 7 * p4().pow(4)),
 
         (p4(), zero(),           zero()),
         (p4(), one(),            cst(6)),
