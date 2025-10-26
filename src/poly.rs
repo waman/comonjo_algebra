@@ -960,16 +960,6 @@ impl<'a, 'b, C> Add<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
     }
 }
 
-impl<C> RefAdd<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-    #[inline]
-    fn ref_add(&self, other: Polynomial<C>) -> Polynomial<C> { self + other }
-}
-
-impl<'b, C> RefAdd<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-    #[inline]
-    fn ref_add(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self + other }
-}
-
 //********** Sub **********/
 impl<C> Sub for Polynomial<C> where C: Ring {
 
@@ -1093,16 +1083,6 @@ impl<'a, 'b, C> Sub<&'b Polynomial<C>> for &'a Polynomial<C> where C: Ring + Clo
     }
 }
 
-impl<C> RefSub<Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
-    #[inline]
-    fn ref_sub(&self, other: Polynomial<C>) -> Polynomial<C> { self + other }
-}
-
-impl<'b, C> RefSub<&'b Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
-    #[inline]
-    fn ref_sub(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self + other }
-}
-
 //********** Mul **********/
 impl<C> Mul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
@@ -1192,15 +1172,7 @@ impl<'a, 'b, C> Mul<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
     }
 }
 
-impl<C> RefMul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-    #[inline]
-    fn ref_mul(&self, other: Polynomial<C>) -> Polynomial<C> { self * other }
-}
-
-impl<'b, C> RefMul<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-    #[inline]
-    fn ref_mul(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self * other }
-}
+//***** Multiply by constant
 impl<C> Mul<C> for Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
@@ -1277,6 +1249,10 @@ impl_scale_by_left!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i1
 
 
 //********** Div & Rem **********/
+fn panic_by_div0<E>() -> E {
+    panic!("Can't divide by zero!")
+}
+
 impl<C> Polynomial<C> where C: Field + Clone {
 
     pub fn euclidean_fn(&self) -> usize { self.degree() }
@@ -1284,7 +1260,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
     #[inline]
     fn div_rem_val<'a>(self, other: &'a Polynomial<C>) -> (Self, Self) {
         match (self, other) {
-            (_, Polynomial::Zero()) => panic!("Can't divide by polynomial of zero!"),
+            (_, Polynomial::Zero()) => panic_by_div0(),
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
             (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero(|_, c| c / (&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs),
@@ -1296,7 +1272,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
     #[inline]
     fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
         match (self, other) {
-            (_, Polynomial::Zero()) => panic!("Can't divide by polynomial of zero!"),
+            (_, Polynomial::Zero()) => panic_by_div0(),
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
             (lhs, Polynomial::Constant(rhs)) => (lhs.ref_map_nonzero(|_, c| c.ref_div(&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs.clone()),
@@ -1342,16 +1318,6 @@ impl<'a, 'b, C> Div<&'b Polynomial<C>> for &'a Polynomial<C> where C: Field + Cl
     fn div(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).0 }
 }
 
-impl<C> RefDiv<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-    #[inline]
-    fn ref_div(&self, other: Polynomial<C>) -> Polynomial<C> { self / other }
-}
-
-impl<'b, C> RefDiv<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-    #[inline]
-    fn ref_div(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self / other }
-}
-
 
 impl<C> Rem for Polynomial<C> where C: Field + Clone {
 
@@ -1381,14 +1347,41 @@ impl<'a, 'b, C> Rem<&'b Polynomial<C>> for &'a Polynomial<C> where C: Field + Cl
     fn rem(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).1 }
 }
 
-impl<C> RefRem<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-    #[inline]
-    fn ref_rem(&self, other: Polynomial<C>) -> Polynomial<C> { self % other }
+//***** Divide by constant
+impl<C> Div<C> for Polynomial<C> where C: Field + Clone {
+
+    type Output = Polynomial<C>;
+
+    fn div(self, k: C) -> Self::Output { self / &k }
 }
 
-impl<'b, C> RefRem<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-    #[inline]
-    fn ref_rem(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self % other }
+impl<'b, C> Div<&'b C> for Polynomial<C> where C: Field + Clone {
+
+    type Output = Polynomial<C>;
+
+    fn div(self, k: &'b C) -> Self::Output {
+        if k.is_zero() { return panic_by_div0() }
+        if k.is_one() { return self }
+        self.map_nonzero(|_, c| c.ref_div(k))
+    }
+}
+
+impl<'a, C> Div<C> for &'a Polynomial<C> where C: Field + Clone {
+
+    type Output = Polynomial<C>;
+
+    fn div(self, k: C) -> Self::Output { self / &k }
+}
+
+impl<'a, 'b, C> Div<&'b C> for &'a Polynomial<C> where C: Field + Clone {
+
+    type Output = Polynomial<C>;
+    
+    fn div(self, k: &'b C) -> Polynomial<C> {
+        if k.is_zero() { return panic_by_div0() }
+        if k.is_one() { return self.clone() }
+        self.ref_map_nonzero(|_, c| c.ref_div(k))
+    }
 }
 
 //********* Pow **********/
@@ -1576,19 +1569,73 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 
 
 //********** Implementation of Algebra *********/
-impl<C> Semigroup for Polynomial<C> where C: Semiring + Clone {}
-impl<C> Monoid for Polynomial<C> where C: Semiring + Clone {}
+impl<C> RefAdd<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+    #[inline]
+    fn ref_add(&self, other: Polynomial<C>) -> Polynomial<C> { self + other }
+}
+
+impl<'b, C> RefAdd<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+    #[inline]
+    fn ref_add(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self + other }
+}
 
 impl<C> AdditiveSemigroup for Polynomial<C> where C: Semiring + Clone {}
-
 impl<C> AdditiveMonoid for Polynomial<C> where C: Semiring + Clone {}
+
+
+impl<C> RefSub<Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
+    #[inline]
+    fn ref_sub(&self, other: Polynomial<C>) -> Polynomial<C> { self + other }
+}
+
+impl<'b, C> RefSub<&'b Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
+    #[inline]
+    fn ref_sub(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self + other }
+}
+
+
+impl<C> RefMul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+    #[inline]
+    fn ref_mul(&self, other: Polynomial<C>) -> Polynomial<C> { self * other }
+}
+
 impl<C> AdditiveGroup for Polynomial<C> where C: Ring + Clone {
     fn ref_neg(&self) -> Self { -self }
 }
 
-impl<C> Semiring for Polynomial<C> where C: Ring + Clone {}
 
+impl<'b, C> RefMul<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+    #[inline]
+    fn ref_mul(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self * other }
+}
+
+impl<C> Semigroup for Polynomial<C> where C: Semiring + Clone {}
+impl<C> Monoid for Polynomial<C> where C: Semiring + Clone {}
+
+impl<C> Semiring for Polynomial<C> where C: Ring + Clone {}
 impl<C> Ring for Polynomial<C> where C: Ring + Clone{}
+
+
+impl<C> RefDiv<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+    #[inline]
+    fn ref_div(&self, other: Polynomial<C>) -> Polynomial<C> { self / other }
+}
+
+impl<'b, C> RefDiv<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+    #[inline]
+    fn ref_div(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self / other }
+}
+
+
+impl<C> RefRem<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+    #[inline]
+    fn ref_rem(&self, other: Polynomial<C>) -> Polynomial<C> { self % other }
+}
+
+impl<'b, C> RefRem<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+    #[inline]
+    fn ref_rem(&self, other: &'b Polynomial<C>) -> Polynomial<C> { self % other }
+}
 
 impl<C> EuclideanRing for Polynomial<C> where C: Field + Clone {
 

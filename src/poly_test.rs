@@ -4,9 +4,13 @@ use num::{complex::c64, pow::Pow, One, Rational64, Zero};
 
 use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Polynomial}, sparse};
 
+type PolyR64 = Polynomial<Rational64>;
+
 fn zero<C: Semiring>() -> Polynomial<C> { Polynomial::zero() }
 fn one<C: Semiring + Clone>() -> Polynomial<C> { Polynomial::one() }
 fn cst<C: Semiring>(v: C) -> Polynomial<C> { Polynomial::constant(v) }
+
+fn to_poly_r64(p: Polynomial<i64>) -> PolyR64 { p.map_nonzero(|_, c| ri(c)) }
 
 fn r(n: i64, d: i64) -> Rational64 { Rational64::new(n, d) }
 fn ri(n: i64) -> Rational64 { Rational64::new(n, 1) }
@@ -592,12 +596,6 @@ fn test_mul_by_c(){
 
 #[test]
 fn test_div_rem(){
-    type PolyR64 = Polynomial<Rational64>;
-
-    fn cst_r(n: i64, d: i64) -> PolyR64 { Polynomial::constant(r(n, d)) }
-    fn cst_i(i: i64) -> PolyR64 { Polynomial::constant(ri(i)) }
-
-    fn to_poly_r64(p: Polynomial<i64>) -> PolyR64 { p.map_nonzero(|_, c| ri(c)) }
     
     /// 1 + 2x + 3x² (= dense![[1, 2, 3]])
     fn pr0() -> PolyR64 { to_poly_r64(p0()) }
@@ -653,24 +651,24 @@ fn test_div_rem(){
 
     let table = [
         (zero(), one(),    zero(), zero()),
-        (zero(), cst_i(3), zero(), zero()),
+        (zero(), cst(ri(3)), zero(), zero()),
         (zero(), pr0(),    zero(), zero()),
            
         (one(), one(),    one(),       zero()),
-        (one(), cst_i(3), cst_r(1, 3), zero()),
+        (one(), cst(ri(3)), cst(r(1, 3)), zero()),
         (one(), pr0(),    zero(),      one()),
         
-        (cst_i(5), one(),    cst_i(5),    zero()),  
-        (cst_i(5), cst_i(3), cst_r(5, 3), zero()),
-        (cst_i(5), pr0(),    zero(),      cst_i(5)),
+        (cst(ri(5)), one(),      cst(ri(5)),   zero()),  
+        (cst(ri(5)), cst(ri(3)), cst(r(5, 3)), zero()),
+        (cst(ri(5)), pr0(),      zero(),       cst(ri(5))),
         
-        (pr1(),           one(),    pr1(),         zero()),
-        (pr1(),           cst_i(3), pr1_div_3(),   zero()),
-        (pr1(),           pr0(),    pr1_div_pr0(), pr1_rem_pr0()),
-        (pr2() * pr3(),   pr3(),    pr2(),         zero()),
-        (pr2() * pr3(),   pr2(),    pr3(),         zero()),
-        (pr2(),           pr3(),    pr2_div_pr3(), pr2_rem_pr3()),
-        (pr2()        ,   pr4(),    pr2_div_pr4(), pr2_rem_pr4()),
+        (pr1(),         one(),      pr1(),         zero()),
+        (pr1(),         cst(ri(3)), pr1_div_3(),   zero()),
+        (pr1(),         pr0(),      pr1_div_pr0(), pr1_rem_pr0()),
+        (pr2() * pr3(), pr3(),      pr2(),         zero()),
+        (pr2() * pr3(), pr2(),      pr3(),         zero()),
+        (pr2(),         pr3(),      pr2_div_pr3(), pr2_rem_pr3()),
+        (pr2(),         pr4(),      pr2_div_pr4(), pr2_rem_pr4()),
     ];
 
     for entry in table {
@@ -678,22 +676,68 @@ fn test_div_rem(){
     }
 }
 
-macro_rules! test_divide_by_zero {
-    ($test_name:ident, $arg:expr) => {
+#[test]
+fn test_div_by_c(){
+
+    /// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
+    fn pr1() -> PolyR64 { to_poly_r64(p1()) }
+
+    fn test(x: PolyR64, y: Rational64, exp: PolyR64){
+
+        fn test_op<'a, 'b>(x: &'a PolyR64, y: Rational64, exp: &'b PolyR64){
+            assert_eq!(x / &y, *exp);
+            assert_eq!(x.clone() / &y, *exp);
+            assert_eq!(x / y, *exp);
+            assert_eq!(x.clone() / y, *exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, y, &exp);
+        }
+    }
+
+    let table = [
+        (zero(), ri(3),  zero()),
+        (zero(), ri(-4), zero()),
+        
+        (one(), ri(3),  cst(r(1, 3))),
+        (one(), ri(-4), cst(r(-1, 4))),
+        
+        (cst(ri(5)), ri(3),  cst(r(5, 3))),
+        (cst(ri(5)), ri(-4), cst(r(-5, 4))),
+        
+        (pr1(), ri(3), dense![r(4, 3), r(5, 3), ri(0), ri(2), r(7, 3)]),
+        (pr1(), ri(-4), dense![ri(-1), r(-5, 4), ri(0), r(-3, 2), r(-7, 4)]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
+macro_rules! test_div_by_zero {
+    ($test_name0:ident, $test_name1:ident, $arg:expr) => {
         #[test]
         #[allow(unused_must_use)]
-        #[should_panic(expected="Can't divide by polynomial of zero!")]
-        fn $test_name(){
+        #[should_panic(expected="Can't divide by zero!")]
+        fn $test_name0(){
             $arg / Polynomial::Zero::<Rational64>();
+        }
+
+        #[test]
+        #[allow(unused_must_use)]
+        #[should_panic(expected="Can't divide by zero!")]
+        fn $test_name1(){
+            $arg / Rational64::zero();
         }
     };
 }
 
-test_divide_by_zero!(test_divide_zero_by_zero, Polynomial::<Rational64>::zero());
-test_divide_by_zero!(test_divide_one_by_zero, Polynomial::<Rational64>::one());
-test_divide_by_zero!(test_divide_const_by_zero, Polynomial::constant(ri(5)));
-test_divide_by_zero!(test_divide_dense_by_zero, dense![ri(1), ri(2), ri(3)]);
-test_divide_by_zero!(test_divide_sparse_by_zero, sparse![(0, ri(1)), (1, ri(2)), (2, ri(3))]);
+test_div_by_zero!(test_div_zero_by_poly_zero, test_div_zero_by_zero, Polynomial::<Rational64>::zero());
+test_div_by_zero!(test_div_one_by_poly_zero, test_div_one_by_zero, Polynomial::<Rational64>::one());
+test_div_by_zero!(test_div_const_by_poly_zero, test_div_const_by_zero, Polynomial::constant(ri(5)));
+test_div_by_zero!(test_div_dense_by_poly_zero, test_div_dense_by_zero, dense![ri(1), ri(2), ri(3)]);
+test_div_by_zero!(test_div_sparse_by_poly_zero, test_div_sparse_by_zero, sparse![(0, ri(1)), (1, ri(2)), (2, ri(3))]);
 
 #[test]
 fn test_pow(){
