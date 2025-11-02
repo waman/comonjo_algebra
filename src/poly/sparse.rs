@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use num::FromPrimitive;
+
 use crate::{algebra::{Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial}};
 
 #[derive(Clone)]
@@ -48,14 +50,6 @@ impl<C> SparseContent<C> where C: Semiring {
     }
 
     // pub fn shift(&mut self, h: C) {
-    //     todo!()
-    // }
-
-    // pub fn differentiate(&mut self) {
-    //     todo!()
-    // }
-
-    // pub fn integrate(&mut self) {
     //     todo!()
     // }
 
@@ -381,14 +375,6 @@ impl<C> SparseContent<C> where C: Semiring + Clone {
     }
 
     // pub fn new_shifted(&self, h: C) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn new_derivative(&self) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn new_integral(&self) -> Polynomial<C> {
     //     todo!()
     // }
 
@@ -850,4 +836,55 @@ pub(crate) fn div_rem<C>(mut u: BTreeMap<usize, C>, rhs: &Polynomial<C>) -> (Pol
     }
 
     (Polynomial::sparse_from_map(q), Polynomial::sparse_from_map(u))
+}
+
+//********** Analysis **********/
+impl<C> SparseContent<C> where C: Semiring + FromPrimitive {
+    
+    pub fn differentiate(self) -> Polynomial<C> {
+        let ite = self.0.into_iter();
+        let map: BTreeMap<usize, C> = 
+            ite.filter(|(i, _)| *i != 0)
+            .map(|(i,c)| (i-1, C::from_usize(i).unwrap() * c))
+            .collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
+    
+impl<C> SparseContent<C> where C: Field + FromPrimitive {
+
+    pub fn integrate(self) -> Polynomial<C> {
+        let map: BTreeMap<usize, C> = 
+            self.0.into_iter().map(|(i, c)| {
+                let j = i+1;
+                let d = c / C::from_usize(j).unwrap();
+                (j, d)
+            }).collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
+
+impl<C> SparseContent<C> where C: Semiring + FromPrimitive  + Clone {
+    
+    pub fn new_derivative(&self) -> Polynomial<C> {
+        let ite = self.0.iter();
+        let map: BTreeMap<usize, C> = 
+            ite.filter(|(i, _)| **i != 0)
+            .map(|(i,c)| (i-1, C::from_usize(*i).unwrap() * c))
+            .collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
+
+impl<C> SparseContent<C> where C: Field + FromPrimitive  + Clone {
+
+    pub fn new_integral(&self) -> Polynomial<C> {
+        let map: BTreeMap<usize, C> = 
+            self.0.iter().map(|(i, c)| {
+                let j = i+1;
+                let d = c.clone() / C::from_usize(j).unwrap();
+                (j, d)
+            }).collect();
+        Polynomial::sparse_from_map(map)
+    }
 }

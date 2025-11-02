@@ -4,7 +4,7 @@ pub(crate) mod iter;
 pub mod term;
 
 use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::*};
-use num::{complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}, BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero};
+use num::{BigInt, BigRational, BigUint, FromPrimitive, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 
 use term::Term;
 
@@ -473,13 +473,6 @@ impl<C> Polynomial<C> where C: Semiring {
     //     }
 
     
-    // pub fn differentiate(&mut self){
-    //     match self {
-    //         Polynomial::Dense(dc) => dc.differentiate(),
-    //         Polynomial::Sparse(sc) => sc.differentiate(),
-    //         _ => *self = Polynomial::Zero(),
-    //     }
-    // }
 
 //   /**
 //    * Removes all zero roots from this polynomial.
@@ -662,33 +655,6 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     //         Polynomial::Zero() | Polynomial::Constant(_) => self.clone(),
     //         Polynomial::Dense(dc) => dc.new_shifted(h),
     //         Polynomial::Sparse(sc) => sc.new_shifted(h),
-    //     }
-    // }
-    
-    // pub fn new_derivative(&self) -> Polynomial<C> {
-    //     match self {
-    //         Polynomial::Dense(dc) => dc.new_derivative(),
-    //         Polynomial::Sparse(sc) => sc.new_derivative(),
-    //         _ => Polynomial::Zero(),
-    //     }
-    // }
-    
-    // pub fn integrate(&mut self){
-    //     match self {
-    //         Polynomial::Zero() => *self = Polynomial::Zero(),
-    //         Polynomial::Constant(cc) => *self = Polynomial::linear_monomial(cc.0.clone()),
-    //         Polynomial::Dense(dc) => dc.integrate(),
-    //         Polynomial::Sparse(sc) => sc.integrate(),
-    //     }
-    // }
-
-    
-    // pub fn new_integral(&self) -> Polynomial<C> {
-    //     match self {
-    //         Polynomial::Zero() => Polynomial::Zero(),
-    //         Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
-    //         Polynomial::Dense(dc) => dc.new_integral(),
-    //         Polynomial::Sparse(sc) => sc.new_integral(),
     //     }
     // }
 
@@ -1488,9 +1454,7 @@ impl_mul_to_const!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i12
         BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
 //********** Div & Rem **********/
-fn panic_by_div0<E>() -> E {
-    panic!("Can't divide by zero!")
-}
+fn panic_to_divide_by_zero<E>() -> E { panic!("Can't divide by zero!") }
 
 impl<C> Polynomial<C> where C: Field + Clone {
 
@@ -1499,7 +1463,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
     #[inline]
     fn div_rem_val<'a>(self, other: &'a Polynomial<C>) -> (Self, Self) {
         match (self, other) {
-            (_, Polynomial::Zero()) => panic_by_div0(),
+            (_, Polynomial::Zero()) => panic_to_divide_by_zero(),
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
             (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero(|_, c| c / (&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs),
@@ -1511,7 +1475,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
     #[inline]
     fn div_rem_ref(&self, other: &Self) -> (Self, Self) {
         match (self, other) {
-            (_, Polynomial::Zero()) => panic_by_div0(),
+            (_, Polynomial::Zero()) => panic_to_divide_by_zero(),
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
             (lhs, Polynomial::Constant(rhs)) => (lhs.ref_map_nonzero(|_, c| c.ref_div(&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs.clone()),
@@ -1581,7 +1545,7 @@ impl<'b, C> Div<&'b C> for Polynomial<C> where C: Field + Clone {
     type Output = Polynomial<C>;
 
     fn div(self, k: &'b C) -> Self::Output {
-        if k.is_zero() { return panic_by_div0() }
+        if k.is_zero() { panic_to_divide_by_zero() }
         if k.is_one() { return self }
         self.map_nonzero(|_, c| c.ref_div(k))
     }
@@ -1597,7 +1561,7 @@ impl<'a, 'b, C> Div<&'b C> for &'a Polynomial<C> where C: Field + Clone {
     type Output = Polynomial<C>;
     
     fn div(self, k: &'b C) -> Polynomial<C> {
-        if k.is_zero() { return panic_by_div0() }
+        if k.is_zero() { panic_to_divide_by_zero() }
         if k.is_one() { return self.clone() }
         self.ref_map_nonzero(|_, c| c.ref_div(k))
     }
@@ -1637,6 +1601,53 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
             0 => Polynomial::one(),
             1 => self.clone(),
             _ => calc_pow(self, power-1, self)
+        }
+    }
+}
+
+//********** Analysis **********/
+impl<C> Polynomial<C> where C: Semiring + FromPrimitive {
+    
+    pub fn differentiate(self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.differentiate(),
+            Polynomial::Sparse(sc) => sc.differentiate(),
+            _ => Polynomial::Zero(),
+        }
+    }
+}
+    
+impl<C> Polynomial<C> where C: Field + FromPrimitive {
+
+    pub fn integrate(self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0),
+            Polynomial::Dense(dc) => dc.integrate(),
+            Polynomial::Sparse(sc) => sc.integrate(),
+        }
+    }
+}
+
+impl<C> Polynomial<C> where C: Semiring + FromPrimitive  + Clone {
+    
+    pub fn new_derivative(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_derivative(),
+            Polynomial::Sparse(sc) => sc.new_derivative(),
+            _ => Polynomial::Zero(),
+        }
+    }
+}
+
+impl<C> Polynomial<C> where C: Field + FromPrimitive  + Clone {
+
+    pub fn new_integral(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
+            Polynomial::Dense(dc) => dc.new_integral(),
+            Polynomial::Sparse(sc) => sc.new_integral(),
         }
     }
 }

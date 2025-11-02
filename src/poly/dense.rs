@@ -1,5 +1,7 @@
 use std::collections::BTreeMap;
 
+use num::FromPrimitive;
+
 use crate::{algebra::{Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial}};
 
 #[derive(Clone)]
@@ -49,14 +51,6 @@ impl<C> DenseContent<C> where C: Semiring {
     }
 
     // pub fn shift(&mut self, h: C) {
-    //     todo!()
-    // }
-
-    // pub fn differentiate(&mut self) {
-    //     todo!()
-    // }
-
-    // pub fn integrate(&mut self) {
     //     todo!()
     // }
 
@@ -158,14 +152,6 @@ impl<C> DenseContent<C> where C: Semiring + Clone {
     }
 
     // pub fn new_shifted(&self, h: C) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn new_derivative(&self) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn new_integral(&self) -> Polynomial<C> {
     //     todo!()
     // }
 
@@ -487,4 +473,49 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
 
     q.reverse();
     (Polynomial::dense_from_vec(q), Polynomial::dense_from_vec(u))
+}
+
+//********** Analysis **********/
+impl<C> DenseContent<C> where C: Semiring + FromPrimitive {
+    
+    pub fn differentiate(self) -> Polynomial<C> {
+        let mut ite = self.0.into_iter().enumerate();
+        ite.next();
+        let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+}
+    
+impl<C> DenseContent<C> where C: Field + FromPrimitive {
+
+    pub fn integrate(self) -> Polynomial<C> {
+        let n = self.0.len();
+        let ite = self.0.into_iter().enumerate();
+        let mut vec: Vec<C> = Vec::with_capacity(n+1);
+        vec.push(C::zero());
+        vec.extend(ite.map(|(i, c)| c / C::from_usize(i+1).unwrap()));
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<C> DenseContent<C> where C: Semiring + FromPrimitive  + Clone {
+    
+    pub fn new_derivative(&self) -> Polynomial<C> {
+        let mut ite = self.0.iter().enumerate();
+        ite.next();
+        let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<C> DenseContent<C> where C: Field + FromPrimitive  + Clone {
+
+    pub fn new_integral(&self) -> Polynomial<C> {
+        let n = self.0.len();
+        let ite = self.0.iter().enumerate();
+        let mut vec: Vec<C> = Vec::with_capacity(n+1);
+        vec.push(C::zero());
+        vec.extend(ite.map(|(i, c)| c.clone() / C::from_usize(i+1).unwrap()));
+        Polynomial::dense_from_vec(vec)
+    }
 }

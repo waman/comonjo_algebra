@@ -756,20 +756,24 @@ fn test_div_by_c(){
     }
 }
 
+fn suppress_stack_traces() {
+    std::panic::set_hook(Box::new(|_|{}));
+}
+
 macro_rules! test_div_by_zero {
     ($test_name0:ident, $test_name1:ident, $arg:expr) => {
         #[test]
-        #[allow(unused_must_use)]
         #[should_panic(expected="Can't divide by zero!")]
         fn $test_name0(){
-            $arg / Polynomial::Zero::<Rational64>();
+            suppress_stack_traces();
+            let _ = $arg / Polynomial::Zero::<Rational64>();
         }
 
         #[test]
-        #[allow(unused_must_use)]
         #[should_panic(expected="Can't divide by zero!")]
         fn $test_name1(){
-            $arg / Rational64::zero();
+            suppress_stack_traces();
+            let _ = $arg / Rational64::zero();
         }
     };
 }
@@ -930,6 +934,70 @@ fn test_reductum(){
         (p2(),             dense![4, 0, 0, 5]),
         (p3(),             dense![1]),
         (p4(),             zero()),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+#[test]
+fn test_derivative(){  // new_derivative(), differentiate()
+
+    fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
+
+        fn test_method(x: Polynomial<i64>, exp: Polynomial<i64>){
+            assert_eq!(x.new_derivative(), exp.clone());
+            assert_eq!(x.differentiate(), exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_method(x_, exp.clone());
+        }
+    }
+
+    let table = [
+        (zero(),           zero()),
+        (cst(5),           zero()),
+        (cst(-4),          zero()),
+        (Polynomial::x(),  cst(1)),
+        (Polynomial::x2(), dense![0, 2]),
+        (p0(),             dense![2, 6]),
+        (p1(),             dense![5, 0, 18, 28]),
+        (p2(),             dense![0, 0, 15, 0, 0, 0, 42]),
+        (p3(),             dense![0, 0, 0, 8]),
+        (p4(),             dense![0, 0, 18]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+#[test]
+fn test_integral(){  // new_integral(), integrate()
+
+    fn test(x: PolyR64, exp: PolyR64){
+
+        fn test_method(x: PolyR64, exp: PolyR64){
+            assert_eq!(x.new_integral(), exp.clone());
+            assert_eq!(x.integrate(), exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_method(x_, exp.clone());
+        }
+    }
+
+    let table = [
+        (zero(),           zero()),
+        (cst(ri(5)),       dense![ri(0), ri(5)]),
+        (cst(ri(-4)),      dense![ri(0), ri(-4)]),
+        (Polynomial::x(),  dense![ri(0), ri(0), r(1, 2)]),
+        (Polynomial::x2(), dense![ri(0), ri(0), ri(0), r(1, 3)]),
+        (pr0(),            dense![ri(0), ri(1), ri(1), ri(1)]),
+        (pr1(),            dense![ri(0), ri(4), r(5, 2), ri(0), r(3, 2), r(7, 5)]),
+        (pr2(),            dense![ri(0), ri(4), ri(0), ri(0), r(5, 4), ri(0), ri(0), ri(0), r(3, 4)]),
+        (pr3(),            dense![ri(0), ri(1), ri(0), ri(0), ri(0), r(2, 5)]),
+        (pr4(),            dense![ri(0), ri(0), ri(0), ri(0), r(3, 2)]),
     ];
 
     for entry in table {
