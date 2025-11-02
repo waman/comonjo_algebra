@@ -37,36 +37,42 @@ impl<C> SparseContent<C> where C: Semiring {
         debug_assert!(self.0.is_empty());
         v
     }
+}
 
-    pub fn reductum(&self) -> Polynomial<C> {
-        todo!()
+impl<C> SparseContent<C> where C: Semiring {
+
+    pub fn reductum(mut self) -> Polynomial<C> {
+        let dim = self.degree();
+        self.0.remove(&dim);
+        Polynomial::sparse_from_map(self.0)
     }
 
-    pub fn monic(&self) -> Polynomial<C> {
-        todo!()
-    }
+    // pub fn shift(&mut self, h: C) {
+    //     todo!()
+    // }
 
-    pub fn derivative(&self) -> Polynomial<C> {
-        todo!()
-    }
+    // pub fn differentiate(&mut self) {
+    //     todo!()
+    // }
 
-    pub fn integral(&self) -> Polynomial<C> {
-        todo!()
-    }
-//    def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C] = {
-//      var i = coeff.length - 2
-//      while (i >= 0 && coeff(i) === ring.zero) i -= 1
-//      if (i < 0) {
-//        new PolySparse(new Array[Int](0), new Array[C](0))
-//      } else {
-//        val len = i + 1
-//        val es = new Array[Int](len)
-//        val cs = new Array[C](len)
-//        System.arraycopy(coeff, 0, cs, 0, len)
-//        System.arraycopy(exp, 0, es, 0, len)
-//        new PolySparse(es, cs)
-//      }
-//    }
+    // pub fn integrate(&mut self) {
+    //     todo!()
+    // }
+
+    // pub fn remove_zero_roots(&mut self) {
+    //     todo!()
+    // }
+
+    // pub fn flip(&mut self) {
+    //     todo!()
+    // }
+
+    // pub fn reciprocal(&mut self) {
+    //     // let d = self.degree();
+    //     // self.0.iter_mut().map(|(k, v)| (d-k, v));
+    //     // Polynomial::Sparse(self)
+    //     todo!()
+    // }
  
 //    final private def expBits(x: C)(implicit ring: Semiring[C]): Array[C] = {
 //      val bits = new Array[C](math.max(2, 32 - numberOfLeadingZeros(degree)))
@@ -363,6 +369,40 @@ impl<C> SparseContent<C> where C: Semiring {
  
 //      loop(0, 0, 0)
 //    }
+}
+
+impl<C> SparseContent<C> where C: Semiring + Clone {
+    
+
+    pub fn new_reductum(&self) -> Polynomial<C> {
+        let n = self.0.len();
+        let map: BTreeMap<usize, C> = self.0.iter().take(n-1).map(|(i, c)| (*i, c.clone())).collect();
+        Polynomial::sparse_from_map(map)
+    }
+
+    // pub fn new_shifted(&self, h: C) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_derivative(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_integral(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_zero_roots_removed(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_flipped(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_reciprocal(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
 }
 
 //********** Add **********/

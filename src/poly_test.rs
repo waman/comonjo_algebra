@@ -15,6 +15,14 @@ fn to_poly_r64(p: Polynomial<i64>) -> PolyR64 { p.map_nonzero(|_, c| ri(c)) }
 fn r(n: i64, d: i64) -> Rational64 { Rational64::new(n, d) }
 fn ri(n: i64) -> Rational64 { Rational64::new(n, 1) }
 
+fn get_impls<'a, C>(x: &'a Polynomial<C>) -> Vec<Polynomial<C>> where C: Semiring + Clone {
+    if x.degree() == 0 {
+        vec![x.clone()]
+    } else {
+        vec![x.dense_clone(), x.sparse_clone()]
+    }
+}
+
 // ⁰¹²³⁴⁵⁶⁷⁸⁹
 #[test]
 fn test_dense_macro(){
@@ -282,14 +290,21 @@ fn p4() -> Polynomial<i64> { dense![0, 0, 0, 6] }
 
 /// 5x + 7x⁴ (= dense![[0, 5, 0, 0, 7]])
 fn p5() -> Polynomial<i64> { dense![0, 5, 0, 0, 7] }
+    
+/// 1 + 2x + 3x² (= dense![[1, 2, 3]])
+fn pr0() -> PolyR64 { to_poly_r64(p0()) }
 
-fn get_impls<'a, C>(x: &'a Polynomial<C>) -> Vec<Polynomial<C>> where C: Semiring + Clone {
-    if x.degree() == 0 {
-        vec![x.clone()]
-    } else {
-        vec![x.dense_clone(), x.sparse_clone()]
-    }
-}
+/// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
+fn pr1() -> PolyR64 { to_poly_r64(p1()) }
+
+/// 4 + 5x³ + 6x⁷ (= dense![[4, 0, 0, 5, 0, 0, 0, 6]])
+fn pr2() -> PolyR64 { to_poly_r64(p2()) }
+
+/// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
+fn pr3() -> PolyR64 { to_poly_r64(p3()) }
+
+/// 6x³ (= dense![[0, 0, 0, 6]])
+fn pr4() -> PolyR64 { to_poly_r64(p4()) }
 
 #[test]
 fn test_neg(){
@@ -637,21 +652,6 @@ fn test_mul_by_c(){
 
 #[test]
 fn test_div_rem(){
-    
-    /// 1 + 2x + 3x² (= dense![[1, 2, 3]])
-    fn pr0() -> PolyR64 { to_poly_r64(p0()) }
-
-    /// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
-    fn pr1() -> PolyR64 { to_poly_r64(p1()) }
-
-    /// 4 + 5x³ + 6x⁷ (= dense![[4, 0, 0, 5, 0, 0, 0, 6]])
-    fn pr2() -> PolyR64 { to_poly_r64(p2()) }
-
-    /// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
-    fn pr3() -> PolyR64 { to_poly_r64(p3()) }
-
-    /// 6x³ (= dense![[0, 0, 0, 6]])
-    fn pr4() -> PolyR64 { to_poly_r64(p4()) }
 
     fn pr1_div_3() -> PolyR64 { dense![r(4, 3), r(5, 3), ri(0), r(6, 3), r(7, 3)] }
     fn pr1_div_m4() -> PolyR64 { dense![ri(-1), r(-5, 4), ri(0), r(-3, 2), r(-7, 4)] }
@@ -722,9 +722,6 @@ fn test_div_rem(){
 
 #[test]
 fn test_div_by_c(){
-
-    /// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
-    fn pr1() -> PolyR64 { to_poly_r64(p1()) }
 
     fn test(x: PolyR64, y: Rational64, exp: PolyR64){
 
@@ -829,18 +826,19 @@ fn test_pow(){
         test(entry.0, entry.1, entry.2);
     }
 }
+
 #[test]
 fn test_compose(){
 
     fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
 
-        fn test_op<'a, 'b, 'c>(x: &'a Polynomial<i64>, y: &'b Polynomial<i64>, exp: &'c Polynomial<i64>){
+        fn test_method<'a, 'b, 'c>(x: &'a Polynomial<i64>, y: &'b Polynomial<i64>, exp: &'c Polynomial<i64>){
             assert_eq!(x.compose(y), *exp);
         }
 
         for x_ in get_impls(&x) {
             for y_ in get_impls(&y) {
-                test_op(&x_, &y_, &exp);
+                test_method(&x_, &y_, &exp);
             }
         }
     }
@@ -902,5 +900,71 @@ fn test_compose(){
 
     for entry in table {
         test(entry.0, entry.1, entry.2);
+    }
+}
+
+//********** Utility Methods **********/
+#[test]
+fn test_reductum(){
+
+    fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
+
+        fn test_method(x: Polynomial<i64>, exp: Polynomial<i64>){
+            assert_eq!(x.new_reductum(), exp.clone());
+            assert_eq!(x.reductum(), exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_method(x_, exp.clone());
+        }
+    }
+
+    let table = [
+        (zero(),           zero()),
+        (cst(5),           zero()),
+        (cst(-4),          zero()),
+        (Polynomial::x(),  zero()),
+        (Polynomial::x2(), zero()),
+        (p0(),             dense![1, 2]),
+        (p1(),             dense![4, 5, 0, 6]),
+        (p2(),             dense![4, 0, 0, 5]),
+        (p3(),             dense![1]),
+        (p4(),             zero()),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
+fn test_monic(){
+
+    fn test(x: PolyR64, exp: PolyR64){
+
+        fn test_method(x: PolyR64, exp: PolyR64){
+            assert_eq!(x.monic(), exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_method(x_, exp.clone());
+        }
+    }
+
+    let table = [
+        (zero(),           zero()),
+        (cst(ri(5)),       one()),
+        (cst(r(5, 3)),     one()),
+        (Polynomial::x(),  Polynomial::x()),
+        (Polynomial::x2(), Polynomial::x2()),
+        (pr0(),             dense![r(1, 3), r(2, 3), ri(1)]),
+        (pr1(),             dense![r(4, 7), r(5, 7), ri(0), r(6, 7), ri(1)]),
+        (pr2(),             dense![r(2, 3), ri(0), ri(0), r(5, 6), ri(0), ri(0), ri(0), ri(1)]),
+        (pr3(),             dense![r(1, 2), ri(0), ri(0), ri(0), ri(1)]),
+        (pr4(),             dense![ri(0), ri(0), ri(0), ri(1)]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
     }
 }

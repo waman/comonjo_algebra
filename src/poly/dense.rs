@@ -29,7 +29,7 @@ impl<C> DenseContent<C> where C: Semiring {
         Polynomial::dense_from_vec(v)
     }
 
-    pub(crate) fn to_map(mut self) -> BTreeMap<usize, C> {
+    pub fn to_map(mut self) -> BTreeMap<usize, C> {
         let mut map = BTreeMap::new();
         while let Some(c) = self.0.pop() {
             if !c.is_zero() {
@@ -39,92 +39,41 @@ impl<C> DenseContent<C> where C: Semiring {
         debug_assert!(self.0.is_empty());
         map
     }
+}
 
-    pub fn reductum(&self) -> Polynomial<C> {
-        todo!()
+impl<C> DenseContent<C> where C: Semiring {
+
+    pub fn reductum(mut self) -> Polynomial<C> {
+        self.0.pop();
+        Polynomial::dense_from_vec(self.0)
     }
 
-    pub fn monic(&self) -> Polynomial<C> {
-        todo!()
-    }
-
-    pub fn derivative(&self) -> Polynomial<C> {
-        todo!()
-    }
-
-    pub fn integral(&self) -> Polynomial<C> {
-        todo!()
-    }
-
-    // pub fn add_dense(mut self, mut other: DenseContent<C>) -> Polynomial<C> {
-    //     // if self.degree() >= other.degree() {
-    //     //     let mut iteref_rhs = other.0.iter().enumerate();
-    //     //     for (i, c_lhs) in self.0.iteref_mut().enumerate() {
-
-    //     //     }
-    //     //     let mut lhs_iter = lhs.coeffs();
-    //     //     let mut rhs_iter = rhs.coeffs();
-        
-    //     //     for _ in 0..=d_min {
-    //     //         match (lhs_iter.next(), rhs_iter.next()) {
-    //     //             (Some(x), Some(y)) => v.push(x + y),
-    //     //             _ => panic!(),
-    //     //         }
-    //     //     }
-        
-    //     //     let rest_iter = if lhs_is_higher { lhs_iter } else { rhs_iter };
-    //     //     v.extend(rest_iter);
-        
-    //     //     Polynomial::dense_from_vec(v)
-
-    //     // }
+    // pub fn shift(&mut self, h: C) {
     //     todo!()
     // }
 
-    // pub fn add_val(mut self, mut other: Polynomial<C>) -> Polynomial<C> {
+    // pub fn differentiate(&mut self) {
     //     todo!()
     // }
 
-    // pub fn add_ref<'b>(mut self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
+    // pub fn integrate(&mut self) {
     //     todo!()
     // }
 
-    // pub fn ref_add_dense(&self, mut other: DenseContent<C>) -> Polynomial<C> {
+    // pub fn remove_zero_roots(&mut self) {
     //     todo!()
     // }
 
-    // pub fn ref_add_sparse(&self, mut other: Polynomial<C>) -> Polynomial<C> {
+    // pub fn flip(&mut self) {
     //     todo!()
     // }
 
-    // pub fn ref_add_ref<'b>(&self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
+    // pub fn reciprocal(&mut self){
+    //     // self.0.reverse();
+    //     // self.0.d
     //     todo!()
     // }
 
-
-    // pub fn sub_dense(mut self, mut other: DenseContent<C>) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn sub_sparse(mut self, mut other: SparseContent<C>) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn sub_ref<'b>(mut self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn ref_sub_dense(&self, mut other: DenseContent<C>) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn ref_sub_sparse(&self, mut other: Polynomial<C>) -> Polynomial<C> {
-    //     todo!()
-    // }
-
-    // pub fn ref_sub_ref<'b>(&self, mut other: &'b Polynomial<C>) -> Polynomial<C> {
-    //     todo!()
-    // }
     
 
 // def *(rhs: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
@@ -143,18 +92,6 @@ impl<C> DenseContent<C> where C: Semiring {
 //     }
 //   }
 //   Polynomial.dense(cs)
-// }
-
-// def reductum(implicit e: Eq[C], ring: Semiring[C], ct: ClassTag[C]): Polynomial[C] = {
-//   var i = coeffs.length - 2
-//   while (i >= 0 && coeffs(i) === ring.zero) i -= 1
-//   if (i < 0) {
-//     new PolyDense(new Array[C](0))
-//   } else {
-//     val arr = new Array[C](i + 1)
-//     System.arraycopy(coeffs, 0, arr, 0, i + 1)
-//     new PolyDense(arr)
-//   }
 // }
 
 // def apply(x: C)(implicit ring: Semiring[C]): C = {
@@ -210,6 +147,38 @@ impl<C> DenseContent<C> where C: Semiring {
 //     Polynomial.dense(cs)
 //   }
 // }
+}
+
+impl<C> DenseContent<C> where C: Semiring + Clone {
+
+    pub fn new_reductum(&self) -> Polynomial<C> {
+        let n = self.0.len();
+        let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+
+    // pub fn new_shifted(&self, h: C) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_derivative(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_integral(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_zero_roots_removed(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+
+    // pub fn new_flipped(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
+    // pub fn new_reciprocal(&self) -> Polynomial<C> {
+    //     todo!()
+    // }
 }
 
 /// Return (max, min, left_is_higher)

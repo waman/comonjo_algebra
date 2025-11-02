@@ -3,10 +3,9 @@ pub(crate) mod sparse;
 pub(crate) mod iter;
 pub mod term;
 
-use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*, };
+use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::*};
 use num::{complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}, BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero};
 
-use once_cell::sync::Lazy;
 use term::Term;
 
 use crate::{algebra::*, poly::{dense::DenseContent, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse::SparseContent}};
@@ -70,6 +69,8 @@ pub enum Polynomial<C> where C: Semiring {
     Sparse(SparseContent<C>)
 }
 
+pub struct ConstContent<C: Semiring>(pub(crate) C);
+
 #[macro_export]
 macro_rules! dense {
     // [ $t:ty; $( $x:expr ),* ] => {
@@ -93,6 +94,7 @@ macro_rules! sparse {
     };
 }
 
+//********** Factory Methods ******
 impl<C> Polynomial<C> where C: Semiring {
 
     pub fn constant(c: C) -> Polynomial<C> {
@@ -140,62 +142,137 @@ impl<C> Polynomial<C> where C: Semiring {
         }
     }
 
-    pub fn parse(s: &str) -> Polynomial<C> {
+//     pub fn parse(s: &str) -> Polynomial<C> {
     
-//    private[this] val termRe = "([0-9]+\\.[0-9]+|[0-9]+/[0-9]+|[0-9]+)?(?:([a-z])(?:\\^([0-9]+))?)?".r
+// //    private[this] val termRe = "([0-9]+\\.[0-9]+|[0-9]+/[0-9]+|[0-9]+)?(?:([a-z])(?:\\^([0-9]+))?)?".r
  
-//    private[this] val operRe = " *([+-]) *".r
+// //    private[this] val operRe = " *([+-]) *".r
  
-//    private[spire] def parse(s: String): Polynomial[Rational] = {
+// //    private[spire] def parse(s: String): Polynomial[Rational] = {
  
-//      // represents a term, plus a named variable v
-//      case class T(c: Rational, v: String, e: Int)
+// //      // represents a term, plus a named variable v
+// //      case class T(c: Rational, v: String, e: Int)
  
-//      // parse all the terms and operators out of the string
-//      @tailrec def parse(s: String, ts: List[T]): List[T] =
-//        if (s.isEmpty) {
-//          ts
-//        } else {
-//          val (op, s2) = operRe.findPrefixMatchOf(s) match {
-//            case Some(m) => (m.group(1), s.substring(m.end))
-//            case None    => if (ts.isEmpty) ("+", s) else throw new IllegalArgumentException(s)
-//          }
+// //      // parse all the terms and operators out of the string
+// //      @tailrec def parse(s: String, ts: List[T]): List[T] =
+// //        if (s.isEmpty) {
+// //          ts
+// //        } else {
+// //          val (op, s2) = operRe.findPrefixMatchOf(s) match {
+// //            case Some(m) => (m.group(1), s.substring(m.end))
+// //            case None    => if (ts.isEmpty) ("+", s) else throw new IllegalArgumentException(s)
+// //          }
  
-//          val m2 = termRe.findPrefixMatchOf(s2).getOrElse(throw new IllegalArgumentException(s2))
-//          val c0 = Option(m2.group(1)).getOrElse("1")
-//          val c = if (op == "-") "-" + c0 else c0
-//          val v = Option(m2.group(2)).getOrElse("")
-//          val e0 = Option(m2.group(3)).getOrElse("")
-//          val e = if (e0 != "") e0 else if (v == "") "0" else "1"
+// //          val m2 = termRe.findPrefixMatchOf(s2).getOrElse(throw new IllegalArgumentException(s2))
+// //          val c0 = Option(m2.group(1)).getOrElse("1")
+// //          val c = if (op == "-") "-" + c0 else c0
+// //          val v = Option(m2.group(2)).getOrElse("")
+// //          val e0 = Option(m2.group(3)).getOrElse("")
+// //          val e = if (e0 != "") e0 else if (v == "") "0" else "1"
  
-//          val t =
-//            try {
-//              T(Rational(c), v, e.toInt)
-//            } catch {
-//              case _: Exception => throw new IllegalArgumentException(s"illegal term: $c*x^$e")
-//            }
-//          parse(s2.substring(m2.end), if (t.c == 0) ts else t :: ts)
-//        }
+// //          val t =
+// //            try {
+// //              T(Rational(c), v, e.toInt)
+// //            } catch {
+// //              case _: Exception => throw new IllegalArgumentException(s"illegal term: $c*x^$e")
+// //            }
+// //          parse(s2.substring(m2.end), if (t.c == 0) ts else t :: ts)
+// //        }
  
-//      // do some pre-processing to remove whitespace/outer parens
-//      val t = s.trim
-//      val u = if (t.startsWith("(") && t.endsWith(")")) t.substring(1, t.length - 1) else t
-//      val v = Term.removeSuperscript(u)
+// //      // do some pre-processing to remove whitespace/outer parens
+// //      val t = s.trim
+// //      val u = if (t.startsWith("(") && t.endsWith(")")) t.substring(1, t.length - 1) else t
+// //      val v = Term.removeSuperscript(u)
  
-//      // parse out the terms
-//      val ts = parse(v, Nil)
+// //      // parse out the terms
+// //      val ts = parse(v, Nil)
  
-//      // make sure we have at most one variable
-//      val vs = ts.view.map(_.v).toSet.filter(_ != "")
-//      if (vs.size > 1) throw new IllegalArgumentException("only univariate polynomials supported")
+// //      // make sure we have at most one variable
+// //      val vs = ts.view.map(_.v).toSet.filter(_ != "")
+// //      if (vs.size > 1) throw new IllegalArgumentException("only univariate polynomials supported")
  
-//      // we're done!
-//      ts.foldLeft(Polynomial.zero[Rational])((a, t) => a + Polynomial(t.c, t.e))
-//    }
-        todo!()
+// //      // we're done!
+// //      ts.foldLeft(Polynomial.zero[Rational])((a, t) => a + Polynomial(t.c, t.e))
+// //    }
+//         todo!()
+//     }
+
+//     pub fn parse_to_dense(s: &str) -> Polynomial<C> {
+//         todo!()
+//     }
+
+//     pub fn parse_to_sparse(s: &str) -> Polynomial<C> {
+//         todo!()
+//     }
+    
+//     pub fn interpolate(points: &[(C, C)]) -> Polynomial<C> {
+//     //   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
+//     //     def loop(p: Polynomial[C], xs: List[C], pts: List[(C, C)]): Polynomial[C] =
+//     //       pts match {
+//     //         case Nil =>
+//     //           p
+//     //         case (x, y) :: tail =>
+//     //           val c = Polynomial.constant((y - p(x)) / xs.map(x - _).qproduct)
+//     //           val prod = xs.foldLeft(Polynomial.one[C]) { (prod, xn) =>
+//     //             prod * (Polynomial.x[C] - constant(xn))
+//     //           }
+//     //           loop(p + c * prod, x :: xs, tail)
+//     //       }
+//     //     loop(Polynomial.zero[C], Nil, points.toList)
+//     //   }
+//     // }
+//         todo!()
+//     }
+
+    /// <code>x</code>
+    pub fn x() -> Polynomial<C> { sparse![(1, C::one())] }
+
+    /// <code>x²</code>
+    pub fn x2() -> Polynomial<C> { sparse![(2, C::one())] }
+
+    /// <code>x³</code>
+    pub fn x3() -> Polynomial<C> { sparse![(3, C::one())] }
+
+    /// <code>x⁴</code>
+    pub fn x4() -> Polynomial<C> { sparse![(4, C::one())] }
+
+    /// <code>x⁵</code>
+    pub fn x5() -> Polynomial<C> { sparse![(5, C::one())] }
+
+    pub fn two_x() -> Polynomial<C> {
+        sparse![(1, C::one() + C::one())]
     }
 
-    //********** METHODS ******
+    /// Create a linear polynomial <i>ax</i>.
+    pub fn linear_monomial(a: C) -> Polynomial<C> { sparse![(1, a)] }
+
+    /// Create a linear polynomial <i>ax + b</i>
+    pub fn linear(c1: C, c0: C) -> Polynomial<C> { sparse![(1, c1), (0, c0)] }
+
+    /// Create a quadratic polynomial <i>ax<sup>2</sup><i>
+    pub fn quadratic_monomial(a: C) -> Polynomial<C> { sparse![(2, a)] }
+
+    /// Create a quadratic polynomial <i>ax<sup>2</sup> + bx + c<i>
+    pub fn quadratic(a: C, b: C, c: C) -> Polynomial<C> { sparse![(2, a), (1, b), (0, c)] }
+
+    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
+    pub fn cubic_monomial(a: C) -> Polynomial<C> { sparse![(3, a)] }
+
+    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
+    pub fn cubic(a: C, b: C, c: C, d: C) -> Polynomial<C> { sparse![(3, a), (2, b), (1, c), (0, d)] }
+}
+
+//********** METHODS with Semiring coefficients ******
+impl<C> Polynomial<C> where C: Semiring {
+    
+    //   /**
+    //    * Evaluate the polynomial at `x`.
+    //    */
+    //   def apply(x: C)(implicit r: Semiring[C]): C
+    
+    //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
+    //     this.map(f).apply(x)
+
     pub fn is_constant(&self) -> bool {
         match self {
             Polynomial::Zero() => true,
@@ -298,76 +375,170 @@ impl<C> Polynomial<C> where C: Semiring {
     //     (es, cs)
     // }
 
-    /// Returns a polynomial with the max term removed.
-    pub fn reductum(&self) -> Polynomial<C> {
+
+//   /**
+//    * Returns the number of sign variations in the coefficients of this polynomial. Given 2 consecutive terms (ignoring 0
+//    * terms), a sign variation is indicated when the terms have differing signs.
+//    */
+//   def signVariations(implicit ring: Semiring[C], order: Order[C], signed: Signed[C]): Int = {
+//     var prevSign: Sign = Signed.Zero
+//     var variations = 0
+//     foreachNonzero { (_, c) =>
+//       val sign = signed.sign(c)
+//       if (Signed.Zero != prevSign && sign != prevSign) {
+//         variations += 1
+//       }
+//       prevSign = sign
+//     }
+//     variations
+//   }
+
+    pub fn sign_variations(&self) -> usize {
+        todo!()
+    }
+}
+
+//********** &mut Methods **********/
+impl<C> Polynomial<C> where C: Semiring {
+
+    /// Remove the max term of self.
+    pub fn reductum(self) -> Polynomial<C> {
         match self {
             Polynomial::Dense(dc) => dc.reductum(),
             Polynomial::Sparse(sc) => sc.reductum(),
             _ => Polynomial::Zero(),
         }
     }
+//   /**
+//    * Shift this polynomial along the x-axis by `h`, so that `this(x + h) == this.shift(h).apply(x)`. This is equivalent
+//    * to calling `this.compose(Polynomial.x + h)`, but is likely to compute the shifted polynomial much faster.
+//    */
+//   def shift(h: C)(implicit ring: Ring[C], eq: Eq[C]): Polynomial[C] = {
+//     // The trick here came from this answer:
+//     //   http://math.stackexchange.com/questions/694565/polynomial-shift
+//     // This is a heavily optimized version of the same idea. This is fairly
+//     // critical method to be fast, since it is the most expensive part of the
+//     // VAS root isolation algorithm.
+
+//     def fromSafeLong(x: SafeLong): C =
+//       if (x.isValidInt) {
+//         ring.fromInt(x.toInt)
+//       } else {
+//         val d = ring.fromInt(1 << 30)
+//         val mask = (1L << 30) - 1
+
+//         @tailrec def loop(k: C, y: SafeLong, acc: C): C =
+//           if (y.isValidInt) {
+//             k * ring.fromInt(y.toInt) + acc
+//           } else {
+//             val z = y >> 30
+//             val r = ring.fromInt((y & mask).toInt)
+//             loop(d * k, z, k * r + acc)
+//           }
+
+//         loop(ring.one, x, ring.zero)
+//       }
+
+//     // The basic idea here is that instead of working with all the derivatives
+//     // of the whole polynomial, we can just break the polynomial up and work
+//     // with the derivatives of the individual terms. This let's us save a whole
+//     // bunch of allocations in a clean way.
+//     val coeffs: Array[C] = this.coeffsArray.clone()
+//     this.foreachNonzero { (deg, c) =>
+//       var i = 1 // Leading factor in factorial in denominator of Taylor series.
+//       var d = deg - 1 // The degree of the current derivative of this term.
+//       var m = SafeLong(1L) // The multiplier of our derivative
+//       var k = c // The current delta (to some power) of the Taylor series.
+//       while (d >= 0) {
+//         // Note that we do division, but only on SafeLongs. This is not just
+//         // for performance, but also required for us to only ask for a Ring,
+//         // rather than a EuclideanRing. We always know that m * (d + 1) is
+//         // divisible by i, so this is exact.
+//         m = (m * (d + 1)) / i
+//         k *= h
+//         coeffs(d) = coeffs(d) + fromSafeLong(m) * k
+//         d -= 1
+//         i += 1
+//       }
+//     }
+//     Polynomial.dense(coeffs)
+//   }
+    // }
+
+    // pub fn shift(&mut self, h: C) {
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.shift(h),
+    //         Polynomial::Sparse(sc) => sc.shift(h),
+    //         _ => (),
+    //     }
+
     
-    pub fn derivative(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.derivative(),
-            Polynomial::Sparse(sc) => sc.derivative(),
-            _ => Polynomial::Zero(),
-        }
-    }
+    // pub fn differentiate(&mut self){
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.differentiate(),
+    //         Polynomial::Sparse(sc) => sc.differentiate(),
+    //         _ => *self = Polynomial::Zero(),
+    //     }
+    // }
 
-    //********** Some factory methods **********/
-    /// <code>x</code>
-    pub fn x() -> Polynomial<C> { sparse![(1, C::one())] }
+//   /**
+//    * Removes all zero roots from this polynomial.
+//    */
+//   def removeZeroRoots(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
+//     val Term(_, k) = minTerm
+//     mapTerms { case Term(c, n) => Term(c, n - k) }
+//   }
 
-    /// <code>x²</code>
-    pub fn x2() -> Polynomial<C> { sparse![(2, C::one())] }
+    // pub fn remove_zero_roots(&mut self){
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.remove_zero_roots(),
+    //         Polynomial::Sparse(sc) => sc.remove_zero_roots(),
+    //         _ => (),
+    //     }
+    // }
 
-    /// <code>x³</code>
-    pub fn x3() -> Polynomial<C> { sparse![(3, C::one())] }
+//   /**
+//    * This will flip/mirror the polynomial about the y-axis. It is equivalent to `poly.compose(-Polynomial.x)`, but will
+//    * likely be faster to calculate.
+//    */
+//   def flip(implicit ring: Rng[C], eq: Eq[C]): Polynomial[C] =
+//     mapTerms { case term @ Term(coeff, exp) =>
+//       if (exp % 2 == 0) term
+//       else Term(-coeff, exp)
+//     }
+    // pub fn flip(&mut self) {
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.flip(),
+    //         Polynomial::Sparse(sc) => sc.flip(),
+    //         _ => (),
+    //     }
+    // }
+    
+//   /**
+//    * Returns the reciprocal of this polynomial. Essentially, if this polynomial is `p` with degree `n`, then returns a
+//    * polynomial `q(x) = x^n*p(1/x)`.
+//    *
+//    * @see
+//    *   http://en.wikipedia.org/wiki/Reciprocal_polynomial
+//    */
+//   def reciprocal(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
+//     val d = degree
+//     mapTerms { case term @ Term(coeff, exp) =>
+//       Term(coeff, d - exp)
+//     }
+//   }
 
-    /// <code>x⁴</code>
-    pub fn x4() -> Polynomial<C> { sparse![(4, C::one())] }
+    // pub fn reciprocal(&mut self) {
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.reciprocal(),
+    //         Polynomial::Sparse(sc) => sc.reciprocal(),
+    //         _ => (),
+    //     }
+    // }
 
-    /// <code>x⁵</code>
-    pub fn x5() -> Polynomial<C> { sparse![(5, C::one())] }
-
-    pub fn two_x() -> Polynomial<C> {
-        sparse![(1, C::one() + C::one())]
-    }
-
-    /// Create a linear polynomial <i>ax</i>.
-    pub fn linear_monomial(a: C) -> Polynomial<C> {
-        sparse![(1, a)]
-    }
-
-    /// Create a linear polynomial <i>ax + b</i>
-    pub fn linear(c1: C, c0: C) -> Polynomial<C> {
-        sparse![(1, c1), (0, c0)]
-    }
-
-    /// Create a quadratic polynomial <i>ax<sup>2</sup><i>
-    pub fn quadratic_monomial(a: C) -> Polynomial<C> {
-        sparse![(2, a)]
-    }
-
-    /// Create a quadratic polynomial <i>ax<sup>2</sup> + bx + c<i>
-    pub fn quadratic(a: C, b: C, c: C) -> Polynomial<C> {
-        sparse![(2, a), (1, b), (0, c)]
-    }
-
-    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
-    pub fn cubic_monomial(a: C) -> Polynomial<C> {
-        sparse![(3, a)]
-    }
-
-    /// Create a cubic polynomial <i>ax<sup>3</sup> + bx<sup>2</sup> + cx + d<i>
-    pub fn cubic(a: C, b: C, c: C, d: C) -> Polynomial<C> {
-        sparse![(3, a), (2, b), (1, c), (0, d)]
-    }
 }
 
-pub struct ConstContent<C: Semiring>(pub(crate) C);
-
+//********** Methods with Semiring + Clone Coefficients **********/
 impl<C> Clone for Polynomial<C> where C: Semiring + Clone {
 
     fn clone(&self) -> Self {
@@ -443,52 +614,6 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
         }
     }
 
-    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. `maxOrderTermCoeff`) is 1.
-    pub fn monic(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(_) => Polynomial::one(),
-            Polynomial::Dense(dc) => dc.monic(),
-            Polynomial::Sparse(sc) => sc.monic(),
-        }
-    }
-
-    pub fn integral(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
-            Polynomial::Dense(dc) => dc.integral(),
-            Polynomial::Sparse(sc) => sc.integral(),
-        }
-    }
-    //   /**
-    //    * Returns the real roots of this polynomial.
-    //    *
-    //    * Depending on `C`, the `finder` argument may need to be passed "explicitly" via an implicit conversion. This is
-    //    * because some types (eg `BigDecimal`, `Rational`, etc) require an error bound, and so provide implicit conversions
-    //    * to `RootFinder`s from the error type. For instance, `BigDecimal` requires either a scale or MathContext. So, we'd
-    //    * call this method with `poly.roots(MathContext.DECIMAL128)`, which would return a `Roots[BigDecimal` whose roots are
-    //    * approximated to the precision specified in `DECIMAL128` and rounded appropriately.
-    //    *
-    //    * On the other hand, a type like `Double` doesn't require an error bound and so can be called without specifying the
-    //    * `RootFinder`.
-    //    *
-    //    * @param finder
-    //    *   a root finder to extract roots with
-    //    * @return
-    //    *   the real roots of this polynomial
-    //    */
-    //   def roots(implicit finder: RootFinder[C]): Roots[C] =
-    //     finder.findRoots(this)
-    
-    //   /**
-    //    * Evaluate the polynomial at `x`.
-    //    */
-    //   def apply(x: C)(implicit r: Semiring[C]): C
-    
-    //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
-    //     this.map(f).apply(x)
-
     fn scale_by_left(self, k: &C) -> Polynomial<C> {
         if k.is_zero() { return Polynomial::Zero() }
         if k.is_one() { return self }
@@ -522,92 +647,118 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
             }
         }
     }
-    
 
+    // /// Returns a polynomial with the max term removed.
+    pub fn new_reductum(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_reductum(),
+            Polynomial::Sparse(sc) => sc.new_reductum(),
+            _ => Polynomial::Zero(),
+        }
+    }
+
+    // pub fn new_shifted(&self, h: C) -> Polynomial<C> {
+    //     match self {
+    //         Polynomial::Zero() | Polynomial::Constant(_) => self.clone(),
+    //         Polynomial::Dense(dc) => dc.new_shifted(h),
+    //         Polynomial::Sparse(sc) => sc.new_shifted(h),
+    //     }
+    // }
     
-    //   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
-    //     def loop(p: Polynomial[C], xs: List[C], pts: List[(C, C)]): Polynomial[C] =
-    //       pts match {
-    //         case Nil =>
-    //           p
-    //         case (x, y) :: tail =>
-    //           val c = Polynomial.constant((y - p(x)) / xs.map(x - _).qproduct)
-    //           val prod = xs.foldLeft(Polynomial.one[C]) { (prod, xn) =>
-    //             prod * (Polynomial.x[C] - constant(xn))
-    //           }
-    //           loop(p + c * prod, x :: xs, tail)
-    //       }
-    //     loop(Polynomial.zero[C], Nil, points.toList)
-    //   }
+    // pub fn new_derivative(&self) -> Polynomial<C> {
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.new_derivative(),
+    //         Polynomial::Sparse(sc) => sc.new_derivative(),
+    //         _ => Polynomial::Zero(),
+    //     }
+    // }
+    
+    // pub fn integrate(&mut self){
+    //     match self {
+    //         Polynomial::Zero() => *self = Polynomial::Zero(),
+    //         Polynomial::Constant(cc) => *self = Polynomial::linear_monomial(cc.0.clone()),
+    //         Polynomial::Dense(dc) => dc.integrate(),
+    //         Polynomial::Sparse(sc) => sc.integrate(),
+    //     }
     // }
 
+    
+    // pub fn new_integral(&self) -> Polynomial<C> {
+    //     match self {
+    //         Polynomial::Zero() => Polynomial::Zero(),
+    //         Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
+    //         Polynomial::Dense(dc) => dc.new_integral(),
+    //         Polynomial::Sparse(sc) => sc.new_integral(),
+    //     }
+    // }
+
+    // pub fn new_zero_roots_removed(&self) -> Polynomial<C> {
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.new_zero_roots_removed(),
+    //         Polynomial::Sparse(sc) => sc.new_zero_roots_removed(),
+    //         _ => self.clone(),
+    //     }
+    // }
+
+    // pub fn new_flipped(self) -> Polynomial<C> {
+    //     match self {
+    //         Polynomial::Dense(dc) => dc.new_flipped(),
+    //         Polynomial::Sparse(sc) => sc.new_flipped(),
+    //         _ => self,
+    //     }
+    // }
+
+    // pub fn new_reciprocal(&self) -> Polynomial<C> {
+    //     match self {
+    //         Polynomial::Zero() => Polynomial::Zero(),
+    //         c @ Polynomial::Constant(_)=> c.clone(),
+    //         Polynomial::Dense(dc) => dc.new_reciprocal(),
+    //         Polynomial::Sparse(sc) => sc.new_reciprocal(),
+    //     }
+    // }
+}
+
+//********** Methods with Field + Clone Coefficients **********/
+impl<C> Polynomial<C> where C: Field + Clone {
+    
+    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. `maxOrderTermCoeff`) is 1.
+    pub fn monic(self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(_) => Polynomial::one(),
+            _ => {
+                let c = self.max_order_term_coeff().unwrap().clone();
+                self / c
+            },
+        }
+    }
+
+
+    //   /**
+    //    * Returns the real roots of this polynomial.
+    //    *
+    //    * Depending on `C`, the `finder` argument may need to be passed "explicitly" via an implicit conversion. This is
+    //    * because some types (eg `BigDecimal`, `Rational`, etc) require an error bound, and so provide implicit conversions
+    //    * to `RootFinder`s from the error type. For instance, `BigDecimal` requires either a scale or MathContext. So, we'd
+    //    * call this method with `poly.roots(MathContext.DECIMAL128)`, which would return a `Roots[BigDecimal` whose roots are
+    //    * approximated to the precision specified in `DECIMAL128` and rounded appropriately.
+    //    *
+    //    * On the other hand, a type like `Double` doesn't require an error bound and so can be called without specifying the
+    //    * `RootFinder`.
+    //    *
+    //    * @param finder
+    //    *   a root finder to extract roots with
+    //    * @return
+    //    *   the real roots of this polynomial
+    //    */
+    //   def roots(implicit finder: RootFinder[C]): Roots[C] =
+    //     finder.findRoots(this)
+    // pub fn roots(self) -> Roots<C> {
+    //     todo!()
+    // }
 }
  
 //********** Display and Debug **********
-static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
-
-// [('0', '⁰'), ('1', '¹'), ...]
-static MAPPING_TO_SUPERSCRIPTS: Lazy<HashMap<char, char>> = Lazy::new(||{
-    SUPERSCRIPTS.chars().enumerate()
-        .map(|e| (e.0.to_string().chars().next().unwrap(), e.1))
-        .collect::<HashMap<char, char>>()
-});
-
-// 123_usize -> "¹²³"
-fn to_superscript(p: usize) -> String {
-    p.to_string().chars().map(|c|(*MAPPING_TO_SUPERSCRIPTS)[&c]).collect()
-}
-
-fn term_to_string<C>(exp: usize, coeff: &C) -> String where C: Semiring + Display {
-
-    let coeff_str = format!("{}", coeff);
-
-    if coeff.is_zero() || coeff_str == "0" {
-        "".to_string()
-
-    } else if coeff.is_one() || coeff_str == "1" {
-        match exp {
-            0 => " + 1".to_string(),
-            1 => " + x".to_string(),
-            _ => format!(" + x{}", to_superscript(exp)),
-        }
-
-    } else if coeff_str == "-1" {
-        match exp {
-            0 => " - 1".to_string(),
-            1 => " - x".to_string(),
-            _ => format!(" - x{}", to_superscript(exp)),
-        }
-
-    } else {
-        if coeff_str.chars().all(|c| "0123456789-.Ee".contains(c)) {
-            let exp_str = match exp {
-                0 => "".to_string(),
-                1 => "x".to_string(),
-                _ => format!("x{}", to_superscript(exp))
-            };
-
-            if coeff_str.starts_with("-") {
-                format!("{}{}", coeff_str.replace("-", " - "), exp_str)
-
-            } else {
-                format!(" + {}{}", coeff_str, exp_str)
-            }
-
-        } else {
-            match exp {
-                0 => if coeff_str.starts_with("-") {
-                    format!(" + ({})", coeff)
-                } else {
-                    format!(" + {}", coeff)  // this sign may be removed
-                },
-                1 => format!(" + ({})x", coeff),
-                _ => format!(" + ({})x{}", coeff, to_superscript(exp)),
-            }       
-        }
-    }
-}
-
 impl<C> Display for Polynomial<C> where C: Semiring + Display {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -616,7 +767,7 @@ impl<C> Display for Polynomial<C> where C: Semiring + Display {
             Polynomial::Zero() => f.write_str("(0)"),
             Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
             _ => {
-                let s: String = self.nonzero_coeffs().map(|(i, c)|term_to_string(i, c)).collect();
+                let s: String = self.nonzero_coeffs().map(|(i, c)|term::term_to_string(i, c)).collect();
                 let first_sign = if s.starts_with(" - ") { "-" } else { "" }; 
                 f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
             },
@@ -962,30 +1113,22 @@ impl<'a, 'b, C> Add<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
 
 //***** Add constant
 impl<C> Add<C> for Polynomial<C> where C: Semiring {
-
     type Output = Polynomial<C>;
-
     fn add(self, rhs: C) -> Self::Output { self + Polynomial::constant(rhs) }
 }
 
 impl<'b, C> Add<&'b C> for Polynomial<C> where C: Semiring + Clone {
-
     type Output = Polynomial<C>;
-
     fn add(self, rhs: &'b C) -> Self::Output { self + Polynomial::constant(rhs.clone()) }
 }
 
 impl<'a, C> Add<C> for &'a Polynomial<C> where C: Semiring + Clone {
-
     type Output = Polynomial<C>;
-
     fn add(self, rhs: C) -> Self::Output { self + Polynomial::constant(rhs) }
 }
 
 impl<'a, 'b, C> Add<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
-
     type Output = Polynomial<C>;
-
     fn add(self, rhs: &'b C) -> Polynomial<C> { self + Polynomial::constant(rhs.clone())  }
 }
 
@@ -993,30 +1136,22 @@ macro_rules! impl_add_to_const {
     ( $( $t:ident ),* ) => {
         $(
             impl Add<Polynomial<$t>> for $t {
-
                 type Output = Polynomial<$t>;
-
                 fn add(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self) + rhs }
             }
 
             impl<'b> Add<&'b Polynomial<$t>> for $t {
-
                 type Output = Polynomial<$t>;
-
                 fn add(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self) + rhs }
             }
 
             impl<'a> Add<Polynomial<$t>> for &'a $t {
-
                 type Output = Polynomial<$t>;
-
                 fn add(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) + rhs }
             }
 
             impl<'a, 'b> Add<&'b Polynomial<$t>> for &'a $t {
-
                 type Output = Polynomial<$t>;
-
                 fn add(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) + rhs }
             }
         )*
@@ -1153,30 +1288,22 @@ impl<'a, 'b, C> Sub<&'b Polynomial<C>> for &'a Polynomial<C> where C: Ring + Clo
 
 //***** Sub constant
 impl<C> Sub<C> for Polynomial<C> where C: Ring {
-
     type Output = Polynomial<C>;
-
     fn sub(self, rhs: C) -> Self::Output { self - Polynomial::constant(rhs) }
 }
 
 impl<'b, C> Sub<&'b C> for Polynomial<C> where C: Ring + Clone {
-
     type Output = Polynomial<C>;
-
     fn sub(self, rhs: &'b C) -> Self::Output { self - Polynomial::constant(rhs.clone()) }
 }
 
 impl<'a, C> Sub<C> for &'a Polynomial<C> where C: Ring + Clone {
-
     type Output = Polynomial<C>;
-
     fn sub(self, rhs: C) -> Self::Output { self - Polynomial::constant(rhs) }
 }
 
 impl<'a, 'b, C> Sub<&'b C> for &'a Polynomial<C> where C: Ring + Clone {
-
     type Output = Polynomial<C>;
-
     fn sub(self, rhs: &'b C) -> Polynomial<C> { self - Polynomial::constant(rhs.clone())  }
 }
 
@@ -1184,30 +1311,22 @@ macro_rules! impl_sub_from_const {
     ( $( $t:ident ),* ) => {
         $(
             impl Sub<Polynomial<$t>> for $t {
-
                 type Output = Polynomial<$t>;
-
                 fn sub(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self) - rhs }
             }
 
             impl<'b> Sub<&'b Polynomial<$t>> for $t {
-
                 type Output = Polynomial<$t>;
-
                 fn sub(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self) - rhs }
             }
 
             impl<'a> Sub<Polynomial<$t>> for &'a $t {
-
                 type Output = Polynomial<$t>;
-
                 fn sub(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) - rhs }
             }
 
             impl<'a, 'b> Sub<&'b Polynomial<$t>> for &'a $t {
-
                 type Output = Polynomial<$t>;
-
                 fn sub(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) - rhs }
             }
         )*
@@ -1308,9 +1427,7 @@ impl<'a, 'b, C> Mul<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
 
 //***** Multiply by constant
 impl<C> Mul<C> for Polynomial<C> where C: Semiring + Clone {
-
     type Output = Polynomial<C>;
-
     fn mul(self, k: C) -> Self::Output { self * &k }
 }
 
@@ -1326,9 +1443,7 @@ impl<'b, C> Mul<&'b C> for Polynomial<C> where C: Semiring + Clone {
 }
 
 impl<'a, C> Mul<C> for &'a Polynomial<C> where C: Semiring + Clone {
-
     type Output = Polynomial<C>;
-
     fn mul(self, k: C) -> Self::Output { self * &k }
 }
 
@@ -1347,30 +1462,22 @@ macro_rules! impl_mul_to_const {
     ( $( $t:ident ),* ) => {
         $(
             impl Mul<Polynomial<$t>> for $t {
-
                 type Output = Polynomial<$t>;
-
                 fn mul(self, rhs: Polynomial<$t>) -> Self::Output { rhs.scale_by_left(&self) }
             }
 
             impl<'b> Mul<&'b Polynomial<$t>> for $t {
-
                 type Output = Polynomial<$t>;
-
                 fn mul(self, rhs: &'b Polynomial<$t>) -> Self::Output { rhs.ref_scale_by_left(&self) }
             }
 
             impl<'a> Mul<Polynomial<$t>> for &'a $t {
-
                 type Output = Polynomial<$t>;
-
                 fn mul(self, rhs: Polynomial<$t>) -> Self::Output { rhs.scale_by_left(self) }
             }
 
             impl<'a, 'b> Mul<&'b Polynomial<$t>> for &'a $t {
-
                 type Output = Polynomial<$t>;
-
                 fn mul(self, rhs: &'b Polynomial<$t>) -> Self::Output { rhs.ref_scale_by_left(self) }
             }
         )*
@@ -1423,67 +1530,49 @@ impl<C> Euclid for Polynomial<C> where C: Field + Clone {
 
 
 impl<C> Div for Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn div(self, other: Self) -> Self::Output { self.div_rem_val(&other).0 }
 }
 
 impl<'b, C> Div<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn div(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).0 }
 }
 
 impl<'a, C> Div<Polynomial<C>> for &'a Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn div(self, other: Polynomial<C>) -> Self::Output { self.div_rem_ref(&other).0 }
 }
 
 impl<'a, 'b, C> Div<&'b Polynomial<C>> for &'a Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn div(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).0 }
 }
 
 
 impl<C> Rem for Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-    
     fn rem(self, other: Self) -> Self::Output { self.div_rem_val(&other).1 }
 }
 
 impl<'b, C> Rem<&'b Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn rem(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).1 }
 }
 
 impl<'a, C> Rem<Polynomial<C>> for &'a Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn rem(self, other: Polynomial<C>) -> Self::Output { self.div_rem_ref(&other).1 }
 }
 
 impl<'a, 'b, C> Rem<&'b Polynomial<C>> for &'a Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn rem(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).1 }
 }
 
 //***** Divide by constant
 impl<C> Div<C> for Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn div(self, k: C) -> Self::Output { self / &k }
 }
 
@@ -1499,9 +1588,7 @@ impl<'b, C> Div<&'b C> for Polynomial<C> where C: Field + Clone {
 }
 
 impl<'a, C> Div<C> for &'a Polynomial<C> where C: Field + Clone {
-
     type Output = Polynomial<C>;
-
     fn div(self, k: C) -> Self::Output { self / &k }
 }
 
@@ -1553,151 +1640,6 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
         }
     }
 }
-
-// operator priority is problem...
-// impl<C: Ring + Clone> BitXor<u32> for Polynomial<C> {
-
-//     type Output = Polynomial<C>;
-
-//     fn bitxor(self, power: u32) -> Self::Output {
-//         self.pow(power)
-//     }
-// }
-
-// impl<'a, C: Ring + Clone> BitXor<u32> for &'a Polynomial<C> {
-
-//     type Output = Polynomial<C>;
-
-//     fn bitxor(self, power: u32) -> Self::Output {
-//         self.pow(power)
-//     }
-// }
-
-
-
-
-//   /**
-//    * Shift this polynomial along the x-axis by `h`, so that `this(x + h) == this.shift(h).apply(x)`. This is equivalent
-//    * to calling `this.compose(Polynomial.x + h)`, but is likely to compute the shifted polynomial much faster.
-//    */
-//   def shift(h: C)(implicit ring: Ring[C], eq: Eq[C]): Polynomial[C] = {
-//     // The trick here came from this answer:
-//     //   http://math.stackexchange.com/questions/694565/polynomial-shift
-//     // This is a heavily optimized version of the same idea. This is fairly
-//     // critical method to be fast, since it is the most expensive part of the
-//     // VAS root isolation algorithm.
-
-//     def fromSafeLong(x: SafeLong): C =
-//       if (x.isValidInt) {
-//         ring.fromInt(x.toInt)
-//       } else {
-//         val d = ring.fromInt(1 << 30)
-//         val mask = (1L << 30) - 1
-
-//         @tailrec def loop(k: C, y: SafeLong, acc: C): C =
-//           if (y.isValidInt) {
-//             k * ring.fromInt(y.toInt) + acc
-//           } else {
-//             val z = y >> 30
-//             val r = ring.fromInt((y & mask).toInt)
-//             loop(d * k, z, k * r + acc)
-//           }
-
-//         loop(ring.one, x, ring.zero)
-//       }
-
-//     // The basic idea here is that instead of working with all the derivatives
-//     // of the whole polynomial, we can just break the polynomial up and work
-//     // with the derivatives of the individual terms. This let's us save a whole
-//     // bunch of allocations in a clean way.
-//     val coeffs: Array[C] = this.coeffsArray.clone()
-//     this.foreachNonzero { (deg, c) =>
-//       var i = 1 // Leading factor in factorial in denominator of Taylor series.
-//       var d = deg - 1 // The degree of the current derivative of this term.
-//       var m = SafeLong(1L) // The multiplier of our derivative
-//       var k = c // The current delta (to some power) of the Taylor series.
-//       while (d >= 0) {
-//         // Note that we do division, but only on SafeLongs. This is not just
-//         // for performance, but also required for us to only ask for a Ring,
-//         // rather than a EuclideanRing. We always know that m * (d + 1) is
-//         // divisible by i, so this is exact.
-//         m = (m * (d + 1)) / i
-//         k *= h
-//         coeffs(d) = coeffs(d) + fromSafeLong(m) * k
-//         d -= 1
-//         i += 1
-//       }
-//     }
-//     Polynomial.dense(coeffs)
-//   }
-
-//   /**
-//    * Returns the number of sign variations in the coefficients of this polynomial. Given 2 consecutive terms (ignoring 0
-//    * terms), a sign variation is indicated when the terms have differing signs.
-//    */
-//   def signVariations(implicit ring: Semiring[C], order: Order[C], signed: Signed[C]): Int = {
-//     var prevSign: Sign = Signed.Zero
-//     var variations = 0
-//     foreachNonzero { (_, c) =>
-//       val sign = signed.sign(c)
-//       if (Signed.Zero != prevSign && sign != prevSign) {
-//         variations += 1
-//       }
-//       prevSign = sign
-//     }
-//     variations
-//   }
-
-//   /**
-//    * Removes all zero roots from this polynomial.
-//    */
-//   def removeZeroRoots(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
-//     val Term(_, k) = minTerm
-//     mapTerms { case Term(c, n) => Term(c, n - k) }
-//   }
-
-//   def mapTerms[D: Semiring: Eq: ClassTag](f: Term[C] => Term[D]): Polynomial[D] =
-//     Polynomial(termsIterator.map(f))
-
-//   /**
-//    * This will flip/mirror the polynomial about the y-axis. It is equivalent to `poly.compose(-Polynomial.x)`, but will
-//    * likely be faster to calculate.
-//    */
-//   def flip(implicit ring: Rng[C], eq: Eq[C]): Polynomial[C] =
-//     mapTerms { case term @ Term(coeff, exp) =>
-//       if (exp % 2 == 0) term
-//       else Term(-coeff, exp)
-//     }
-
-//   /**
-//    * Returns the reciprocal of this polynomial. Essentially, if this polynomial is `p` with degree `n`, then returns a
-//    * polynomial `q(x) = x^n*p(1/x)`.
-//    *
-//    * @see
-//    *   http://en.wikipedia.org/wiki/Reciprocal_polynomial
-//    */
-//   def reciprocal(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
-//     val d = degree
-//     mapTerms { case term @ Term(coeff, exp) =>
-//       Term(coeff, d - exp)
-//     }
-//   }
-
-//   // VectorSpace ops.
-
-//   def *:(k: C)(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C]
-//   def :*(k: C)(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = k *: lhs
-//   def :/(k: C)(implicit field: Field[C], eq: Eq[C]): Polynomial[C] = this :* k.reciprocal
-
-//   override def hashCode: Int = {
-//     val it = lhs.termsIterator
-//     @tailrec def loop(n: Int): Int =
-//       if (it.hasNext) {
-//         val term = it.next()
-//         loop(n ^ (0xfeed1257 * term.exp ^ term.coeff.##))
-//       } else n
-//     loop(0)
-//   }
 
 
 //********** Implementation of Algebra *********/
