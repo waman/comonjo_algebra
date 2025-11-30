@@ -1,12 +1,10 @@
 pub(crate) mod dense;
 pub(crate) mod sparse;
 pub(crate) mod iter;
-pub mod term;
 
-use std::{collections::BTreeMap, fmt::{Debug, Display}, ops::*};
+use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{BigInt, BigRational, BigUint, FromPrimitive, Integer, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
-
-use term::Term;
+use once_cell::sync::Lazy;
 
 use crate::{algebra::*, poly::{dense::DenseContent, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse::SparseContent}};
 
@@ -281,22 +279,6 @@ impl<C> Polynomial<C> where C: Semiring {
         }
     }
 
-    // for debug
-    pub(crate) fn is_dense(&self) -> bool {
-        match self {
-            Polynomial::Dense(_) => true,
-            _ => false,
-        }
-    }
-
-    // for debug
-    pub(crate) fn is_sparse(&self) -> bool {
-        match self {
-            Polynomial::Sparse(_) => true,
-            _ => false,
-        }
-    }
-
     pub fn is_x(&self) -> bool {
         match self {
             Polynomial::Zero() | Polynomial::Constant(_) => false,
@@ -426,24 +408,6 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
                 Polynomial::sparse_from_map(map)
             },
             _ => self.clone()
-        }
-    }
-
-    pub fn terms<'a>(&'a self) -> impl Iterator<Item=Term<'a, C>> {
-        self.nonzero_coeffs().map(|(i, c)| Term::from_ref(i, c))
-    }
-
-    pub fn max_term<'a>(&'a self) -> Term<'a, C> {
-        match self.max_order_term_coeff() {
-            Some(c) => Term::from_ref(self.degree(), c),
-            _ => Term::from_value(0, C::zero()),
-        }
-    }
-
-    pub fn min_term<'a>(&'a self) -> Term<'a, C> {
-        match self.terms().next() {
-            Some(t) => t,
-            _ => Term::from_value(0, C::zero()),
         }
     }
 
@@ -770,6 +734,70 @@ impl<'a, C> FieldPolyOps<C> for &'a Polynomial<C> where C: Field + Clone {
 }
  
 //********** Display and Debug **********
+static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+// [('0', '⁰'), ('1', '¹'), ...]
+static MAPPING_TO_SUPERSCRIPTS: Lazy<HashMap<char, char>> = Lazy::new(||{
+    SUPERSCRIPTS.chars().enumerate()
+        .map(|e| (e.0.to_string().chars().next().unwrap(), e.1))
+        .collect::<HashMap<char, char>>()
+});
+
+// 123_usize -> "¹²³"
+fn to_superscript(p: usize) -> String {
+    p.to_string().chars().map(|c|(*MAPPING_TO_SUPERSCRIPTS)[&c]).collect()
+}
+
+pub(crate) fn term_to_string<C>(exp: usize, coeff: &C) -> String where C: Semiring + Display {
+
+    let coeff_str = format!("{}", coeff);
+
+    if coeff.is_zero() || coeff_str == "0" {
+        "".to_string()
+
+    } else if coeff.is_one() || coeff_str == "1" {
+        match exp {
+            0 => " + 1".to_string(),
+            1 => " + x".to_string(),
+            _ => format!(" + x{}", to_superscript(exp)),
+        }
+
+    } else if coeff_str == "-1" {
+        match exp {
+            0 => " - 1".to_string(),
+            1 => " - x".to_string(),
+            _ => format!(" - x{}", to_superscript(exp)),
+        }
+
+    } else {
+        if coeff_str.chars().all(|c| "0123456789-.Ee".contains(c)) {
+            let exp_str = match exp {
+                0 => "".to_string(),
+                1 => "x".to_string(),
+                _ => format!("x{}", to_superscript(exp))
+            };
+
+            if coeff_str.starts_with("-") {
+                format!("{}{}", coeff_str.replace("-", " - "), exp_str)
+
+            } else {
+                format!(" + {}{}", coeff_str, exp_str)
+            }
+
+        } else {
+            match exp {
+                0 => if coeff_str.starts_with("-") {
+                    format!(" + ({})", coeff)
+                } else {
+                    format!(" + {}", coeff)  // this sign may be removed
+                },
+                1 => format!(" + ({})x", coeff),
+                _ => format!(" + ({})x{}", coeff, to_superscript(exp)),
+            }       
+        }
+    }
+}
+
 impl<C> Display for Polynomial<C> where C: Semiring + Display {
 
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -778,7 +806,7 @@ impl<C> Display for Polynomial<C> where C: Semiring + Display {
             Polynomial::Zero() => f.write_str("(0)"),
             Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
             _ => {
-                let s: String = self.nonzero_coeffs().map(|(i, c)|term::term_to_string(i, c)).collect();
+                let s: String = self.nonzero_coeffs().map(|(i, c)|term_to_string(i, c)).collect();
                 let first_sign = if s.starts_with(" - ") { "-" } else { "" }; 
                 f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
             },

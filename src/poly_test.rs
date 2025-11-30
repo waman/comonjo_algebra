@@ -186,26 +186,6 @@ fn test_degree_and_is_xxx_methods(){
 }
 
 #[test]
-fn test_is_dense_and_is_sparse(){
-    
-    fn test(p: Polynomial<i64>, exp_be_dense: bool, exp_be_sparse: bool){
-        assert_eq!(p.is_dense(), exp_be_dense);
-        assert_eq!(p.is_sparse(), exp_be_sparse);
-    }
-
-    let table = [ // deg, zero, one, const, x
-        (zero(), false, false),
-        (cst(2), false, false),
-        (dense![1, 2, 3], true, false),
-        (sparse![(0, 1), (1, 2), (2, 3)], false, true),
-    ];
-
-    for entry in table {
-        test(entry.0, entry.1, entry.2);
-    }
-}
-
-#[test]
 fn test_coeffs_iter_methods(){
     fn test(p: Polynomial<i64>, exp: Vec<i64>){
         let nonzero_exp: HashMap<usize, i64> = exp.clone().into_iter().enumerate().filter(|(_, c)|*c != 0).collect();
