@@ -1,8 +1,6 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, btree_map::{IntoIter, Iter}};
 
-use num::FromPrimitive;
-
-use crate::{algebra::{Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial}};
+use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Differentiable, EuclideanRingPolyOps, Integrable, Polynomial, RingPolyOps, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
 
 #[derive(Clone)]
 pub struct SparseContent<C>(pub(crate) BTreeMap<usize, C>);
@@ -17,56 +15,9 @@ impl<C> SparseContent<C> where C: Semiring {
         self.0.get(&n)
     }
 
-    pub fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
-        let m: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
-        Polynomial::sparse_from_map(m)
+    pub fn is_x(&self) -> bool {
+        self.0.len() == 1 && self.0.get(&1).is_some_and(|c|c.is_one())
     }
-
-    pub fn ref_map_nonzero<D, F>(&self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &C) -> D {
-        let m: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c))).collect();
-        Polynomial::sparse_from_map(m)
-    }
-
-    pub(crate) fn to_vec(mut self) -> Vec<C> {
-        let n = self.degree() + 1;
-        let mut v: Vec<C> = Vec::with_capacity(n);
-        for i in 0..n {
-            match self.0.remove(&i) {
-                Some(e) => v.push(e),
-                None => v.push(C::zero()),
-            } 
-        }
-        debug_assert!(self.0.is_empty());
-        v
-    }
-}
-
-impl<C> SparseContent<C> where C: Semiring {
-
-    pub fn reductum(mut self) -> Polynomial<C> {
-        let dim = self.degree();
-        self.0.remove(&dim);
-        Polynomial::sparse_from_map(self.0)
-    }
-
-    // pub fn shift(&mut self, h: C) {
-    //     todo!()
-    // }
-
-    // pub fn remove_zero_roots(&mut self) {
-    //     todo!()
-    // }
-
-    // pub fn flip(&mut self) {
-    //     todo!()
-    // }
-
-    // pub fn reciprocal(&mut self) {
-    //     // let d = self.degree();
-    //     // self.0.iter_mut().map(|(k, v)| (d-k, v));
-    //     // Polynomial::Sparse(self)
-    //     todo!()
-    // }
  
 //    final private def expBits(x: C)(implicit ring: Semiring[C]): Array[C] = {
 //      val bits = new Array[C](math.max(2, 32 - numberOfLeadingZeros(degree)))
@@ -95,300 +46,241 @@ impl<C> SparseContent<C> where C: Semiring {
 //      val lb = numberOfTrailingZeros(e) + 1
 //      fastExp(bits, e >>> lb, lb, bits(lb - 1))
 //    }
- 
-//    def apply(x: C)(implicit ring: Semiring[C]): C = if (isZero) {
-//      ring.zero
-//    } else if (exp.length == 1) {
-//      if (exp(0) != 0) coeff(0) * (x.pow(exp(0))) else coeff(0)
-//    } else {
-//      // TODO: Rewrite this to be more like PolyDense.
-//      val bits = expBits(x)
-//      val e0 = exp(0)
-//      val c0 = coeff(0)
-//      var sum = if (e0 == 0) c0 else c0 * fastExp(bits, e0)
-//      cfor(1)(_ < exp.length, _ + 1) { i =>
-//        sum += coeff(i) * fastExp(bits, exp(i))
-//      }
-//      sum
-//    }
- 
-//    def derivative(implicit ring: Ring[C], eq: Eq[C]): Polynomial[C] =
-//      if (exp.length == 0) this
-//      else {
-//        val i0 = if (exp(0) == 0) 1 else 0
-//        val es = new Array[Int](exp.length - i0)
-//        val cs = new Array[C](es.length)
- 
-//        @tailrec
-//        def loop(i: Int, j: Int): Unit = if (j < es.length) {
-//          val e = exp(i)
-//          es(j) = e - 1
-//          cs(j) = e * coeff(i)
-//          loop(i + 1, j + 1)
-//        }
- 
-//        loop(i0, 0)
-//        PolySparse.safe(es, cs)
-//      }
- 
-//    def integral(implicit field: Field[C], eq: Eq[C]): Polynomial[C] = {
-//      val es = new Array[Int](exp.length)
-//      val cs = new Array[C](es.length)
- 
-//      cfor(0)(_ < es.length, _ + 1) { i =>
-//        val e = exp(i) + 1
-//        es(i) = e
-//        cs(i) = coeff(i) / field.fromInt(e)
-//      }
- 
-//      PolySparse.safe(es, cs)
-//    }
- 
-//    def unary_-(implicit ring: Rng[C]): Polynomial[C] = {
-//      val cs = new Array[C](coeff.length)
-//      cfor(0)(_ < cs.length, _ + 1) { i => cs(i) = -coeff(i) }
-//      new PolySparse(exp, cs)
-//    }
- 
-//    def *(rhs0: Polynomial[C])(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
-//      val rhs: PolySparse[C] = PolySparse(rhs0)
-//      PolySparse.multiplySparse(lhs, rhs)
-//    }
- 
-//    def *:(k: C)(implicit ring: Semiring[C], eq: Eq[C]): Polynomial[C] = {
-//      if (k === ring.zero) {
-//        PolySparse.zero[C]
-//      } else {
-//        val cs = new Array[C](coeff.length)
-//        cfor(0)(_ < cs.length, _ + 1) { i =>
-//          cs(i) = k * coeff(i)
-//        }
-//        new PolySparse(exp, cs)
-//      }
-//    }
-//  }
- 
-//  object PolySparse {
-//    final private[math] def dense2sparse[@sp(Double) C: Semiring: Eq: ClassTag](poly: PolyDense[C]): PolySparse[C] = {
-//      val cs = poly.coeffs
-//      val es = new Array[Int](cs.length)
-//      cfor(0)(_ < es.length, _ + 1) { i => es(i) = i }
-//      PolySparse.safe(es, cs)
-//    }
- 
-//    final private[math] def safe[@sp(Double) C: Semiring: Eq: ClassTag](exp: Array[Int],
-//                                                                        coeff: Array[C]
-//    ): PolySparse[C] = {
-//      var len = 0
-//      cfor(0)(_ < coeff.length, _ + 1) { i =>
-//        if (coeff(i) =!= Semiring[C].zero)
-//          len += 1
-//      }
- 
-//      if (len == coeff.length) {
-//        new PolySparse(exp, coeff)
-//      } else {
-//        val es = new Array[Int](len)
-//        val cs = new Array[C](len)
-//        @tailrec def loop(i: Int, j: Int): PolySparse[C] =
-//          if (i < coeff.length) {
-//            val c = coeff(i)
-//            if (c =!= Semiring[C].zero) {
-//              es(j) = exp(i)
-//              cs(j) = c
-//              loop(i + 1, j + 1)
-//            } else {
-//              loop(i + 1, j)
-//            }
-//          } else new PolySparse(es, cs)
-//        loop(0, 0)
-//      }
-//    }
- 
-//    final def apply[@sp(Double) C: Semiring: Eq: ClassTag](data: IterableOnce[Term[C]]): PolySparse[C] = {
-//      import spire.scalacompat.arrayBuilderMake
- 
-//      var expBldr = arrayBuilderMake[Int]
-//      var coeffBldr = arrayBuilderMake[C]
-//      val zero = Semiring[C].zero
-//      var inReverseOrder = true
-//      var inOrder = true
-//      var lastDeg = -1
- 
-//      data.iterator.foreach { case Term(c, i) =>
-//        if (c =!= zero) {
-//          expBldr += i
-//          coeffBldr += c
-//          inOrder &&= (lastDeg < i)
-//          inReverseOrder &&= (lastDeg < 0 || lastDeg > i)
-//          lastDeg = i
-//        }
-//      }
- 
-//      val exp = expBldr.result()
-//      val coeff = coeffBldr.result()
-//      if (inOrder) {
-//        PolySparse(exp, coeff)
-//      } else if (inReverseOrder) {
-//        reverse(exp); reverse(coeff)
-//        PolySparse(exp, coeff)
-//      } else {
-//        val indices = Array.range(0, exp.length)
-//        indices.qsortBy(exp(_))
-//        expBldr = arrayBuilderMake[Int]
-//        coeffBldr = arrayBuilderMake[C]
-//        var i = 1
-//        var j = indices(0)
-//        var e = exp(j)
-//        var c = coeff(j)
-//        while (i < indices.length) {
-//          val j0 = indices(i)
-//          val e0 = exp(j0)
-//          val c0 = coeff(j0)
-//          if (e != e0) {
-//            if (!c.isZero) {
-//              expBldr += e
-//              coeffBldr += c
-//            }
-//            c = c0
-//          } else {
-//            c += c0
-//          }
-//          e = e0
-//          j = j0
-//          i += 1
-//        }
-//        if (!c.isZero) {
-//          expBldr += e
-//          coeffBldr += c
-//        }
-//        val poly = PolySparse(expBldr.result(), coeffBldr.result())
-//        poly
-//      }
-//    }
- 
-//    private def reverse[@sp(Double) A](arr: Array[A]): Unit = {
-//      var i = 0
-//      var j = arr.length - 1
-//      while (i < j) {
-//        val tmp = arr(i)
-//        arr(i) = arr(j)
-//        arr(j) = tmp
-//        i += 1
-//        j -= 1
-//      }
-//    }
- 
-//    final def apply[@sp(Double) C: Semiring: Eq: ClassTag](data: Map[Int, C]): PolySparse[C] = {
-//      val data0 = data.toArray
-//      data0.qsortBy(_._1)
-//      val es = new Array[Int](data0.length)
-//      val cs = new Array[C](data0.length)
-//      cfor(0)(_ < data0.length, _ + 1) { i =>
-//        val (e, c) = data0(i)
-//        es(i) = e
-//        cs(i) = c
-//      }
-//      safe(es, cs)
-//    }
- 
-//    final def apply[@sp(Double) C: Semiring: Eq: ClassTag](poly: Polynomial[C]): PolySparse[C] = {
-//      poly match {
-//        case (poly: PolySparse[_]) =>
-//          poly
- 
-//        case (_: PolyDense[_]) =>
-//          dense2sparse(poly.asInstanceOf[PolyDense[C]]) // Yay...
- 
-//        case _ =>
-//          var len = 0
-//          poly.foreachNonzero { (_, _) => len += 1 }
-//          val es = new Array[Int](len)
-//          val cs = new Array[C](len)
-//          var i = 0
-//          poly.foreachNonzero { (e, c) =>
-//            es(i) = e
-//            cs(i) = c
-//            i += 1
-//          }
-//          PolySparse.safe(es, cs)
-//      }
-//    }
- 
-//    final private def multiplyTerm[@sp(Double) C: Semiring: Eq: ClassTag](poly: PolySparse[C],
-//                                                                          c: C,
-//                                                                          e: Int
-//    ): PolySparse[C] = {
-//      val exp = poly.exp
-//      val coeff = poly.coeff
-//      val cs = new Array[C](coeff.length)
-//      val es = new Array[Int](exp.length)
-//      cfor(0)(_ < coeff.length, _ + 1) { i =>
-//        cs(i) = c * coeff(i)
-//        es(i) = exp(i) + e
-//      }
-//      new PolySparse(es, cs)
-//    }
- 
-//    final private def multiplySparse[@sp(Double) C: Semiring: Eq: ClassTag](lhs: PolySparse[C],
-//                                                                            rhs: PolySparse[C]
-//    ): PolySparse[C] = {
-//      val lexp = lhs.exp
-//      val lcoeff = lhs.coeff
-//      var sum = new PolySparse(new Array[Int](0), new Array[C](0))
-//      cfor(0)(_ < lexp.length, _ + 1) { i =>
-//        sum = addSparse(sum, multiplyTerm(rhs, lcoeff(i), lexp(i)))
-//      }
-//      sum
-//    }
- 
-//    final private def countSumTerms[@sp(Double) C](lhs: PolySparse[C],
-//                                                   rhs: PolySparse[C],
-//                                                   lOffset: Int = 0,
-//                                                   rOffset: Int = 0
-//    ): Int = {
-//      val PolySparse(lexp, lcoeff) = lhs
-//      val PolySparse(rexp, rcoeff) = rhs
- 
-//      @tailrec
-//      def loop(i: Int, j: Int, count: Int): Int =
-//        if (i < lexp.length && j < rexp.length) {
-//          val cmp = lexp(i) + lOffset - rexp(j) - rOffset
-//          if (cmp == 0) loop(i + 1, j + 1, count + 1)
-//          else if (cmp < 0) loop(i + 1, j, count + 1)
-//          else loop(i, j + 1, count + 1)
-//        } else {
-//          count + (lexp.length - i) + (rexp.length - j)
-//        }
- 
-//      loop(0, 0, 0)
-//    }
 }
 
-impl<C> SparseContent<C> where C: Semiring + Clone {
-    
+impl<C> SemiringPolyOps<C> for SparseContent<C> where C: Semiring {
 
-    pub fn new_reductum(&self) -> Polynomial<C> {
+    fn to_vec(mut self) -> Vec<C> {
+        let n = self.degree() + 1;
+        let mut v: Vec<C> = Vec::with_capacity(n);
+        for i in 0..n {
+            match self.0.remove(&i) {
+                Some(e) => v.push(e),
+                None => v.push(C::zero()),
+            } 
+        }
+        debug_assert!(self.0.is_empty());
+        v
+    }
+    
+    fn to_map(self) -> BTreeMap<usize, C> { self.0 }
+
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+        let m: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
+        Polynomial::sparse_from_map(m)
+    }
+
+    fn reductum(mut self) -> Polynomial<C> {
+        let dim = self.degree();
+        self.0.remove(&dim);
+        Polynomial::sparse_from_map(self.0)
+    }
+
+    fn remove_zero_roots(mut self) -> Polynomial<C> {
+        let i0 = *self.0.first_entry().unwrap().key();
+        let map: BTreeMap<usize, C> = self.0.into_iter().map(|(i, c)|(i-i0, c)).collect();
+        Polynomial::sparse_from_map(map)
+    }
+
+    fn reciprocal(self) -> Polynomial<C> {
+        let d = self.degree();
+        let map: BTreeMap<usize, C> = self.0.into_iter().map(|(i, c)| (d-i, c)).collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
+
+impl<'a, C> SemiringPolyOps<C> for &'a SparseContent<C> where C: Semiring + Clone {
+    
+    fn to_vec(self) -> Vec<C> {
+        self.coeffs_iter().map(|c|{
+            match c {
+                Some(v) => v.clone(),
+                _ => C::zero(),
+            }
+        }).collect()
+    }
+    
+    fn to_map(self) -> BTreeMap<usize, C> { self.0.clone() }
+
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+        let m: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c.clone()))).collect();
+        Polynomial::sparse_from_map(m)
+    }
+
+    fn reductum(self) -> Polynomial<C> {
         let n = self.0.len();
         let map: BTreeMap<usize, C> = self.0.iter().take(n-1).map(|(i, c)| (*i, c.clone())).collect();
         Polynomial::sparse_from_map(map)
     }
 
-    // pub fn new_shifted(&self, h: C) -> Polynomial<C> {
-    //     todo!()
-    // }
+    fn remove_zero_roots(self) -> Polynomial<C> {
+        let i0 = *self.0.first_key_value().unwrap().0;
+        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)|(i-i0, c.clone())).collect();
+        Polynomial::sparse_from_map(map)
+    }
 
-    // pub fn new_zero_roots_removed(&self) -> Polynomial<C> {
-    //     todo!()
-    // }
+    fn reciprocal(self) -> Polynomial<C> {
+        let d = self.degree();
+        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)| (d-i, c.clone())).collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
 
-    // pub fn new_flipped(&self) -> Polynomial<C> {
-    //     todo!()
-    // }
+impl<C> RingPolyOps<C> for SparseContent<C> where C: Ring {
 
-    // pub fn new_reciprocal(&self) -> Polynomial<C> {
-    //     todo!()
-    // }
+    fn flip(mut self) -> Polynomial<C> {
+        for (i, c) in self.0.iter_mut() {
+            if i % 2 != 0 {
+                *c = c.ref_neg();
+            }
+        }
+        Polynomial::Sparse(self)
+    }
+}
+
+impl<'a, C> RingPolyOps<C> for &'a SparseContent<C> where C: Ring + Clone {
+
+    fn flip(self) -> Polynomial<C> {
+        let map: BTreeMap<usize, C> =
+            self.0.iter().map(|(i, c)|{
+                if i % 2 == 0 { (*i, c.clone()) } else { (*i, c.ref_neg()) }
+            }).collect();
+        Polynomial::Sparse(SparseContent(map))
+    }
+}
+
+impl<'a, C> EuclideanRingPolyOps<C> for &'a SparseContent<C> where C: EuclideanRing + num::FromPrimitive + Clone {
+    
+    // ** From spire code *****
+    // The trick here came from this answer:
+    //   http://math.stackexchange.com/questions/694565/polynomial-shift
+    // This is a heavily optimized version of the same idea. This is fairly
+    // critical method to be fast, since it is the most expensive part of the
+    // VAS root isolation algorithm.
+    fn shift(self, h: C) -> Polynomial<C> {
+        let mut coeffs: BTreeMap<usize, C> = self.0.clone();
+        for (deg, c) in self.nonzero_coeffs_iter() {
+            if deg == 0 { continue; }
+            let mut i: u128 = 1;
+            let mut d: usize = deg;
+            let mut m: u128 = 1;
+            let mut k: C = c.clone();
+            while d > 0 {
+                m = mul_div_uint(m, d, i);  // m * d / i
+                k = k * &h;
+                let dif = C::from_u128(m).unwrap() * &k;
+                coeffs.entry(d-1).and_modify(|v| *v = v.ref_add(&dif)).or_insert(dif);
+                d = d - 1;
+                i = i + 1;
+            }
+        }
+        Polynomial::sparse_from_map(coeffs)
+    }
+}
+
+//********** Iterator **********/
+impl<C> SparseContent<C> where C: Semiring {
+    
+    pub fn into_nonzero_coeffs_iter(self) -> IntoNonzeroCoeffsIter<C> {
+        IntoNonzeroCoeffsIter::Sparse(SIntoNonzeroCoeffsIter(self.0.into_iter()))
+    }
+
+    pub fn nonzero_coeffs_iter<'a>(&'a self) -> NonzeroCoeffsIter<'a, C> {
+        NonzeroCoeffsIter::Sparse(SNonzeroCoeffsIter(self.0.iter()))
+    }
+
+    pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
+        let mut map_iter = self.0.into_iter();
+        IntoCoeffsIter::Sparse(SIntoCoeffsIter{ index: 0, current: map_iter.next(), map_iter })
+    }
+
+    pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
+        let mut map_iter = self.0.iter();
+        CoeffsIter::Sparse(SCoeffsIter{ index: 0, current: map_iter.next(), map_iter})
+    }
+}
+
+pub struct SIntoNonzeroCoeffsIter<C>(pub(crate) IntoIter<usize, C>) where C: Semiring;
+
+impl<C> Iterator for SIntoNonzeroCoeffsIter<C> where C: Semiring {
+    type Item = (usize, C);
+
+    fn next(&mut self) -> Option<Self::Item> { self.0.next() }
+
+    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
+}
+
+pub struct SNonzeroCoeffsIter<'a, C>(pub(crate) Iter<'a, usize, C>) where C: Semiring;
+
+impl<'a, C> Iterator for SNonzeroCoeffsIter<'a, C> where C: Semiring {
+
+    type Item = (usize, &'a C);
+
+    fn next(&mut self) -> Option<Self::Item> { self.0.next().map(|(i, c)| (*i, c)) }
+
+    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
+}
+
+pub struct SIntoCoeffsIter<C> where C: Semiring {
+    pub(crate) index: usize,
+    pub(crate) current: Option<(usize, C)>,
+    pub(crate) map_iter: IntoIter<usize, C>,
+}
+
+impl<C> Iterator for SIntoCoeffsIter<C> where C: Semiring {
+
+    type Item = C;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let result = match &mut self.current {
+            Some(c) => 
+                if c.0 == self.index {
+                    let r = match self.map_iter.next() {
+                        Some(nxt) => self.current.replace(nxt),
+                        None => self.current.take(),
+                    };
+                    Some(r.unwrap().1)
+                } else { 
+                    Some(C::zero())
+                }
+            _ => None,
+        };
+
+        self.index += 1;
+        return result;
+    }
+    
+    fn size_hint(&self) -> (usize, Option<usize>) { self.map_iter.size_hint() }
+}
+
+/// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
+pub struct SCoeffsIter<'a, C> where C: Semiring {
+    pub(crate) index: usize,
+    pub(crate) current: Option<(&'a usize, &'a C)>,
+    pub(crate) map_iter: Iter<'a, usize, C>,
+}
+
+impl<'a, C> Iterator for SCoeffsIter<'a, C> where C: Semiring {
+
+    type Item = Option<&'a C>;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        if let Some(c) = self.current {
+            let result = if *c.0 == self.index { 
+                let r = Some(c.1);
+                self.current = self.map_iter.next();
+                r
+            } else {
+                None
+            };
+            self.index += 1;
+            Some(result)
+        } else {
+            return None;
+        }
+    }
+    
+    fn size_hint(&self) -> (usize, Option<usize>) { self.map_iter.size_hint() }
 }
 
 //********** Add **********/
@@ -839,9 +731,9 @@ pub(crate) fn div_rem<C>(mut u: BTreeMap<usize, C>, rhs: &Polynomial<C>) -> (Pol
 }
 
 //********** Analysis **********/
-impl<C> SparseContent<C> where C: Semiring + FromPrimitive {
+impl<C> Differentiable<C> for SparseContent<C> where C: Semiring + num::FromPrimitive {
     
-    pub fn differentiate(self) -> Polynomial<C> {
+    fn derivative(self) -> Polynomial<C> {
         let ite = self.0.into_iter();
         let map: BTreeMap<usize, C> = 
             ite.filter(|(i, _)| *i != 0)
@@ -850,10 +742,22 @@ impl<C> SparseContent<C> where C: Semiring + FromPrimitive {
         Polynomial::sparse_from_map(map)
     }
 }
-    
-impl<C> SparseContent<C> where C: Field + FromPrimitive {
 
-    pub fn integrate(self) -> Polynomial<C> {
+impl<'a, C> Differentiable<C> for &'a SparseContent<C> where C: Semiring + num::FromPrimitive  + Clone {
+    
+    fn derivative(self) -> Polynomial<C> {
+        let ite = self.0.iter();
+        let map: BTreeMap<usize, C> = 
+            ite.filter(|(i, _)| **i != 0)
+            .map(|(i,c)| (i-1, C::from_usize(*i).unwrap() * c))
+            .collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
+    
+impl<C> Integrable<C> for SparseContent<C> where C: Field + num::FromPrimitive {
+
+    fn integral(self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = 
             self.0.into_iter().map(|(i, c)| {
                 let j = i+1;
@@ -864,21 +768,9 @@ impl<C> SparseContent<C> where C: Field + FromPrimitive {
     }
 }
 
-impl<C> SparseContent<C> where C: Semiring + FromPrimitive  + Clone {
-    
-    pub fn new_derivative(&self) -> Polynomial<C> {
-        let ite = self.0.iter();
-        let map: BTreeMap<usize, C> = 
-            ite.filter(|(i, _)| **i != 0)
-            .map(|(i,c)| (i-1, C::from_usize(*i).unwrap() * c))
-            .collect();
-        Polynomial::sparse_from_map(map)
-    }
-}
+impl<'a, C> Integrable<C> for &'a SparseContent<C> where C: Field + num::FromPrimitive  + Clone {
 
-impl<C> SparseContent<C> where C: Field + FromPrimitive  + Clone {
-
-    pub fn new_integral(&self) -> Polynomial<C> {
+    fn integral(self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = 
             self.0.iter().map(|(i, c)| {
                 let j = i+1;
