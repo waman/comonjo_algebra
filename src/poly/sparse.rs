@@ -3,9 +3,9 @@ use std::collections::{BTreeMap, btree_map::{IntoIter, Iter}};
 use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Differentiable, EuclideanRingPolyOps, Integrable, Polynomial, RingPolyOps, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
 
 #[derive(Clone)]
-pub struct SparseContent<C>(pub(crate) BTreeMap<usize, C>);
+pub struct SparseCoeffs<C>(pub(crate) BTreeMap<usize, C>);
 
-impl<C> SparseContent<C> where C: Semiring {
+impl<C> SparseCoeffs<C> where C: Semiring {
 
     pub fn degree(&self) -> usize {
         *self.0.last_key_value().unwrap().0
@@ -48,7 +48,7 @@ impl<C> SparseContent<C> where C: Semiring {
 //    }
 }
 
-impl<C> SemiringPolyOps<C> for SparseContent<C> where C: Semiring {
+impl<C> SemiringPolyOps<C> for SparseCoeffs<C> where C: Semiring {
 
     fn to_vec(mut self) -> Vec<C> {
         let n = self.degree() + 1;
@@ -89,7 +89,7 @@ impl<C> SemiringPolyOps<C> for SparseContent<C> where C: Semiring {
     }
 }
 
-impl<'a, C> SemiringPolyOps<C> for &'a SparseContent<C> where C: Semiring + Clone {
+impl<'a, C> SemiringPolyOps<C> for &'a SparseCoeffs<C> where C: Semiring + Clone {
     
     fn to_vec(self) -> Vec<C> {
         self.coeffs_iter().map(|c|{
@@ -126,7 +126,7 @@ impl<'a, C> SemiringPolyOps<C> for &'a SparseContent<C> where C: Semiring + Clon
     }
 }
 
-impl<C> RingPolyOps<C> for SparseContent<C> where C: Ring {
+impl<C> RingPolyOps<C> for SparseCoeffs<C> where C: Ring {
 
     fn flip(mut self) -> Polynomial<C> {
         for (i, c) in self.0.iter_mut() {
@@ -138,18 +138,18 @@ impl<C> RingPolyOps<C> for SparseContent<C> where C: Ring {
     }
 }
 
-impl<'a, C> RingPolyOps<C> for &'a SparseContent<C> where C: Ring + Clone {
+impl<'a, C> RingPolyOps<C> for &'a SparseCoeffs<C> where C: Ring + Clone {
 
     fn flip(self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> =
             self.0.iter().map(|(i, c)|{
                 if i % 2 == 0 { (*i, c.clone()) } else { (*i, c.ref_neg()) }
             }).collect();
-        Polynomial::Sparse(SparseContent(map))
+        Polynomial::Sparse(SparseCoeffs(map))
     }
 }
 
-impl<'a, C> EuclideanRingPolyOps<C> for &'a SparseContent<C> where C: EuclideanRing + num::FromPrimitive + Clone {
+impl<'a, C> EuclideanRingPolyOps<C> for &'a SparseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + Clone {
     
     // ** From spire code *****
     // The trick here came from this answer:
@@ -179,7 +179,7 @@ impl<'a, C> EuclideanRingPolyOps<C> for &'a SparseContent<C> where C: EuclideanR
 }
 
 //********** Iterator **********/
-impl<C> SparseContent<C> where C: Semiring {
+impl<C> SparseCoeffs<C> where C: Semiring {
     
     pub fn into_nonzero_coeffs_iter(self) -> IntoNonzeroCoeffsIter<C> {
         IntoNonzeroCoeffsIter::Sparse(SIntoNonzeroCoeffsIter(self.0.into_iter()))
@@ -731,7 +731,7 @@ pub(crate) fn div_rem<C>(mut u: BTreeMap<usize, C>, rhs: &Polynomial<C>) -> (Pol
 }
 
 //********** Analysis **********/
-impl<C> Differentiable<C> for SparseContent<C> where C: Semiring + num::FromPrimitive {
+impl<C> Differentiable<C> for SparseCoeffs<C> where C: Semiring + num::FromPrimitive {
     
     fn derivative(self) -> Polynomial<C> {
         let ite = self.0.into_iter();
@@ -743,7 +743,7 @@ impl<C> Differentiable<C> for SparseContent<C> where C: Semiring + num::FromPrim
     }
 }
 
-impl<'a, C> Differentiable<C> for &'a SparseContent<C> where C: Semiring + num::FromPrimitive  + Clone {
+impl<'a, C> Differentiable<C> for &'a SparseCoeffs<C> where C: Semiring + num::FromPrimitive  + Clone {
     
     fn derivative(self) -> Polynomial<C> {
         let ite = self.0.iter();
@@ -755,7 +755,7 @@ impl<'a, C> Differentiable<C> for &'a SparseContent<C> where C: Semiring + num::
     }
 }
     
-impl<C> Integrable<C> for SparseContent<C> where C: Field + num::FromPrimitive {
+impl<C> Integrable<C> for SparseCoeffs<C> where C: Field + num::FromPrimitive {
 
     fn integral(self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = 
@@ -768,7 +768,7 @@ impl<C> Integrable<C> for SparseContent<C> where C: Field + num::FromPrimitive {
     }
 }
 
-impl<'a, C> Integrable<C> for &'a SparseContent<C> where C: Field + num::FromPrimitive  + Clone {
+impl<'a, C> Integrable<C> for &'a SparseCoeffs<C> where C: Field + num::FromPrimitive  + Clone {
 
     fn integral(self) -> Polynomial<C> {
         let map: BTreeMap<usize, C> = 

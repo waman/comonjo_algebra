@@ -6,7 +6,7 @@ use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{BigInt, BigRational, BigUint, FromPrimitive, Integer, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
 
-use crate::{algebra::*, poly::{dense::DenseContent, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse::SparseContent}};
+use crate::{algebra::*, poly::{dense::DenseCoeffs, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse::SparseCoeffs}};
 
 /// Polynomial type.
 /// 
@@ -58,17 +58,17 @@ pub enum Polynomial<C> where C: Semiring {
     Zero(),
 
     /// Use <code>Polynomial::constant()</code> function to instantiate.
-    Constant(ConstContent<C>),
+    Constant(ConstCoeff<C>),
 
     /// Use <code>dense!()</code> macro to instantiate.
-    Dense(DenseContent<C>),
+    Dense(DenseCoeffs<C>),
     
     /// Use <code>sparse!()</code> macro to instantiate.
-    Sparse(SparseContent<C>)
+    Sparse(SparseCoeffs<C>)
 }
 
 #[derive(Clone)]
-pub struct ConstContent<C: Semiring>(pub(crate) C);
+pub struct ConstCoeff<C: Semiring>(pub(crate) C);
 
 #[macro_export]
 macro_rules! dense {
@@ -100,7 +100,7 @@ impl<C> Polynomial<C> where C: Semiring {
         if c.is_zero() {
             Polynomial::Zero()
         } else {
-            Polynomial::Constant(ConstContent(c))
+            Polynomial::Constant(ConstCoeff(c))
         }
     }
 
@@ -119,7 +119,7 @@ impl<C> Polynomial<C> where C: Semiring {
             1 => Polynomial::constant(coeffs.pop().unwrap()),
             _ => {
                 coeffs.shrink_to_fit();
-                Polynomial::Dense(DenseContent(coeffs))
+                Polynomial::Dense(DenseCoeffs(coeffs))
             }
         }
     }
@@ -134,10 +134,10 @@ impl<C> Polynomial<C> where C: Semiring {
                 if coeffs.contains_key(&0) {
                     Polynomial::constant(coeffs.remove(&0).unwrap())
                 } else {
-                    Polynomial::Sparse(SparseContent(coeffs))
+                    Polynomial::Sparse(SparseCoeffs(coeffs))
                 }
             },
-            _ => Polynomial::Sparse(SparseContent(coeffs))
+            _ => Polynomial::Sparse(SparseCoeffs(coeffs))
         }
     }
 
@@ -884,7 +884,7 @@ impl<C> ConstZero for Polynomial<C> where C: Semiring + ConstZero + Clone {
 impl<C> One for Polynomial<C> where C: Semiring + Clone {
 
     fn one() -> Self { 
-        Polynomial::Constant(ConstContent(C::one()))  // raw creation
+        Polynomial::Constant(ConstCoeff(C::one()))  // raw creation
     }
     
     fn is_one(&self) -> bool {
@@ -896,7 +896,7 @@ impl<C> One for Polynomial<C> where C: Semiring + Clone {
 }
 
 impl<C> ConstOne for Polynomial<C> where C: Semiring + Clone + ConstOne {
-    const ONE: Self = Polynomial::Constant(ConstContent(C::ONE));
+    const ONE: Self = Polynomial::Constant(ConstCoeff(C::ONE));
 }
 
 //********** Iterator **********

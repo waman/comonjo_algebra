@@ -2,9 +2,9 @@ use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
 use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Differentiable, EuclideanRingPolyOps, Integrable, Polynomial, RingPolyOps, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
 
 #[derive(Clone)]
-pub struct DenseContent<C>(pub(crate) Vec<C>);
+pub struct DenseCoeffs<C>(pub(crate) Vec<C>);
 
-impl<C> DenseContent<C> where C: Semiring {
+impl<C> DenseCoeffs<C> where C: Semiring {
 
     pub fn degree(&self) -> usize {
         self.0.len() - 1
@@ -44,7 +44,7 @@ impl<C> DenseContent<C> where C: Semiring {
 // }
 }
 
-impl<C> SemiringPolyOps<C> for DenseContent<C> where C: Semiring {
+impl<C> SemiringPolyOps<C> for DenseCoeffs<C> where C: Semiring {
     
     fn to_vec(self) -> Vec<C> { self.0 }
     
@@ -83,7 +83,7 @@ impl<C> SemiringPolyOps<C> for DenseContent<C> where C: Semiring {
     }
 }
 
-impl<'a, C> SemiringPolyOps<C> for &'a DenseContent<C> where C: Semiring + Clone {
+impl<'a, C> SemiringPolyOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
     
     fn to_vec(self) -> Vec<C> { self.0.clone() }
     
@@ -116,7 +116,7 @@ impl<'a, C> SemiringPolyOps<C> for &'a DenseContent<C> where C: Semiring + Clone
     }
 }
 
-impl<C> RingPolyOps<C> for DenseContent<C> where C: Ring {
+impl<C> RingPolyOps<C> for DenseCoeffs<C> where C: Ring {
 
     fn flip(mut self) -> Polynomial<C> {
         self.0.iter_mut().enumerate().filter(|(i, _)| i % 2 != 0).for_each(|(_, c)| *c = c.ref_neg());
@@ -124,18 +124,18 @@ impl<C> RingPolyOps<C> for DenseContent<C> where C: Ring {
     }
 }
 
-impl<'a, C> RingPolyOps<C> for &'a DenseContent<C> where C: Ring + Clone {
+impl<'a, C> RingPolyOps<C> for &'a DenseCoeffs<C> where C: Ring + Clone {
 
     fn flip(self) -> Polynomial<C> {
         let vec: Vec<C> = 
             self.0.iter().enumerate().map(|(i, c)|{
                 if i % 2 == 0 { c.clone() } else { c.ref_neg() }
             }).collect();
-        Polynomial::Dense(DenseContent(vec))
+        Polynomial::Dense(DenseCoeffs(vec))
     }
 }
 
-impl<'a, C> EuclideanRingPolyOps<C> for &'a DenseContent<C> where C: EuclideanRing + num::FromPrimitive + Clone {
+impl<'a, C> EuclideanRingPolyOps<C> for &'a DenseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + Clone {
 
     // ** From spire code *****
     // The trick here came from this answer:
@@ -167,7 +167,7 @@ impl<'a, C> EuclideanRingPolyOps<C> for &'a DenseContent<C> where C: EuclideanRi
 }
 
 //********** Iterator **********/
-impl<C> DenseContent<C> where C: Semiring {
+impl<C> DenseCoeffs<C> where C: Semiring {
 
     pub fn into_nonzero_coeffs_iter(self) -> IntoNonzeroCoeffsIter<C> {
         IntoNonzeroCoeffsIter::Dense(DIntoNonzeroCoeffsIter(self.0.into_iter().enumerate()))
@@ -558,7 +558,7 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
 }
 
 //********** Analysis **********/
-impl<C> Differentiable<C> for DenseContent<C> where C: Semiring + num::FromPrimitive {
+impl<C> Differentiable<C> for DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
     
     fn derivative(self) -> Polynomial<C> {
         let mut ite = self.0.into_iter().enumerate();
@@ -568,7 +568,7 @@ impl<C> Differentiable<C> for DenseContent<C> where C: Semiring + num::FromPrimi
     }
 }
 
-impl<'a, C> Differentiable<C> for &'a DenseContent<C> where C: Semiring + num::FromPrimitive  + Clone {
+impl<'a, C> Differentiable<C> for &'a DenseCoeffs<C> where C: Semiring + num::FromPrimitive  + Clone {
     
     fn derivative(self) -> Polynomial<C> {
         let mut ite = self.0.iter().enumerate();
@@ -578,7 +578,7 @@ impl<'a, C> Differentiable<C> for &'a DenseContent<C> where C: Semiring + num::F
     }
 }
     
-impl<C> Integrable<C> for DenseContent<C> where C: Field + num::FromPrimitive {
+impl<C> Integrable<C> for DenseCoeffs<C> where C: Field + num::FromPrimitive {
 
     fn integral(self) -> Polynomial<C> {
         let n = self.0.len();
@@ -590,7 +590,7 @@ impl<C> Integrable<C> for DenseContent<C> where C: Field + num::FromPrimitive {
     }
 }
 
-impl<'a, C> Integrable<C> for &'a DenseContent<C> where C: Field + num::FromPrimitive  + Clone {
+impl<'a, C> Integrable<C> for &'a DenseCoeffs<C> where C: Field + num::FromPrimitive  + Clone {
 
     fn integral(self) -> Polynomial<C> {
         let n = self.0.len();
