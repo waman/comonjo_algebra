@@ -1,8 +1,8 @@
 use std::{collections::HashMap, vec};
 
-use num::{complex::c64, pow::Pow, One, Rational64, Zero};
+use num::{One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
-use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Differentiable, EuclideanRingPolyOps, FieldPolyOps, Integrable, Polynomial, RingPolyOps, SemiringPolyOps}, sparse};
+use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Polynomial, Flip, SemiringPolyOps}, sparse};
 
 type PolyR64 = Polynomial<Rational64>;
 
@@ -1123,18 +1123,31 @@ fn test_flip(){
 }
 
 #[test]
-fn test_shift(){
+fn test_shift_and_shift_f(){
 
     fn test(x: Polynomial<i64>, h: i64, exp: Polynomial<i64>){
 
         fn test_op<'a, 'b>(x: &'a Polynomial<i64>, h: i64, exp: &'b Polynomial<i64>){
+            // shift
             assert_eq!(x.shift(h), *exp);
             assert_eq!(x.clone().shift(h), *exp);
 
             // a shifted polynomial of p(x) by h equals p(x + h) 
             let exp2 = x.compose(Polynomial::x() + h);
             assert_eq!(x.shift(h), exp2.clone());
-            assert_eq!(x.clone().shift(h), exp2);
+
+            // shift_f
+            let z: &Polynomial<f64> = &x.map_nonzero(|_, c|c.to_f64().unwrap());
+            let t: f64 = h.to_f64().unwrap();
+            let exp_f: &Polynomial<f64> = &exp.map_nonzero(|_, c|c.to_f64().unwrap());
+            assert_eq!(z.clone().shift_f(t), *exp_f);
+            assert_eq!(z.shift_f(t), *exp_f);
+            assert_eq!(z.clone().shift_f(t), *exp_f);
+
+            // a shifted polynomial of p(x) by t equals p(x + t) 
+            let exp_f2 = z.compose(Polynomial::x() + t);
+            assert_eq!(z.shift_f(t), exp_f2.clone());
+            assert_eq!(z.clone().shift_f(t), exp_f2);
         }
 
         for x_ in get_impls(&x) {

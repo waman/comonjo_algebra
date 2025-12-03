@@ -3,7 +3,7 @@ pub(crate) mod sparse;
 pub(crate) mod iter;
 
 use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
-use num::{BigInt, BigRational, BigUint, FromPrimitive, Integer, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
+use num::{self, BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
 
 use crate::{algebra::*, poly::{dense::DenseCoeffs, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse::SparseCoeffs}};
@@ -423,6 +423,250 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
         self.map_nonzero(|_, c| k.ref_mul(c))
     }
 }
+ 
+//********** Display and Debug **********
+static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
+
+// [('0', '⁰'), ('1', '¹'), ...]
+static MAPPING_TO_SUPERSCRIPTS: Lazy<HashMap<char, char>> = Lazy::new(||{
+    SUPERSCRIPTS.chars().enumerate()
+        .map(|e| (e.0.to_string().chars().next().unwrap(), e.1))
+        .collect::<HashMap<char, char>>()
+});
+
+// 123_usize -> "¹²³"
+fn to_superscript(p: usize) -> String {
+    p.to_string().chars().map(|c|(*MAPPING_TO_SUPERSCRIPTS)[&c]).collect()
+}
+
+pub(crate) fn term_to_string<C>(exp: usize, coeff: &C) -> String where C: Semiring + Display {
+
+    let coeff_str = format!("{}", coeff);
+
+    if coeff.is_zero() || coeff_str == "0" {
+        "".to_string()
+
+    } else if coeff.is_one() || coeff_str == "1" {
+        match exp {
+            0 => " + 1".to_string(),
+            1 => " + x".to_string(),
+            _ => format!(" + x{}", to_superscript(exp)),
+        }
+
+    } else if coeff_str == "-1" {
+        match exp {
+            0 => " - 1".to_string(),
+            1 => " - x".to_string(),
+            _ => format!(" - x{}", to_superscript(exp)),
+        }
+
+    } else {
+        if coeff_str.chars().all(|c| "0123456789-.Ee".contains(c)) {
+            let exp_str = match exp {
+                0 => "".to_string(),
+                1 => "x".to_string(),
+                _ => format!("x{}", to_superscript(exp))
+            };
+
+            if coeff_str.starts_with("-") {
+                format!("{}{}", coeff_str.replace("-", " - "), exp_str)
+
+            } else {
+                format!(" + {}{}", coeff_str, exp_str)
+            }
+
+        } else {
+            match exp {
+                0 => if coeff_str.starts_with("-") {
+                    format!(" + ({})", coeff)
+                } else {
+                    format!(" + {}", coeff)  // this sign may be removed
+                },
+                1 => format!(" + ({})x", coeff),
+                _ => format!(" + ({})x{}", coeff, to_superscript(exp)),
+            }       
+        }
+    }
+}
+
+impl<C> Display for Polynomial<C> where C: Semiring + Display {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+
+        match self {
+            Polynomial::Zero() => f.write_str("(0)"),
+            Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
+            _ => {
+                let s: String = self.nonzero_coeffs().map(|(i, c)|term_to_string(i, c)).collect();
+                let first_sign = if s.starts_with(" - ") { "-" } else { "" }; 
+                f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
+            },
+        }
+    }
+}
+ 
+impl<C> Debug for Polynomial<C> where C: Semiring + Display {
+
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let s = match self {
+            Polynomial::Zero() => "Zero",
+            Polynomial::Constant(_) => "Constant",
+            Polynomial::Dense(_) => "Dense",
+            Polynomial::Sparse(_) => "Sparse",
+        };
+        f.write_fmt(format_args!("Polynomial::<{}>::{}[{}]", std::any::type_name::<C>(), s, self))
+    }
+}
+
+//********** Eq, PartialEq, Zero and One **********
+impl<C> PartialEq for Polynomial<C> where C: Semiring {
+
+    fn eq(&self, other: &Polynomial<C>) -> bool {
+
+        if self.degree() != other.degree() { return false; }
+
+        fn has_the_same_content<C>(vec: &Vec<C>, map: &BTreeMap<usize, C>) -> bool where C: num::Zero + PartialEq {
+            let vec_iter = vec.iter().enumerate().filter(|(_, c)| !c.is_zero());
+            let map_iter = map.iter();
+            vec_iter.zip(map_iter).all(|(v, m)| v.0 == *m.0 && v.1 == m.1)
+        }
+
+        match self {
+            Polynomial::Zero() => other.is_zero(),
+            
+            Polynomial::Constant(lhs) => match other {
+                Polynomial::Constant(rhs) => lhs.0 == rhs.0,
+                _ => false,
+            },
+
+            Polynomial::Dense(lhs) => match other {
+                Polynomial::Dense(rhs) => lhs.0 == rhs.0,
+                Polynomial::Sparse(rhs) => has_the_same_content(&lhs.0, &rhs.0),
+                _ => false,
+            },
+
+            Polynomial::Sparse(lhs) => match other {
+                Polynomial::Dense(rhs) => has_the_same_content(&rhs.0, &lhs.0),
+                Polynomial::Sparse(rhs) => lhs.0 == rhs.0,
+                _ => false,
+            },
+        }
+    }
+}
+
+impl<C> Eq for Polynomial<C> where C: Semiring + Eq {}
+
+impl<C> Zero for Polynomial<C> where C: Semiring {
+
+    fn zero() -> Self { Polynomial::Zero() }
+
+    fn is_zero(&self) -> bool {
+        match self {
+            Polynomial::Zero() => true,
+            _ => false,
+        }
+    }
+}
+
+impl<C> ConstZero for Polynomial<C> where C: Semiring + ConstZero + Clone {
+    const ZERO: Self = Polynomial::Zero();
+}
+
+impl<C> num::One for Polynomial<C> where C: Semiring + Clone {
+
+    fn one() -> Self { 
+        Polynomial::Constant(ConstCoeff(C::one()))  // raw creation
+    }
+    
+    fn is_one(&self) -> bool {
+        match self {
+            Polynomial::Constant(cc) => cc.0.is_one(),
+            _ => false,
+        }
+    }
+}
+
+impl<C> ConstOne for Polynomial<C> where C: Semiring + Clone + ConstOne {
+    const ONE: Self = Polynomial::Constant(ConstCoeff(C::ONE));
+}
+
+//********** Iterator **********
+/// Iterate nonzero coefficients
+impl<C> IntoIterator for Polynomial<C> where C: Semiring {
+
+    type Item = (usize, C);
+    type IntoIter = IntoNonzeroCoeffsIter<C>;
+
+    /// Return <code>impl Iterator<Item=(usize, C)></code>.
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Polynomial::Zero() => IntoNonzeroCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => IntoNonzeroCoeffsIter::Constant(Some(cc.0)),
+            Polynomial::Dense(dc) => dc.into_nonzero_coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.into_nonzero_coeffs_iter(),
+        }
+    }
+}
+
+/// Iterate reference of nonzero coefficient
+impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
+
+    type Item = (usize, &'a C);
+    type IntoIter = NonzeroCoeffsIter<'a, C>;
+
+    /// Iterate nonzero coefficients.
+    /// Return <code>impl Iterator<Item=(usize, &C)></code>.
+    fn into_iter(self) -> Self::IntoIter {
+        match self {
+            Polynomial::Zero() => NonzeroCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => NonzeroCoeffsIter::Constant(Some(&cc.0)),
+            Polynomial::Dense(dc) => dc.nonzero_coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.nonzero_coeffs_iter(),
+        }
+    }
+}
+
+pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring, Self::IntoCoeffsIter: Iterator<Item=Self::Coeff>{
+    type Coeff;
+    type IntoCoeffsIter;
+
+    fn coeffs(self) -> Self::IntoCoeffsIter;
+
+    #[inline]
+    fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
+}
+
+impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
+    
+    type Coeff = C;
+    type IntoCoeffsIter = IntoCoeffsIter<C>;
+
+    /// Return <code>impl Iterator<Item=C></code>.
+    fn coeffs(self) -> Self::IntoCoeffsIter {
+        match self {
+            Polynomial::Zero() => IntoCoeffsIter::Zero(),
+            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
+            Polynomial::Dense(dc) => dc.into_coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.into_coeffs_iter(), 
+        }
+    }
+}
+
+impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
+    
+    type Coeff = Option<&'a C>;
+    type IntoCoeffsIter = CoeffsIter<'a, C>;
+
+    /// Return <code>impl Iterator<Item=Option<Option<&C>>></code>.
+    fn coeffs(self) -> Self::IntoCoeffsIter {
+        match self {
+            Polynomial::Zero() => CoeffsIter::Zero(),
+            Polynomial::Constant(cc) => CoeffsIter::Constant(Some(Some(&cc.0))),
+            Polynomial::Dense(dc) => dc.coeffs_iter(),
+            Polynomial::Sparse(sc) => sc.coeffs_iter(), 
+        }
+    }
+}
 
 //********** Semiring Polynomial Operations **********/
 pub trait SemiringPolyOps<C> where C: Semiring {
@@ -543,6 +787,17 @@ impl<'a, C> SemiringPolyOps<C> for &'a Polynomial<C> where C: Semiring + Clone {
     }
 }
 
+impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
+    
+    pub fn derivative(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.derivative(),
+            Polynomial::Sparse(sc) => sc.derivative(),
+            _ => Polynomial::Zero(),
+        }
+    }
+}
+
 //********** Compose **********/
 fn compose_polynomials<'a, 'b, C> (lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Semiring + Clone {
@@ -555,33 +810,12 @@ fn compose_polynomials<'a, 'b, C> (lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C
     }
 
     acc
-
 }
+
 pub trait Compose<C, RHS> where C: Semiring + Clone {
 
     /// Compose this polynomial with another.
     fn compose(self, other: RHS) -> Polynomial<C>;
-}
-
-impl<C> Compose<C, Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-
-    fn compose(self, y: Polynomial<C>) -> Polynomial<C> { self.compose(&y) }
-}
-
-impl<'b, C> Compose<C, &'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-
-    fn compose(self, y: &'b Polynomial<C>) -> Polynomial<C> {
-        match (self, y) {
-            (Polynomial::Zero(), _) => Polynomial::Zero(),
-            (lhs @ Polynomial::Constant(_), _) => lhs,
-            (lhs, Polynomial::Zero()) => match lhs.nth(0) {
-                Some(c) => Polynomial::constant(c.clone()),
-                _ => Polynomial::Zero(),
-            },
-            (lhs, rhs) if rhs.is_x() => lhs,
-            (lhs, rhs) => compose_polynomials(&lhs, rhs),
-        }
-    }
 }
 
 impl<'a, C> Compose<C, Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
@@ -606,12 +840,12 @@ impl<'a, 'b, C> Compose<C, &'b Polynomial<C>> for &'a Polynomial<C> where C: Sem
 }
 
 //********** Methods with Ring Coefficients **********/
-pub trait RingPolyOps<C>: SemiringPolyOps<C> where C: Ring {
+pub trait Flip<C> where C: Ring {
     
     fn flip(self) -> Polynomial<C>;
 }
 
-impl<C> RingPolyOps<C> for Polynomial<C> where C: Ring {
+impl<C> Flip<C> for Polynomial<C> where C: Ring {
 
     fn flip(self) -> Polynomial<C> {
         match self {
@@ -622,7 +856,7 @@ impl<C> RingPolyOps<C> for Polynomial<C> where C: Ring {
     }
 }
 
-impl<'a, C> RingPolyOps<C> for &'a Polynomial<C> where C: Ring + Clone {
+impl<'a, C> Flip<C> for &'a Polynomial<C> where C: Ring + Clone {
 
     fn flip(self) -> Polynomial<C> {
         match self {
@@ -636,34 +870,19 @@ impl<'a, C> RingPolyOps<C> for &'a Polynomial<C> where C: Ring + Clone {
 
 //********** Methods with Euclidean Ring Coefficients **********/
 /// x * y / z
-pub(crate) fn mul_div_uint(x: u128, y: usize, z: u128) -> u128 {
+pub(crate) fn mul_div_uint<C>(x: C, y: usize, z: C) -> C
+        where C: EuclideanRing + num::FromPrimitive + num::Integer + Clone {
+
     let gcd_xz = x.gcd(&z);
-    let x_red = x / gcd_xz;
-    let z_red = z /gcd_xz;
-    let y_red = y as u128 / z_red;
+    let x_red = x / gcd_xz.clone();
+    let z_red = z / gcd_xz;
+    let y_red = C::from_usize(y).unwrap() / z_red;
     x_red * y_red
 }
 
-pub trait EuclideanRingPolyOps<C>: RingPolyOps<C> where C: EuclideanRing {
+impl<C> Polynomial<C> where C: EuclideanRing + num::FromPrimitive + num::Integer + Clone {
 
-    fn shift(self, h: C) -> Polynomial<C>;
-}
-
-impl<C> EuclideanRingPolyOps<C> for Polynomial<C> where C: EuclideanRing + FromPrimitive + Clone {
-
-    fn shift(self, h: C) -> Polynomial<C> {
-        if h.is_zero() { return self }
-        match self {
-            Polynomial::Dense(dc) => dc.shift(h),
-            Polynomial::Sparse(sc) => sc.shift(h),
-            _ => self,
-        }
-    }
-}
-
-impl<'a, C> EuclideanRingPolyOps<C> for &'a Polynomial<C> where C: EuclideanRing + FromPrimitive + Clone {
-
-    fn shift(self, h: C) -> Polynomial<C> {
+    pub fn shift(&self, h: C) -> Polynomial<C> {
         if h.is_zero() { return self.clone() }
         match self {
             Polynomial::Dense(dc) => dc.shift(h),
@@ -673,40 +892,19 @@ impl<'a, C> EuclideanRingPolyOps<C> for &'a Polynomial<C> where C: EuclideanRing
     }
 }
 
+impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone {
+
+    pub fn shift_f(&self, h: C) -> Polynomial<C> {
+        if h.is_zero() { return self.clone() }
+        match self {
+            Polynomial::Dense(dc) => dc.shift_f(h),
+            Polynomial::Sparse(sc) => sc.shift_f(h),
+            _ => self.clone(),
+        }
+    }
+}
+
 //********** Methods with Field Coefficients **********/
-pub trait FieldPolyOps<C>: RingPolyOps<C> where C: Field {
-
-    fn monic(self) -> Polynomial<C>;
-}
-
-impl<C> FieldPolyOps<C> for Polynomial<C> where C: Field + Clone {
-    
-    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. `max_order_term_coeff`) is 1.
-    fn monic(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => self,
-            Polynomial::Constant(_) => Polynomial::one(),
-            _ => {
-                let c = self.max_order_term_coeff().unwrap().clone();
-                self / c
-            },
-        }
-    }
-}
-
-impl<'a, C> FieldPolyOps<C> for &'a Polynomial<C> where C: Field + Clone {
-
-    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. ``max_order_term_coeff`) is 1.
-    fn monic(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(_) => Polynomial::one(),
-            _ => {
-                let c = self.max_order_term_coeff().unwrap().clone();
-                self / c
-            },
-        }
-    }
 
 
     //   /**
@@ -731,248 +929,31 @@ impl<'a, C> FieldPolyOps<C> for &'a Polynomial<C> where C: Field + Clone {
     // pub fn roots(self) -> Roots<C> {
     //     todo!()
     // }
-}
- 
-//********** Display and Debug **********
-static SUPERSCRIPTS: &'static str = "⁰¹²³⁴⁵⁶⁷⁸⁹";
 
-// [('0', '⁰'), ('1', '¹'), ...]
-static MAPPING_TO_SUPERSCRIPTS: Lazy<HashMap<char, char>> = Lazy::new(||{
-    SUPERSCRIPTS.chars().enumerate()
-        .map(|e| (e.0.to_string().chars().next().unwrap(), e.1))
-        .collect::<HashMap<char, char>>()
-});
 
-// 123_usize -> "¹²³"
-fn to_superscript(p: usize) -> String {
-    p.to_string().chars().map(|c|(*MAPPING_TO_SUPERSCRIPTS)[&c]).collect()
-}
+impl<C> Polynomial<C> where C: Field + Clone {
 
-pub(crate) fn term_to_string<C>(exp: usize, coeff: &C) -> String where C: Semiring + Display {
-
-    let coeff_str = format!("{}", coeff);
-
-    if coeff.is_zero() || coeff_str == "0" {
-        "".to_string()
-
-    } else if coeff.is_one() || coeff_str == "1" {
-        match exp {
-            0 => " + 1".to_string(),
-            1 => " + x".to_string(),
-            _ => format!(" + x{}", to_superscript(exp)),
-        }
-
-    } else if coeff_str == "-1" {
-        match exp {
-            0 => " - 1".to_string(),
-            1 => " - x".to_string(),
-            _ => format!(" - x{}", to_superscript(exp)),
-        }
-
-    } else {
-        if coeff_str.chars().all(|c| "0123456789-.Ee".contains(c)) {
-            let exp_str = match exp {
-                0 => "".to_string(),
-                1 => "x".to_string(),
-                _ => format!("x{}", to_superscript(exp))
-            };
-
-            if coeff_str.starts_with("-") {
-                format!("{}{}", coeff_str.replace("-", " - "), exp_str)
-
-            } else {
-                format!(" + {}{}", coeff_str, exp_str)
-            }
-
-        } else {
-            match exp {
-                0 => if coeff_str.starts_with("-") {
-                    format!(" + ({})", coeff)
-                } else {
-                    format!(" + {}", coeff)  // this sign may be removed
-                },
-                1 => format!(" + ({})x", coeff),
-                _ => format!(" + ({})x{}", coeff, to_superscript(exp)),
-            }       
-        }
-    }
-}
-
-impl<C> Display for Polynomial<C> where C: Semiring + Display {
-
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-
+    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. ``max_order_term_coeff`) is 1.
+    pub fn monic(&self) -> Polynomial<C> {
         match self {
-            Polynomial::Zero() => f.write_str("(0)"),
-            Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(_) => Polynomial::one(),
             _ => {
-                let s: String = self.nonzero_coeffs().map(|(i, c)|term_to_string(i, c)).collect();
-                let first_sign = if s.starts_with(" - ") { "-" } else { "" }; 
-                f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
-            },
-        }
-    }
-}
- 
-impl<C> Debug for Polynomial<C> where C: Semiring + Display {
-
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        let s = match self {
-            Polynomial::Zero() => "Zero",
-            Polynomial::Constant(_) => "Constant",
-            Polynomial::Dense(_) => "Dense",
-            Polynomial::Sparse(_) => "Sparse",
-        };
-        f.write_fmt(format_args!("Polynomial::<{}>::{}[{}]", std::any::type_name::<C>(), s, self))
-    }
-}
-
-//********** Eq, PartialEq, Zero and One **********
-impl<C> PartialEq for Polynomial<C> where C: Semiring {
-
-    fn eq(&self, other: &Polynomial<C>) -> bool {
-
-        if self.degree() != other.degree() { return false; }
-
-        fn has_the_same_content<C>(vec: &Vec<C>, map: &BTreeMap<usize, C>) -> bool where C: Zero + PartialEq {
-            let vec_iter = vec.iter().enumerate().filter(|(_, c)| !c.is_zero());
-            let map_iter = map.iter();
-            vec_iter.zip(map_iter).all(|(v, m)| v.0 == *m.0 && v.1 == m.1)
-        }
-
-        match self {
-            Polynomial::Zero() => other.is_zero(),
-            
-            Polynomial::Constant(lhs) => match other {
-                Polynomial::Constant(rhs) => lhs.0 == rhs.0,
-                _ => false,
-            },
-
-            Polynomial::Dense(lhs) => match other {
-                Polynomial::Dense(rhs) => lhs.0 == rhs.0,
-                Polynomial::Sparse(rhs) => has_the_same_content(&lhs.0, &rhs.0),
-                _ => false,
-            },
-
-            Polynomial::Sparse(lhs) => match other {
-                Polynomial::Dense(rhs) => has_the_same_content(&rhs.0, &lhs.0),
-                Polynomial::Sparse(rhs) => lhs.0 == rhs.0,
-                _ => false,
+                let c = self.max_order_term_coeff().unwrap().clone();
+                self / c
             },
         }
     }
 }
 
-impl<C> Eq for Polynomial<C> where C: Semiring + Eq {}
+impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone {
 
-impl<C> Zero for Polynomial<C> where C: Semiring {
-
-    fn zero() -> Self { Polynomial::Zero() }
-
-    fn is_zero(&self) -> bool {
+    pub fn integral(&self) -> Polynomial<C> {
         match self {
-            Polynomial::Zero() => true,
-            _ => false,
-        }
-    }
-}
-
-impl<C> ConstZero for Polynomial<C> where C: Semiring + ConstZero + Clone {
-    const ZERO: Self = Polynomial::Zero();
-}
-
-impl<C> One for Polynomial<C> where C: Semiring + Clone {
-
-    fn one() -> Self { 
-        Polynomial::Constant(ConstCoeff(C::one()))  // raw creation
-    }
-    
-    fn is_one(&self) -> bool {
-        match self {
-            Polynomial::Constant(cc) => cc.0.is_one(),
-            _ => false,
-        }
-    }
-}
-
-impl<C> ConstOne for Polynomial<C> where C: Semiring + Clone + ConstOne {
-    const ONE: Self = Polynomial::Constant(ConstCoeff(C::ONE));
-}
-
-//********** Iterator **********
-/// Iterate nonzero coefficients
-impl<C> IntoIterator for Polynomial<C> where C: Semiring {
-
-    type Item = (usize, C);
-    type IntoIter = IntoNonzeroCoeffsIter<C>;
-
-    /// Return <code>impl Iterator<Item=(usize, C)></code>.
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            Polynomial::Zero() => IntoNonzeroCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => IntoNonzeroCoeffsIter::Constant(Some(cc.0)),
-            Polynomial::Dense(dc) => dc.into_nonzero_coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.into_nonzero_coeffs_iter(),
-        }
-    }
-}
-
-/// Iterate reference of nonzero coefficient
-impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
-
-    type Item = (usize, &'a C);
-    type IntoIter = NonzeroCoeffsIter<'a, C>;
-
-    /// Iterate nonzero coefficients.
-    /// Return <code>impl Iterator<Item=(usize, &C)></code>.
-    fn into_iter(self) -> Self::IntoIter {
-        match self {
-            Polynomial::Zero() => NonzeroCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => NonzeroCoeffsIter::Constant(Some(&cc.0)),
-            Polynomial::Dense(dc) => dc.nonzero_coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.nonzero_coeffs_iter(),
-        }
-    }
-}
-
-pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring, Self::IntoCoeffsIter: Iterator<Item=Self::Coeff>{
-    type Coeff;
-    type IntoCoeffsIter;
-
-    fn coeffs(self) -> Self::IntoCoeffsIter;
-
-    #[inline]
-    fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
-}
-
-impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
-    
-    type Coeff = C;
-    type IntoCoeffsIter = IntoCoeffsIter<C>;
-
-    /// Return <code>impl Iterator<Item=C></code>.
-    fn coeffs(self) -> Self::IntoCoeffsIter {
-        match self {
-            Polynomial::Zero() => IntoCoeffsIter::Zero(),
-            Polynomial::Constant(cc) => IntoCoeffsIter::Constant(Some(cc.0)),
-            Polynomial::Dense(dc) => dc.into_coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.into_coeffs_iter(), 
-        }
-    }
-}
-
-impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
-    
-    type Coeff = Option<&'a C>;
-    type IntoCoeffsIter = CoeffsIter<'a, C>;
-
-    /// Return <code>impl Iterator<Item=Option<Option<&C>>></code>.
-    fn coeffs(self) -> Self::IntoCoeffsIter {
-        match self {
-            Polynomial::Zero() => CoeffsIter::Zero(),
-            Polynomial::Constant(cc) => CoeffsIter::Constant(Some(Some(&cc.0))),
-            Polynomial::Dense(dc) => dc.coeffs_iter(),
-            Polynomial::Sparse(sc) => sc.coeffs_iter(), 
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
+            Polynomial::Dense(dc) => dc.integral(),
+            Polynomial::Sparse(sc) => sc.integral(),
         }
     }
 }
@@ -1670,64 +1651,6 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
     }
 }
 
-//********** Analysis **********/
-pub trait Differentiable<C> where C: Semiring + FromPrimitive {
-    
-    fn derivative(self) -> Polynomial<C>;
-}
-
-impl<C> Differentiable<C> for Polynomial<C> where C: Semiring + FromPrimitive {
-    
-    fn derivative(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.derivative(),
-            Polynomial::Sparse(sc) => sc.derivative(),
-            _ => Polynomial::Zero(),
-        }
-    }
-}
-
-impl<'a, C> Differentiable<C> for &'a Polynomial<C> where C: Semiring + FromPrimitive + Clone {
-    
-    fn derivative(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.derivative(),
-            Polynomial::Sparse(sc) => sc.derivative(),
-            _ => Polynomial::Zero(),
-        }
-    }
-}
-
-pub trait Integrable<C> where C: Field + FromPrimitive {
-
-    fn integral(self) -> Polynomial<C>;
-}
-    
-impl<C> Integrable<C> for Polynomial<C> where C: Field + FromPrimitive {
-
-    fn integral(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0),
-            Polynomial::Dense(dc) => dc.integral(),
-            Polynomial::Sparse(sc) => sc.integral(),
-        }
-    }
-}
-
-impl<'a, C> Integrable<C> for &'a Polynomial<C> where C: Field + FromPrimitive  + Clone {
-
-    fn integral(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
-            Polynomial::Dense(dc) => dc.integral(),
-            Polynomial::Sparse(sc) => sc.integral(),
-        }
-    }
-}
-
-
 //********** Implementation of Algebra *********/
 impl<C> RefAdd<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
     #[inline]
@@ -1806,4 +1729,4 @@ impl<C> EuclideanRing for Polynomial<C> where C: Field + Clone {
     fn ref_div_rem(&self, other: &Self) -> (Self, Self) {
         self.div_rem_euclid(other)
     }
-} 
+}

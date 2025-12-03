@@ -1,5 +1,5 @@
 use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
-use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Differentiable, EuclideanRingPolyOps, Integrable, Polynomial, RingPolyOps, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
+use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, Flip, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
 
 #[derive(Clone)]
 pub struct DenseCoeffs<C>(pub(crate) Vec<C>);
@@ -42,128 +42,6 @@ impl<C> DenseCoeffs<C> where C: Semiring {
 //     c0
 //   }
 // }
-}
-
-impl<C> SemiringPolyOps<C> for DenseCoeffs<C> where C: Semiring {
-    
-    fn to_vec(self) -> Vec<C> { self.0 }
-    
-    fn to_map(mut self) -> BTreeMap<usize, C> {
-        let mut map = BTreeMap::new();
-        while let Some(c) = self.0.pop() {
-            if !c.is_zero() {
-                map.insert(self.0.len(), c);
-            }
-        }
-        debug_assert!(self.0.is_empty());
-        map
-    }
-
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
-        let v: Vec<D> = self.0.into_iter().enumerate().map(|(i, c)|
-            if c.is_zero() { D::zero() } else { f(i, c) }
-        ).collect();
-        Polynomial::dense_from_vec(v)
-    }
-
-    fn reductum(mut self) -> Polynomial<C> {
-        self.0.pop();
-        Polynomial::dense_from_vec(self.0)
-    }
-
-    fn remove_zero_roots(self) -> Polynomial<C> {
-        let vec: Vec<C> = self.0.into_iter().skip_while(|c|c.is_zero()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-
-    fn reciprocal(self) -> Polynomial<C> {
-        let mut vec = self.0;
-        vec.reverse();
-        Polynomial::dense_from_vec(vec)
-    }
-}
-
-impl<'a, C> SemiringPolyOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
-    
-    fn to_vec(self) -> Vec<C> { self.0.clone() }
-    
-    fn to_map(self) -> BTreeMap<usize, C> {
-        self.nonzero_coeffs_iter().map(|(i, c)|(i, c.clone())).collect()
-    }
-
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
-        let v: Vec<D> = self.0.iter().enumerate().map(|(i, c)|
-            if c.is_zero() { D::zero() } else { f(i, c.clone()) }
-        ).collect();
-        Polynomial::dense_from_vec(v)
-    }
-
-    fn reductum(self) -> Polynomial<C> {
-        let n = self.0.len();
-        let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-
-    fn remove_zero_roots(self) -> Polynomial<C> {
-        let vec: Vec<C> = self.0.iter().skip_while(|c|c.is_zero()).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-
-    fn reciprocal(self) -> Polynomial<C> {
-        let mut vec = Vec::with_capacity(self.0.len());
-        self.0.iter().rev().for_each(|c| vec.push(c.clone()));
-        Polynomial::dense_from_vec(vec)
-    }
-}
-
-impl<C> RingPolyOps<C> for DenseCoeffs<C> where C: Ring {
-
-    fn flip(mut self) -> Polynomial<C> {
-        self.0.iter_mut().enumerate().filter(|(i, _)| i % 2 != 0).for_each(|(_, c)| *c = c.ref_neg());
-        Polynomial::Dense(self)
-    }
-}
-
-impl<'a, C> RingPolyOps<C> for &'a DenseCoeffs<C> where C: Ring + Clone {
-
-    fn flip(self) -> Polynomial<C> {
-        let vec: Vec<C> = 
-            self.0.iter().enumerate().map(|(i, c)|{
-                if i % 2 == 0 { c.clone() } else { c.ref_neg() }
-            }).collect();
-        Polynomial::Dense(DenseCoeffs(vec))
-    }
-}
-
-impl<'a, C> EuclideanRingPolyOps<C> for &'a DenseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + Clone {
-
-    // ** From spire code *****
-    // The trick here came from this answer:
-    //   http://math.stackexchange.com/questions/694565/polynomial-shift
-    // This is a heavily optimized version of the same idea. This is fairly
-    // critical method to be fast, since it is the most expensive part of the
-    // VAS root isolation algorithm.
-    fn shift(self, h: C) -> Polynomial<C> {
-
-        let mut coeffs: Vec<C> = self.0.clone();
-        for (deg, c) in self.nonzero_coeffs_iter() {
-            if deg == 0 { continue }
-            let mut i: u128 = 1;
-            let mut d: usize = deg;
-            let mut m: u128 = 1;
-            let mut k: C = c.clone();
-            while d > 0 {
-                m = mul_div_uint(m, d, i);  // (m * d) / i;
-                k = k * &h;
-                if let Some(coeff) = coeffs.get_mut(d-1) {
-                    *coeff = coeff.ref_add(C::from_u128(m).unwrap() * &k);
-                }
-                d = d - 1;
-                i = i + 1;
-            }
-        }
-        Polynomial::dense_from_vec(coeffs)
-    }
 }
 
 //********** Iterator **********/
@@ -248,6 +126,175 @@ impl<'a, C> Iterator for DCoeffsIter<'a, C> where C: Semiring {
     }
     
     fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
+}
+
+impl<C> SemiringPolyOps<C> for DenseCoeffs<C> where C: Semiring {
+    
+    fn to_vec(self) -> Vec<C> { self.0 }
+    
+    fn to_map(mut self) -> BTreeMap<usize, C> {
+        let mut map = BTreeMap::new();
+        while let Some(c) = self.0.pop() {
+            if !c.is_zero() {
+                map.insert(self.0.len(), c);
+            }
+        }
+        debug_assert!(self.0.is_empty());
+        map
+    }
+
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+        let v: Vec<D> = self.0.into_iter().enumerate().map(|(i, c)|
+            if c.is_zero() { D::zero() } else { f(i, c) }
+        ).collect();
+        Polynomial::dense_from_vec(v)
+    }
+
+    fn reductum(mut self) -> Polynomial<C> {
+        self.0.pop();
+        Polynomial::dense_from_vec(self.0)
+    }
+
+    fn remove_zero_roots(self) -> Polynomial<C> {
+        let vec: Vec<C> = self.0.into_iter().skip_while(|c|c.is_zero()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+
+    fn reciprocal(self) -> Polynomial<C> {
+        let mut vec = self.0;
+        vec.reverse();
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<'a, C> SemiringPolyOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
+    
+    fn to_vec(self) -> Vec<C> { self.0.clone() }
+    
+    fn to_map(self) -> BTreeMap<usize, C> {
+        self.nonzero_coeffs_iter().map(|(i, c)|(i, c.clone())).collect()
+    }
+
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+        let v: Vec<D> = self.0.iter().enumerate().map(|(i, c)|
+            if c.is_zero() { D::zero() } else { f(i, c.clone()) }
+        ).collect();
+        Polynomial::dense_from_vec(v)
+    }
+
+    fn reductum(self) -> Polynomial<C> {
+        let n = self.0.len();
+        let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+
+    fn remove_zero_roots(self) -> Polynomial<C> {
+        let vec: Vec<C> = self.0.iter().skip_while(|c|c.is_zero()).map(|c|c.clone()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+
+    fn reciprocal(self) -> Polynomial<C> {
+        let mut vec = Vec::with_capacity(self.0.len());
+        self.0.iter().rev().for_each(|c| vec.push(c.clone()));
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
+    
+    pub(crate) fn derivative(&self) -> Polynomial<C> {
+        let mut ite = self.0.iter().enumerate();
+        ite.next();
+        let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<C> Flip<C> for DenseCoeffs<C> where C: Ring {
+
+    fn flip(mut self) -> Polynomial<C> {
+        self.0.iter_mut().enumerate().filter(|(i, _)| i % 2 != 0).for_each(|(_, c)| *c = c.ref_neg());
+        Polynomial::Dense(self)
+    }
+}
+
+impl<'a, C> Flip<C> for &'a DenseCoeffs<C> where C: Ring + Clone {
+
+    fn flip(self) -> Polynomial<C> {
+        let vec: Vec<C> = 
+            self.0.iter().enumerate().map(|(i, c)|{
+                if i % 2 == 0 { c.clone() } else { c.ref_neg() }
+            }).collect();
+        Polynomial::Dense(DenseCoeffs(vec))
+    }
+}
+    
+impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
+
+    pub(crate) fn integral(&self) -> Polynomial<C> {
+        let n = self.0.len();
+        let ite = self.0.iter().enumerate();
+        let mut vec: Vec<C> = Vec::with_capacity(n+1);
+        vec.push(C::zero());
+        vec.extend(ite.map(|(i, c)| c.ref_div(C::from_usize(i+1).unwrap())));
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Integer + Clone {
+
+    // ** From spire code *****
+    // The trick here came from this answer:
+    //   http://math.stackexchange.com/questions/694565/polynomial-shift
+    // This is a heavily optimized version of the same idea. This is fairly
+    // critical method to be fast, since it is the most expensive part of the
+    // VAS root isolation algorithm.
+    pub(crate) fn shift(&self, h: C) -> Polynomial<C> {
+
+        let mut coeffs: Vec<C> = self.0.clone();
+        for (deg, c) in self.nonzero_coeffs_iter() {
+            if deg == 0 { continue; }
+            let mut i: C = C::one();
+            let mut d: usize = deg;
+            let mut m: C = C::one();
+            let mut k: C = c.clone();
+            while d > 0 {
+                m = mul_div_uint(m, d, i.clone());  // (m * d) / i;
+                k = k * &h;
+                if let Some(coeff) = coeffs.get_mut(d-1) {
+                    *coeff = coeff.ref_add(m.ref_mul(&k));
+                }
+                d = d - 1;
+                i = i + C::one();
+            }
+        }
+        Polynomial::dense_from_vec(coeffs)
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
+
+    pub(crate) fn shift_f(&self, h: C) -> Polynomial<C> {
+
+        let mut coeffs: Vec<C> = self.0.clone();
+        for (deg, c) in self.nonzero_coeffs_iter() {
+            if deg == 0 { continue; }
+            let mut i: C = C::one();
+            let mut d: usize = deg;
+            let mut m: C = C::one();
+            let mut k: C = c.clone();
+            while d > 0 {
+                m = m * C::from_usize(d).unwrap() / i.clone();
+                k = k * &h;
+                if let Some(coeff) = coeffs.get_mut(d-1) {
+                    *coeff = coeff.ref_add(m.ref_mul(&k));
+                }
+                d = d - 1;
+                i = i + C::one();
+            }
+        }
+        Polynomial::dense_from_vec(coeffs)
+    }
 }
 
 //********** Add **********/
@@ -555,49 +602,4 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
 
     q.reverse();
     (Polynomial::dense_from_vec(q), Polynomial::dense_from_vec(u))
-}
-
-//********** Analysis **********/
-impl<C> Differentiable<C> for DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
-    
-    fn derivative(self) -> Polynomial<C> {
-        let mut ite = self.0.into_iter().enumerate();
-        ite.next();
-        let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-}
-
-impl<'a, C> Differentiable<C> for &'a DenseCoeffs<C> where C: Semiring + num::FromPrimitive  + Clone {
-    
-    fn derivative(self) -> Polynomial<C> {
-        let mut ite = self.0.iter().enumerate();
-        ite.next();
-        let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-}
-    
-impl<C> Integrable<C> for DenseCoeffs<C> where C: Field + num::FromPrimitive {
-
-    fn integral(self) -> Polynomial<C> {
-        let n = self.0.len();
-        let ite = self.0.into_iter().enumerate();
-        let mut vec: Vec<C> = Vec::with_capacity(n+1);
-        vec.push(C::zero());
-        vec.extend(ite.map(|(i, c)| c / C::from_usize(i+1).unwrap()));
-        Polynomial::dense_from_vec(vec)
-    }
-}
-
-impl<'a, C> Integrable<C> for &'a DenseCoeffs<C> where C: Field + num::FromPrimitive  + Clone {
-
-    fn integral(self) -> Polynomial<C> {
-        let n = self.0.len();
-        let ite = self.0.iter().enumerate();
-        let mut vec: Vec<C> = Vec::with_capacity(n+1);
-        vec.push(C::zero());
-        vec.extend(ite.map(|(i, c)| c.clone() / C::from_usize(i+1).unwrap()));
-        Polynomial::dense_from_vec(vec)
-    }
 }
