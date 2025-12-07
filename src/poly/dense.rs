@@ -1,20 +1,28 @@
 use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
-use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, Flip, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
+use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint, remove_tail_zeros}};
 
 #[derive(Clone)]
 pub struct DenseCoeffs<C>(pub(crate) Vec<C>);
 
 impl<C> DenseCoeffs<C> where C: Semiring {
 
-    pub fn degree(&self) -> usize {
+    pub(crate) fn degree(&self) -> usize {
         self.0.len() - 1
     }
 
-    pub fn nth(&self, n: usize) -> Option<&C> {
+    pub(crate) fn nth(&self, n: usize) -> Option<&C> {
         self.0.get(n)
     }
+
+    pub(crate) fn max_order_term(&self) -> Option<(usize, &C)> {
+        self.0.last().map(|c|(self.degree(), c))
+    }
+
+    pub(crate) fn min_order_term(&self) -> Option<(usize, &C)> {
+        self.0.iter().enumerate().skip_while(|e|e.1.is_zero()).next()
+    }
     
-    pub fn is_x(&self) -> bool {
+    pub(crate) fn is_x(&self) -> bool {
         self.0.len() == 2 && self.0[0].is_zero() && self.0[1].is_one()
     }
 
@@ -42,6 +50,62 @@ impl<C> DenseCoeffs<C> where C: Semiring {
 //     c0
 //   }
 // }
+
+    pub(crate) fn reciprocal(&mut self) -> Option<Polynomial<C>> {
+        self.0.reverse();
+        normalize_vec_or_new_poly(&mut self.0)
+    }
+
+    pub(crate) fn remove_zero_roots(&mut self) -> Option<Polynomial<C>> {
+        if let Some((i, _)) = self.min_order_term() {
+            if i == 0 { return None }
+            let vec = &mut self.0;
+            vec.drain(0..i);
+            normalize_vec_or_new_poly(vec)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn reductum(&mut self) -> Option<Polynomial<C>> {
+        self.0.pop();
+        normalize_vec_or_new_poly(&mut self.0)
+    }
+}
+
+fn normalize_vec_or_new_poly<C>(vec: &mut Vec<C>) -> Option<Polynomial<C>> where C: Semiring {
+
+    remove_tail_zeros(vec);
+
+    match vec.len() {
+        0 => Some(Polynomial::Zero()),
+        1 if vec.len() == 1 =>
+            Some(Polynomial::new_raw_const(vec.pop().unwrap())),
+        _ => {
+            vec.shrink_to_fit();
+            None
+        },
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: Semiring + Clone {
+
+    pub(crate) fn new_reciprocal(&self) -> Polynomial<C> {
+        let mut vec = Vec::with_capacity(self.0.len());
+        self.0.iter().rev().for_each(|c| vec.push(c.clone()));
+        Polynomial::dense_from_vec(vec)
+    }
+
+    pub(crate) fn new_zero_roots_removed(&self) -> Polynomial<C> {
+        let vec: Vec<C> = self.0.iter().skip_while(|c|c.is_zero()).map(|c|c.clone()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+
+    pub(crate) fn new_reductum(&self) -> Polynomial<C> {
+        let n = self.0.len();
+        let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
 }
 
 //********** Iterator **********/
@@ -149,22 +213,6 @@ impl<C> SemiringPolyOps<C> for DenseCoeffs<C> where C: Semiring {
         ).collect();
         Polynomial::dense_from_vec(v)
     }
-
-    fn reductum(mut self) -> Polynomial<C> {
-        self.0.pop();
-        Polynomial::dense_from_vec(self.0)
-    }
-
-    fn remove_zero_roots(self) -> Polynomial<C> {
-        let vec: Vec<C> = self.0.into_iter().skip_while(|c|c.is_zero()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-
-    fn reciprocal(self) -> Polynomial<C> {
-        let mut vec = self.0;
-        vec.reverse();
-        Polynomial::dense_from_vec(vec)
-    }
 }
 
 impl<'a, C> SemiringPolyOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
@@ -181,28 +229,11 @@ impl<'a, C> SemiringPolyOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone 
         ).collect();
         Polynomial::dense_from_vec(v)
     }
-
-    fn reductum(self) -> Polynomial<C> {
-        let n = self.0.len();
-        let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-
-    fn remove_zero_roots(self) -> Polynomial<C> {
-        let vec: Vec<C> = self.0.iter().skip_while(|c|c.is_zero()).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-
-    fn reciprocal(self) -> Polynomial<C> {
-        let mut vec = Vec::with_capacity(self.0.len());
-        self.0.iter().rev().for_each(|c| vec.push(c.clone()));
-        Polynomial::dense_from_vec(vec)
-    }
 }
 
 impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
     
-    pub(crate) fn derivative(&self) -> Polynomial<C> {
+    pub(crate) fn new_derivative(&self) -> Polynomial<C> {
         let mut ite = self.0.iter().enumerate();
         ite.next();
         let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
@@ -210,17 +241,16 @@ impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
     }
 }
 
-impl<C> Flip<C> for DenseCoeffs<C> where C: Ring {
+impl<C> DenseCoeffs<C> where C: Ring {
 
-    fn flip(mut self) -> Polynomial<C> {
+    pub(crate) fn flip(&mut self){
         self.0.iter_mut().enumerate().filter(|(i, _)| i % 2 != 0).for_each(|(_, c)| *c = c.ref_neg());
-        Polynomial::Dense(self)
     }
 }
 
-impl<'a, C> Flip<C> for &'a DenseCoeffs<C> where C: Ring + Clone {
+impl<C> DenseCoeffs<C> where C: Ring + Clone {
 
-    fn flip(self) -> Polynomial<C> {
+    pub(crate) fn new_flipped(&self) -> Polynomial<C> {
         let vec: Vec<C> = 
             self.0.iter().enumerate().map(|(i, c)|{
                 if i % 2 == 0 { c.clone() } else { c.ref_neg() }
@@ -581,7 +611,7 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
 
     let d_rhs = rhs.degree();
     let n = u.len() - d_rhs;  // = lhs.degree() + 1 - rhs.degree()
-    let v0: &C = rhs.max_order_term_coeff().unwrap();
+    let v0: &C = rhs.max_order_term().unwrap().1;
     let mut q: Vec<C> = Vec::with_capacity(n);
 
     for _ in 0..n {

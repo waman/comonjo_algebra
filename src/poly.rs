@@ -67,7 +67,6 @@ pub enum Polynomial<C> where C: Semiring {
     Sparse(SparseCoeffs<C>)
 }
 
-#[derive(Clone)]
 pub struct ConstCoeff<C: Semiring>(pub(crate) C);
 
 #[macro_export]
@@ -100,23 +99,21 @@ impl<C> Polynomial<C> where C: Semiring {
         if c.is_zero() {
             Polynomial::Zero()
         } else {
-            Polynomial::Constant(ConstCoeff(c))
+            Polynomial::new_raw_const(c)
         }
+    }
+
+    pub(crate) fn new_raw_const(c: C) -> Polynomial<C> {
+        Polynomial::Constant(ConstCoeff(c))
     }
 
     pub fn dense_from_vec(mut coeffs: Vec<C>) -> Polynomial<C>  {
 
-        while let Some(c) = coeffs.last() {
-            if c.is_zero() {
-                coeffs.pop();
-            } else {
-                break;
-            }
-        }
+        remove_tail_zeros(&mut coeffs);
 
         match coeffs.len() {
             0 => Polynomial::Zero(),
-            1 => Polynomial::constant(coeffs.pop().unwrap()),
+            1 => Polynomial::new_raw_const(coeffs.pop().unwrap()),
             _ => {
                 coeffs.shrink_to_fit();
                 Polynomial::Dense(DenseCoeffs(coeffs))
@@ -132,7 +129,7 @@ impl<C> Polynomial<C> where C: Semiring {
             0 => Polynomial::Zero(),
             1 => {
                 if coeffs.contains_key(&0) {
-                    Polynomial::constant(coeffs.remove(&0).unwrap())
+                    Polynomial::new_raw_const(coeffs.remove(&0).unwrap())
                 } else {
                     Polynomial::Sparse(SparseCoeffs(coeffs))
                 }
@@ -261,6 +258,16 @@ impl<C> Polynomial<C> where C: Semiring {
     pub fn cubic(a: C, b: C, c: C, d: C) -> Polynomial<C> { sparse![(3, a), (2, b), (1, c), (0, d)] }
 }
 
+pub(crate) fn remove_tail_zeros<C>(vec: &mut Vec<C>) where C: Semiring {
+    while let Some(c) = vec.last() {
+        if c.is_zero() {
+            vec.pop();
+        } else {
+            break;
+        }
+    }
+}
+
 //********** METHODS with Semiring coefficients ******
 impl<C> Polynomial<C> where C: Semiring {
     
@@ -271,21 +278,6 @@ impl<C> Polynomial<C> where C: Semiring {
     
     //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
     //     this.map(f).apply(x)
-
-    pub fn is_constant(&self) -> bool {
-        match self {
-            Polynomial::Zero() | Polynomial::Constant(_) => true,
-            _ => false,
-        }
-    }
-
-    pub fn is_x(&self) -> bool {
-        match self {
-            Polynomial::Zero() | Polynomial::Constant(_) => false,
-            Polynomial::Dense(dc) => dc.is_x(),
-            Polynomial::Sparse(sc) => sc.is_x(),
-        }
-    }
 
     pub fn degree(&self) -> usize {
         match self {
@@ -303,6 +295,39 @@ impl<C> Polynomial<C> where C: Semiring {
             Polynomial::Sparse(sc) => sc.nth(n),
         }
     }
+
+    pub fn max_order_term(&self) -> Option<(usize, &C)> {
+        match self {
+            Polynomial::Zero() => None,
+            Polynomial::Constant(cc) => Some((0, &cc.0)),
+            Polynomial::Dense(dc) => dc.max_order_term(),
+            Polynomial::Sparse(sc) => sc.max_order_term(),
+        }
+    }
+
+    pub fn min_order_term(&self) -> Option<(usize, &C)> {
+        match self {
+            Polynomial::Zero() => None,
+            Polynomial::Constant(cc) => Some((0, &cc.0)),
+            Polynomial::Dense(dc) => dc.min_order_term(),
+            Polynomial::Sparse(sc) => sc.min_order_term(),
+        }
+    }
+
+    pub fn is_constant(&self) -> bool {
+        match self {
+            Polynomial::Zero() | Polynomial::Constant(_) => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_x(&self) -> bool {
+        match self {
+            Polynomial::Zero() | Polynomial::Constant(_) => false,
+            Polynomial::Dense(dc) => dc.is_x(),
+            Polynomial::Sparse(sc) => sc.is_x(),
+        }
+    }
      
     /// Return dense expression of this polynomial if this is sparse, otherwise (zero or constant) self.
     pub fn to_dense(self) -> Polynomial<C> {
@@ -317,15 +342,6 @@ impl<C> Polynomial<C> where C: Semiring {
         match self {
             Polynomial::Dense(dc) => Polynomial::sparse_from_map(dc.to_map()),
             _ => self
-        }
-    }
-
-
-    // the following methods are used?
-    pub fn max_order_term_coeff(&self) -> Option<&C> {
-        match self {
-            Polynomial::Zero() => None,
-            _ => self.nth(self.degree())
         }
     }
 
@@ -362,6 +378,40 @@ impl<C> Polynomial<C> where C: Semiring {
 //   }
         todo!()
     }
+
+    /// Reference: <a href="http://en.wikipedia.org/wiki/Reciprocal_polynomial">Reciprocal polynomial</a>
+    pub fn reciprocal(&mut self) {
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.reciprocal() { *self = p; },
+            Polynomial::Sparse(sc) => 
+                if let Some(p) = sc.reciprocal() { *self = p; },
+            _ => (),
+        }
+    }
+
+    /// Removes all zero roots from this polynomial.
+    pub fn remove_zero_roots(&mut self) {
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.remove_zero_roots() { *self = p; },
+            Polynomial::Sparse(sc) =>
+                if let Some(p) = sc.remove_zero_roots() { *self = p; },
+            _ => (),
+        }
+    }
+
+    /// Remove the max term of self.
+    pub fn reductum(&mut self) {
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(_) => *self = Polynomial::Zero(),
+            Polynomial::Dense(dc) =>
+                if let Some(p) = dc.reductum() { *self = p; },
+            Polynomial::Sparse(sc) =>
+                if let Some(p) = sc.reductum() { *self = p; },
+        }
+    }
 }
 
 //********** Methods with Semiring + Clone Coefficients **********/
@@ -370,7 +420,7 @@ impl<C> Clone for Polynomial<C> where C: Semiring + Clone {
     fn clone(&self) -> Self {
         match self {
             Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => Polynomial::Constant(cc.clone()),  // raw creation
+            Polynomial::Constant(cc) => Polynomial::new_raw_const(cc.0.clone()),
             Polynomial::Dense(dc) => Polynomial::Dense(dc.clone()),
             Polynomial::Sparse(sc) => Polynomial::Sparse(sc.clone()),
         }
@@ -408,6 +458,32 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
                 Polynomial::sparse_from_map(map)
             },
             _ => self.clone()
+        }
+    }
+
+    pub fn new_reciprocal(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            c @ Polynomial::Constant(_)=> c.clone(),
+            Polynomial::Dense(dc) => dc.new_reciprocal(),
+            Polynomial::Sparse(sc) => sc.new_reciprocal(),
+        }
+    }
+
+    pub fn new_zero_roots_removed(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_zero_roots_removed(),
+            Polynomial::Sparse(sc) => sc.new_zero_roots_removed(),
+            _ => self.clone(),
+        }
+    }
+
+    // /// Returns a polynomial with the max term removed.
+    pub fn new_reductum(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_reductum(),
+            Polynomial::Sparse(sc) => sc.new_reductum(),
+            _ => Polynomial::Zero(),
         }
     }
 
@@ -575,7 +651,7 @@ impl<C> ConstZero for Polynomial<C> where C: Semiring + ConstZero + Clone {
 impl<C> num::One for Polynomial<C> where C: Semiring + Clone {
 
     fn one() -> Self { 
-        Polynomial::Constant(ConstCoeff(C::one()))  // raw creation
+        Polynomial::new_raw_const(C::one())
     }
     
     fn is_one(&self) -> bool {
@@ -674,9 +750,6 @@ pub trait SemiringPolyOps<C> where C: Semiring {
     fn to_vec(self) -> Vec<C>;
     fn to_map(self) -> BTreeMap<usize, C>;
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D;
-    fn reductum(self) -> Polynomial<C>;
-    fn remove_zero_roots(self) -> Polynomial<C>;
-    fn reciprocal(self) -> Polynomial<C>;
 }
 
 impl<C> SemiringPolyOps<C> for Polynomial<C> where C: Semiring {
@@ -708,33 +781,6 @@ impl<C> SemiringPolyOps<C> for Polynomial<C> where C: Semiring {
             Polynomial::Sparse(sc) => sc.map_nonzero(f),
         }
     }
-
-    /// Remove the max term of self.
-    fn reductum(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.reductum(),
-            Polynomial::Sparse(sc) => sc.reductum(),
-            _ => Polynomial::Zero(),
-        }
-    }
-
-    /// Removes all zero roots from this polynomial.
-    fn remove_zero_roots(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.remove_zero_roots(),
-            Polynomial::Sparse(sc) => sc.remove_zero_roots(),
-            _ => self,
-        }
-    }
-    
-    /// Reference: <a href="http://en.wikipedia.org/wiki/Reciprocal_polynomial">Reciprocal polynomial</a>
-    fn reciprocal(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.reciprocal(),
-            Polynomial::Sparse(sc) => sc.reciprocal(),
-            _ => self,
-        }
-    }
 }
 
 impl<'a, C> SemiringPolyOps<C> for &'a Polynomial<C> where C: Semiring + Clone {
@@ -759,40 +805,15 @@ impl<'a, C> SemiringPolyOps<C> for &'a Polynomial<C> where C: Semiring + Clone {
             Polynomial::Sparse(sc) => sc.map_nonzero(f),
         }
     }
-
-    // /// Returns a polynomial with the max term removed.
-    fn reductum(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.reductum(),
-            Polynomial::Sparse(sc) => sc.reductum(),
-            _ => Polynomial::Zero(),
-        }
-    }
-
-    fn remove_zero_roots(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.remove_zero_roots(),
-            Polynomial::Sparse(sc) => sc.remove_zero_roots(),
-            _ => self.clone(),
-        }
-    }
-
-    fn reciprocal(self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            c @ Polynomial::Constant(_)=> c.clone(),
-            Polynomial::Dense(dc) => dc.reciprocal(),
-            Polynomial::Sparse(sc) => sc.reciprocal(),
-        }
-    }
 }
+    
 
 impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
     
-    pub fn derivative(&self) -> Polynomial<C> {
+    pub fn new_derivative(&self) -> Polynomial<C> {
         match self {
-            Polynomial::Dense(dc) => dc.derivative(),
-            Polynomial::Sparse(sc) => sc.derivative(),
+            Polynomial::Dense(dc) => dc.new_derivative(),
+            Polynomial::Sparse(sc) => sc.new_derivative(),
             _ => Polynomial::Zero(),
         }
     }
@@ -840,30 +861,25 @@ impl<'a, 'b, C> Compose<C, &'b Polynomial<C>> for &'a Polynomial<C> where C: Sem
 }
 
 //********** Methods with Ring Coefficients **********/
-pub trait Flip<C> where C: Ring {
-    
-    fn flip(self) -> Polynomial<C>;
-}
+impl<C> Polynomial<C> where C: Ring {
 
-impl<C> Flip<C> for Polynomial<C> where C: Ring {
-
-    fn flip(self) -> Polynomial<C> {
+    pub fn flip(&mut self){
         match self {
             Polynomial::Dense(dc) => dc.flip(),
             Polynomial::Sparse(sc) => sc.flip(),
-            _ => self,
+            _ => (),
         }
     }
 }
 
-impl<'a, C> Flip<C> for &'a Polynomial<C> where C: Ring + Clone {
+impl<'a, C> Polynomial<C> where C: Ring + Clone {
 
-    fn flip(self) -> Polynomial<C> {
+    pub fn new_flipped(&self) -> Polynomial<C> {
         match self {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(_) => self.clone(),
-            Polynomial::Dense(dc) => dc.flip(),
-            Polynomial::Sparse(sc) => sc.flip(),
+            Polynomial::Dense(dc) => dc.new_flipped(),
+            Polynomial::Sparse(sc) => sc.new_flipped(),
         }
     }
 }
@@ -939,7 +955,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(_) => Polynomial::one(),
             _ => {
-                let c = self.max_order_term_coeff().unwrap().clone();
+                let c = self.max_order_term().unwrap().1.clone();
                 self / c
             },
         }
