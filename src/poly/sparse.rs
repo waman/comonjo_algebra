@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, btree_map::{IntoIter, Iter}};
 
-use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
+use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, PolynomialOps, factorial, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
 
 #[derive(Clone)]
 pub struct SparseCoeffs<C>(pub(crate) BTreeMap<usize, C>);
@@ -56,70 +56,6 @@ impl<C> SparseCoeffs<C> where C: Semiring {
 //      val lb = numberOfTrailingZeros(e) + 1
 //      fastExp(bits, e >>> lb, lb, bits(lb - 1))
 //    }
-
-    pub(crate) fn reciprocal(&mut self) -> Option<Polynomial<C>>{
-        let d = self.degree();
-        let map0 = &mut self.0;
-        let keys: Vec<usize> = map0.keys().map(|i|*i).collect();
-        let mut map: BTreeMap<usize, C> = BTreeMap::new();
-
-        for i in keys {
-            map.insert(d - i, map0.remove(&i).unwrap());
-        }
-        Some(Polynomial::sparse_from_map(map))
-    }
-
-    pub(crate) fn remove_zero_roots(&mut self) -> Option<Polynomial<C>> {
-        let i0 = self.min_order_term().unwrap().0;
-        if i0 == 0 {
-            None
-        } else {
-            let map0 = &mut self.0;
-            let keys: Vec<usize> = map0.keys().map(|i|*i).collect();
-            let mut map: BTreeMap<usize, C> = BTreeMap::new();
-
-            for i in keys {
-                map.insert(i - i0, map0.remove(&i).unwrap());
-            }
-            Some(Polynomial::sparse_from_map(map))
-        }
-    }
-
-    pub(crate) fn reductum(&mut self) -> Option<Polynomial<C>> {
-        let dim = self.degree();
-        self.0.remove(&dim);
-        match self.0.len() {
-            0 => Some(Polynomial::Zero()),
-            1 if self.0.contains_key(&0) => 
-                Some(Polynomial::new_raw_const(self.0.remove(&0).unwrap())),
-            _ => None,
-        }
-    }
-}
-
-impl<C> SparseCoeffs<C> where C: Semiring + Clone {
-    
-    pub(crate) fn new_reciprocal(&self) -> Polynomial<C> {
-        let d = self.degree();
-        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)| (d-i, c.clone())).collect();
-        Polynomial::sparse_from_map(map)
-    }
-
-    pub(crate) fn new_zero_roots_removed(&self) -> Polynomial<C> {
-        let i0 = *self.0.first_key_value().unwrap().0;
-        if i0 == 0 {
-            Polynomial::Sparse(SparseCoeffs(self.0.clone()))
-        } else {
-            let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)|(i-i0, c.clone())).collect();
-            Polynomial::sparse_from_map(map)
-        }
-    }
-
-    pub(crate) fn new_reductum(&self) -> Polynomial<C> {
-        let n = self.0.len();
-        let map: BTreeMap<usize, C> = self.0.iter().take(n-1).map(|(i, c)| (*i, c.clone())).collect();
-        Polynomial::sparse_from_map(map)
-    }
 }
 
 //********** Iterator **********/
@@ -227,7 +163,7 @@ impl<'a, C> Iterator for SCoeffsIter<'a, C> where C: Semiring {
     fn size_hint(&self) -> (usize, Option<usize>) { self.map_iter.size_hint() }
 }
 
-impl<C> SemiringPolyOps<C> for SparseCoeffs<C> where C: Semiring {
+impl<C> PolynomialOps<C> for SparseCoeffs<C> where C: Semiring {
 
     fn to_vec(mut self) -> Vec<C> {
         let n = self.degree() + 1;
@@ -250,7 +186,7 @@ impl<C> SemiringPolyOps<C> for SparseCoeffs<C> where C: Semiring {
     }
 }
 
-impl<'a, C> SemiringPolyOps<C> for &'a SparseCoeffs<C> where C: Semiring + Clone {
+impl<'a, C> PolynomialOps<C> for &'a SparseCoeffs<C> where C: Semiring + Clone {
     
     fn to_vec(self) -> Vec<C> {
         self.coeffs_iter().map(|c|{
@@ -269,26 +205,161 @@ impl<'a, C> SemiringPolyOps<C> for &'a SparseCoeffs<C> where C: Semiring + Clone
     }
 }
 
+//********** Polynomial Operations **********/
+fn keys<C>(map: &BTreeMap<usize, C>) -> Vec<usize> where C: Semiring {
+    map.keys().map(|i|*i).collect()
+}
+
+impl<C> SparseCoeffs<C> where C: Semiring {
+
+    pub(crate) fn reciprocal(&mut self) -> Option<Polynomial<C>>{
+        let d = self.degree();
+        let map0 = &mut self.0;
+        let keys = keys(map0);
+        let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+        for i in keys {
+            map.insert(d-i, map0.remove(&i).unwrap());
+        }
+        Some(Polynomial::sparse_from_map(map))
+    }
+
+    pub(crate) fn remove_zero_roots(&mut self) -> Option<Polynomial<C>> {
+        let i0 = self.min_order_term().unwrap().0;
+        if i0 == 0 { return None; }
+        
+        let map0 = &mut self.0;
+        let keys = keys(map0);
+        let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+        for i in keys {
+            map.insert(i-i0, map0.remove(&i).unwrap());
+        }
+        Some(Polynomial::sparse_from_map(map))
+    }
+
+    pub(crate) fn reductum(&mut self) -> Option<Polynomial<C>> {
+        let dim = self.degree();
+        self.0.remove(&dim);
+        match self.0.len() {
+            0 => Some(Polynomial::Zero()),
+            1 if self.0.contains_key(&0) => 
+                Some(Polynomial::new_raw_const(self.0.remove(&0).unwrap())),
+            _ => None,
+        }
+    }
+}
+
+impl<C> SparseCoeffs<C> where C: Semiring + Clone {
+    
+    pub(crate) fn new_reciprocal(&self) -> Polynomial<C> {
+        let d = self.degree();
+        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)| (d-i, c.clone())).collect();
+        Polynomial::sparse_from_map(map)
+    }
+
+    pub(crate) fn new_zero_roots_removed(&self) -> Polynomial<C> {
+        let i0 = *self.0.first_key_value().unwrap().0;
+        if i0 == 0 {
+            Polynomial::Sparse(SparseCoeffs(self.0.clone()))
+        } else {
+            let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)|(i-i0, c.clone())).collect();
+            Polynomial::sparse_from_map(map)
+        }
+    }
+
+    pub(crate) fn new_reductum(&self) -> Polynomial<C> {
+        let n = self.0.len();
+        let map: BTreeMap<usize, C> = self.0.iter().take(n-1).map(|(i, c)| (*i, c.clone())).collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
+
 impl<C> SparseCoeffs<C> where C: Semiring + num::FromPrimitive {
     
+    pub(crate) fn differentiate(&mut self) -> Option<Polynomial<C>> {
+        if self.degree() == 1 { 
+            return Some(Polynomial::new_raw_const(self.0.remove(&1).unwrap()));
+        }
+
+        let map0 = &mut self.0;
+        let keys = keys(map0);
+        let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+        for i in keys.into_iter().filter(|i| *i > 0) {
+            map.insert(i-1, C::from_usize(i).unwrap() * map0.remove(&i).unwrap());
+        }
+
+        Some(Polynomial::sparse_from_map(map))
+    }
+    
     pub(crate) fn new_derivative(&self) -> Polynomial<C> {
-        let ite = self.0.iter();
         let map: BTreeMap<usize, C> = 
-            ite.filter(|(i, _)| **i != 0)
-            .map(|(i,c)| (i-1, C::from_usize(*i).unwrap() * c))
+            self.0.iter().filter(|(i, _)| **i != 0)
+            .map(|(i, c)| (i-1, C::from_usize(*i).unwrap() * c))
             .collect();
         Polynomial::sparse_from_map(map)
+    }
+    
+    pub(crate) fn n_differentiate(&mut self, n: usize) -> Option<Polynomial<C>> {
+        debug_assert!(n > 1);
+
+        match self.degree() {
+            d if d < n => Some(Polynomial::Zero()),
+            d if d == n => {
+                let f: C = factorial(n);
+                Some(Polynomial::new_raw_const(f * self.0.remove(&n).unwrap()))
+            },
+            _ => {
+                let map0 = &mut self.0;
+                let keys = keys(map0);
+                let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+                for i in keys {
+                    if i < n { continue; }
+
+                    let mut f: C = C::one();
+                    for j in (i-n+1)..=i { f = f * C::from_usize(j).unwrap(); }
+                    map.insert(i-n, f * map0.remove(&i).unwrap());
+                }
+
+                Some(Polynomial::sparse_from_map(map))
+            }
+        }
+    }
+
+    pub(crate) fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
+        debug_assert!(n > 1);
+
+        match self.degree() {
+            d if d < n => Polynomial::Zero(),
+            d if d == n => {
+                let f: C = factorial(n);
+                Polynomial::new_raw_const(f * self.0.get(&n).unwrap())
+            },
+            _ => {
+                let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+                for (i, c) in &self.0 {
+                    if *i < n { continue; }
+
+                    let mut f: C = C::one();
+                    for j in (*i-n+1)..=*i { f = f * C::from_usize(j).unwrap(); }
+                    map.insert(*i-n, f.ref_mul(c));
+                }
+
+                Polynomial::sparse_from_map(map)
+            }
+        }
     }
 }
 
 impl<C> SparseCoeffs<C> where C: Ring {
 
     pub(crate) fn flip(&mut self){
-        for (i, c) in self.0.iter_mut() {
-            if i % 2 != 0 {
-                *c = c.ref_neg();
-            }
-        }
+        self.0.iter_mut()
+            .filter(|(i, _)| *i % 2 != 0)
+            .for_each(|(_, c)| *c = c.ref_neg());
     }
 }
 
@@ -300,19 +371,6 @@ impl<C> SparseCoeffs<C> where C: Ring + Clone {
                 if i % 2 == 0 { (*i, c.clone()) } else { (*i, c.ref_neg()) }
             }).collect();
         Polynomial::Sparse(SparseCoeffs(map))
-    }
-}
-    
-impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive {
-
-    pub(crate) fn integral(&self) -> Polynomial<C> {
-        let map: BTreeMap<usize, C> = 
-            self.0.iter().map(|(i, c)| {
-                let j = i+1;
-                let d = c.ref_div(C::from_usize(j).unwrap());
-                (j, d)
-            }).collect();
-        Polynomial::sparse_from_map(map)
     }
 }
 
@@ -366,6 +424,79 @@ impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
         }
         Polynomial::sparse_from_map(coeffs)
     }
+}
+
+impl<C> SparseCoeffs<C> where C: Field {
+
+    pub(crate) fn monic(&mut self) {
+        let (j, a) = self.0.pop_last().unwrap();
+        self.0.iter_mut().for_each(|(_, c)| *c = c.ref_div(&a));
+        self.0.insert(j, C::one());
+    }
+}
+
+impl<C> SparseCoeffs<C> where C: Field + Clone {
+
+    pub(crate) fn new_monic(&self) -> Polynomial<C> {
+        let a = self.0.last_key_value().unwrap().1;
+        let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)| (*i, c.ref_div(a))).collect();
+        Polynomial::new_raw_sparse(map)
+    }
+}
+    
+impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive {
+
+    pub(crate) fn integrate(&mut self) {
+        let map0 = &mut self.0;
+        let keys = keys(map0);
+        let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+        for i in keys {
+            let j = i+1;
+            map.insert(j, map0.remove(&i).unwrap() / C::from_usize(j).unwrap());
+        }
+
+        self.0 = map;
+    }
+
+    pub(crate) fn new_integral(&self) -> Polynomial<C> {
+        let map: BTreeMap<usize, C> = 
+            self.0.iter().map(|(i, c)| {
+                let j = i+1;
+                let d = c.ref_div(C::from_usize(j).unwrap());
+                (j, d)
+            }).collect();
+        Polynomial::new_raw_sparse(map)
+    }
+
+    // pub(crate) fn n_integrate(&mut self, n: usize) {
+    //     debug_assert!(n > 1);
+
+    //     let map0 = &mut self.0;
+    //     let keys = keys(map0);
+    //     let mut map: BTreeMap<usize, C> = BTreeMap::new();
+
+    //     for i in keys {
+    //         let j = i+n;
+    //         let f: C = factorial(j);
+    //         map.insert(j, map0.remove(&i).unwrap() / f);
+    //     }
+
+    //     self.0 = map;
+    // }
+
+    // pub(crate) fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
+    //     debug_assert!(n > 1);
+
+    //     let map: BTreeMap<usize, C> = 
+    //         self.0.iter().map(|(i, c)| {
+    //             let j = i+n;
+    //             let f: C = factorial(j);
+    //             let d = c.ref_div(f);
+    //             (j, d)
+    //         }).collect();
+    //     Polynomial::sparse_from_map(map)
+    // }
 }
 
 //********** Add **********/

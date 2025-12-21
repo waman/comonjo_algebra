@@ -2,7 +2,7 @@ use std::{collections::HashMap, vec};
 
 use num::{One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
-use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Polynomial, SemiringPolyOps}, sparse};
+use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Polynomial, PolynomialOps}, sparse};
 
 type PolyR64 = Polynomial<Rational64>;
 
@@ -1033,17 +1033,19 @@ fn test_remove_zero_roots(){  // remove_zero_roots(), new_zero_roots_removed()
 }
 
 #[test]
-fn test_derivative(){
+fn test_derivative(){  // derivative(), new_derivative()
 
     fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
 
-        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<i64>){
+        fn test_op<'a>(mut x: Polynomial<i64>, exp: &'a Polynomial<i64>){
             assert_eq!(x.new_derivative(), *exp);
-            assert_eq!(x.clone().new_derivative(), *exp);
+
+            x.differentiate();
+            assert_eq!(x, *exp);
         }
 
         for x_ in get_impls(&x) {
-            test_op(&x_, &exp);
+            test_op(x_, &exp);
         }
     }
 
@@ -1066,17 +1068,22 @@ fn test_derivative(){
 }
 
 #[test]
-fn test_integral(){
+fn test_integral(){  // integrate(), new_integral()
 
     fn test(x: PolyR64, exp: PolyR64){
 
-        fn test_op<'a, 'b>(x: &'a PolyR64, exp: &'b PolyR64){
-            assert_eq!(x.integral(), *exp);
-            assert_eq!(x.clone().integral(), *exp);
+        fn test_op<'a>(mut x: PolyR64, exp: &'a PolyR64){
+            assert_eq!(x.new_integral(), *exp);
+            
+            if !x.is_dense() {
+
+                x.integrate();
+                assert_eq!(x, *exp);
+            }
         }
 
         for x_ in get_impls(&x) {
-            test_op(&x_, &exp);
+            test_op(x_, &exp);
         }
     }
 
@@ -1097,6 +1104,90 @@ fn test_integral(){
         test(entry.0, entry.1);
     }
 }
+
+#[test]
+fn test_nth_derivative(){  // n_differentiate(), new_nth_derivative()
+
+    fn test(x: Polynomial<i64>){
+
+        fn test_op(x: Polynomial<i64>){
+            let mut exp = x.clone();
+            for i in 0..7 {
+                assert_eq!(x.new_nth_derivative(i), exp);
+
+                let mut y = x.clone();
+                y.n_differentiate(i);
+                assert_eq!(y, exp);
+
+                exp.differentiate();
+            }
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(x_);
+        }
+    }
+
+    let table = [
+        zero(),
+        cst(5),
+        cst(-4),
+        Polynomial::x(),
+        Polynomial::x2(),
+        p0(),
+        p1(),
+        p2(),
+        p3(),
+        p4(),
+    ];
+
+    for entry in table {
+        test(entry);
+    }
+}
+
+// #[test]
+// fn test_nth_integral(){  // n_integrate(), new_nth_integral()
+
+//     fn test(x: PolyR64){
+
+//         fn test_op(x: PolyR64){
+//             let mut exp = x.clone();
+//             for i in 0..3 {
+//                 if !x.is_sparse() {
+//                     assert_eq!(x.new_nth_integral(i), exp);
+
+//                     // let mut y = x.clone();
+//                     // y.n_integrate(i);
+//                     // assert_eq!(y, exp);
+//                 }
+
+//                 exp.integrate();
+//             }
+//         }
+
+//         for x_ in get_impls(&x) {
+//             test_op(x_);
+//         }
+//     }
+
+//     let table = [
+//         zero(),
+//         cst(ri(5)),
+//         cst(ri(-4)),
+//         Polynomial::x(),
+//         // Polynomial::x2(),
+//         // pr0(),
+//         // pr1(),
+//         // pr2(),
+//         // pr3(),
+//         // pr4(),
+//     ];
+
+//     for entry in table {
+//         test(entry);
+//     }
+// }
 
 #[test]
 fn test_reciprocal(){  // reciprocal(), new_reciprocal()
@@ -1134,7 +1225,7 @@ fn test_reciprocal(){  // reciprocal(), new_reciprocal()
 }
 
 #[test]
-fn test_flip(){
+fn test_flip(){  // flip(), new_flipped()
 
     fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
 
@@ -1262,17 +1353,19 @@ fn test_shift_and_shift_f(){
 }
 
 #[test]
-fn test_monic(){
+fn test_monic(){  // monic(), new_monic()
 
     fn test(x: PolyR64, exp: PolyR64){
 
-        fn test_op<'a, 'b>(x: &'a PolyR64, exp: &'b PolyR64){
-            assert_eq!(x.monic(), *exp);
-            assert_eq!(x.clone().monic(), *exp);
+        fn test_op<'a>(mut x: PolyR64, exp: &'a PolyR64){
+            assert_eq!(x.new_monic(), *exp);
+
+            x.monic();
+            assert_eq!(x, *exp);
         }
 
         for x_ in get_impls(&x) {
-            test_op(&x_, &exp);
+            test_op(x_, &exp);
         }
     }
 

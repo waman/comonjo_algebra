@@ -1,5 +1,8 @@
 use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
-use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, SemiringPolyOps, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint, remove_tail_zeros}};
+
+use num::Integer;
+
+use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, PolynomialOps, factorial, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint, remove_tail_zeros}};
 
 #[derive(Clone)]
 pub struct DenseCoeffs<C>(pub(crate) Vec<C>);
@@ -50,62 +53,6 @@ impl<C> DenseCoeffs<C> where C: Semiring {
 //     c0
 //   }
 // }
-
-    pub(crate) fn reciprocal(&mut self) -> Option<Polynomial<C>> {
-        self.0.reverse();
-        normalize_vec_or_new_poly(&mut self.0)
-    }
-
-    pub(crate) fn remove_zero_roots(&mut self) -> Option<Polynomial<C>> {
-        if let Some((i, _)) = self.min_order_term() {
-            if i == 0 { return None }
-            let vec = &mut self.0;
-            vec.drain(0..i);
-            normalize_vec_or_new_poly(vec)
-        } else {
-            None
-        }
-    }
-
-    pub(crate) fn reductum(&mut self) -> Option<Polynomial<C>> {
-        self.0.pop();
-        normalize_vec_or_new_poly(&mut self.0)
-    }
-}
-
-fn normalize_vec_or_new_poly<C>(vec: &mut Vec<C>) -> Option<Polynomial<C>> where C: Semiring {
-
-    remove_tail_zeros(vec);
-
-    match vec.len() {
-        0 => Some(Polynomial::Zero()),
-        1 if vec.len() == 1 =>
-            Some(Polynomial::new_raw_const(vec.pop().unwrap())),
-        _ => {
-            vec.shrink_to_fit();
-            None
-        },
-    }
-}
-
-impl<C> DenseCoeffs<C> where C: Semiring + Clone {
-
-    pub(crate) fn new_reciprocal(&self) -> Polynomial<C> {
-        let mut vec = Vec::with_capacity(self.0.len());
-        self.0.iter().rev().for_each(|c| vec.push(c.clone()));
-        Polynomial::dense_from_vec(vec)
-    }
-
-    pub(crate) fn new_zero_roots_removed(&self) -> Polynomial<C> {
-        let vec: Vec<C> = self.0.iter().skip_while(|c|c.is_zero()).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
-
-    pub(crate) fn new_reductum(&self) -> Polynomial<C> {
-        let n = self.0.len();
-        let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
-    }
 }
 
 //********** Iterator **********/
@@ -192,7 +139,7 @@ impl<'a, C> Iterator for DCoeffsIter<'a, C> where C: Semiring {
     fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
 }
 
-impl<C> SemiringPolyOps<C> for DenseCoeffs<C> where C: Semiring {
+impl<C> PolynomialOps<C> for DenseCoeffs<C> where C: Semiring {
     
     fn to_vec(self) -> Vec<C> { self.0 }
     
@@ -215,7 +162,7 @@ impl<C> SemiringPolyOps<C> for DenseCoeffs<C> where C: Semiring {
     }
 }
 
-impl<'a, C> SemiringPolyOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
+impl<'a, C> PolynomialOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
     
     fn to_vec(self) -> Vec<C> { self.0.clone() }
     
@@ -231,7 +178,82 @@ impl<'a, C> SemiringPolyOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone 
     }
 }
 
+//********** Polynomial Operations **********/
+fn normalize_vec_or_new_poly<C>(vec: &mut Vec<C>) -> Option<Polynomial<C>> where C: Semiring {
+
+    remove_tail_zeros(vec);
+
+    match vec.len() {
+        0 => Some(Polynomial::Zero()),
+        1 if vec.len() == 1 =>
+            Some(Polynomial::new_raw_const(vec.pop().unwrap())),
+        _ => {
+            vec.shrink_to_fit();
+            None
+        },
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: Semiring {
+
+    pub(crate) fn reciprocal(&mut self) -> Option<Polynomial<C>> {
+        self.0.reverse();
+        normalize_vec_or_new_poly(&mut self.0)
+    }
+
+    pub(crate) fn remove_zero_roots(&mut self) -> Option<Polynomial<C>> {
+        if let Some((i, _)) = self.min_order_term() {
+            if i == 0 { return None }
+            let vec = &mut self.0;
+            vec.drain(0..i);
+            normalize_vec_or_new_poly(vec)
+        } else {
+            None
+        }
+    }
+
+    pub(crate) fn reductum(&mut self) -> Option<Polynomial<C>> {
+        self.0.pop();
+        normalize_vec_or_new_poly(&mut self.0)
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: Semiring + Clone {
+
+    pub(crate) fn new_reciprocal(&self) -> Polynomial<C> {
+        let mut vec = Vec::with_capacity(self.0.len());
+        self.0.iter().rev().for_each(|c| vec.push(c.clone()));
+        Polynomial::dense_from_vec(vec)
+    }
+
+    pub(crate) fn new_zero_roots_removed(&self) -> Polynomial<C> {
+        let vec: Vec<C> = self.0.iter().skip_while(|c|c.is_zero()).map(|c|c.clone()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+
+    pub(crate) fn new_reductum(&self) -> Polynomial<C> {
+        let n = self.0.len();
+        let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
 impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
+    
+    pub(crate) fn differentiate(&mut self) -> Option<Polynomial<C>> {
+        if self.0.len() == 2 {
+            return Some(Polynomial::new_raw_const(self.0.pop().unwrap()));
+        }
+
+        let d = self.degree();
+        for i in 1..=d {
+            let v = C::from_usize(i).unwrap() * self.0.get(i).unwrap();
+            self.0[i-1] = v;
+        }
+        self.0.pop();
+        self.0.shrink_to_fit();
+        None
+    }
     
     pub(crate) fn new_derivative(&self) -> Polynomial<C> {
         let mut ite = self.0.iter().enumerate();
@@ -239,12 +261,76 @@ impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
         let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
         Polynomial::dense_from_vec(vec)
     }
+
+    /// k * self.0[[n]]
+    fn deriv_coeff<'a>(&self, n: usize, k: u128) -> C
+            where C: Semiring + num::FromPrimitive {
+        C::from_u128(k).unwrap().ref_mul(self.0.get(n).unwrap())
+    }
+    
+    pub(crate) fn n_differentiate(&mut self, n: usize) -> Option<Polynomial<C>> {
+        debug_assert!(n > 1);
+
+        match self.degree() {
+            d if d < n => Some(Polynomial::Zero()),
+            d if d == n => {
+                let f: C = factorial(n);
+                Some(Polynomial::new_raw_const(f * self.0.pop().unwrap()))
+            },
+            d => {
+                let mut k: u128 = factorial(n);
+                self.0[0] = self.deriv_coeff(n, k);
+
+                for i in (n+1)..=d {
+                    k = mul_div_u128(k, i, i-n);
+                    self.0[i-n] = self.deriv_coeff(i, k);
+                }
+                self.0.truncate(d-n+1);
+                self.0.shrink_to_fit();
+                None
+            }
+        }
+    }
+    
+    pub(crate) fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
+        debug_assert!(n > 1);
+
+        match self.degree() {
+            d if d < n => Polynomial::Zero(),
+            d if d == n => {
+                let f: C = factorial(n);
+                Polynomial::new_raw_const(f * self.0.last().unwrap())
+            },
+            d => {
+                let mut vec: Vec<C> = Vec::with_capacity(d-n+1);
+
+                let mut k: u128 = factorial(n);
+                vec.push(self.deriv_coeff(n, k));
+
+                for i in (n+1)..=d {
+                    k = mul_div_u128(k, i, i-n);
+                    vec.push(self.deriv_coeff(i, k));
+                }
+                Polynomial::dense_from_vec(vec)
+            }
+        }
+    }
+}
+
+fn mul_div_u128(x: u128, y: usize, z: usize) -> u128 {
+    let z128 = z as u128;
+    let gcd = x.gcd(&z128);
+    let x_red = x / gcd;
+    let z_red = (z as u128) / gcd;
+    x_red * ((y as u128) / z_red)
 }
 
 impl<C> DenseCoeffs<C> where C: Ring {
 
     pub(crate) fn flip(&mut self){
-        self.0.iter_mut().enumerate().filter(|(i, _)| i % 2 != 0).for_each(|(_, c)| *c = c.ref_neg());
+        self.0.iter_mut().enumerate()
+            .filter(|(i, _)| i % 2 != 0)
+            .for_each(|(_, c)| *c = c.ref_neg());
     }
 }
 
@@ -255,19 +341,7 @@ impl<C> DenseCoeffs<C> where C: Ring + Clone {
             self.0.iter().enumerate().map(|(i, c)|{
                 if i % 2 == 0 { c.clone() } else { c.ref_neg() }
             }).collect();
-        Polynomial::Dense(DenseCoeffs(vec))
-    }
-}
-    
-impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
-
-    pub(crate) fn integral(&self) -> Polynomial<C> {
-        let n = self.0.len();
-        let ite = self.0.iter().enumerate();
-        let mut vec: Vec<C> = Vec::with_capacity(n+1);
-        vec.push(C::zero());
-        vec.extend(ite.map(|(i, c)| c.ref_div(C::from_usize(i+1).unwrap())));
-        Polynomial::dense_from_vec(vec)
+        Polynomial::new_raw_dense(vec)
     }
 }
 
@@ -298,7 +372,7 @@ impl<C> DenseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Intege
                 i = i + C::one();
             }
         }
-        Polynomial::dense_from_vec(coeffs)
+        Polynomial::new_raw_dense(coeffs)
     }
 }
 
@@ -323,8 +397,80 @@ impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
                 i = i + C::one();
             }
         }
-        Polynomial::dense_from_vec(coeffs)
+        Polynomial::new_raw_dense(coeffs)
     }
+}
+
+impl<C> DenseCoeffs<C> where C: Field {
+
+    pub(crate) fn monic(&mut self) {
+        let a = self.0.pop().unwrap();
+        self.0.iter_mut().for_each(|c| *c = c.ref_div(&a));
+        self.0.push(C::one());
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: Field + Clone {
+
+    pub(crate) fn new_monic(&self) -> Polynomial<C> {
+        let a = self.0.last().unwrap();
+        let vec: Vec<C> = self.0.iter().map(|c| c.ref_div(a)).collect();
+        Polynomial::new_raw_dense(vec)
+    }
+}
+    
+impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
+
+    pub(crate) fn integrate(&mut self) {
+        let d = self.degree();
+        self.0.reserve(d+1);
+
+        for i in 1..=d {
+            let v = self.0.get(i-1).unwrap().ref_div(C::from_usize(i).unwrap());
+            if let Some(c) = self.0.get_mut(i) {
+                *c = v;
+            }
+        }
+
+        if let Some(c) = self.0.get_mut(0) { *c = C::zero(); }
+    }
+
+    pub(crate) fn new_integral(&self) -> Polynomial<C> {
+        let mut vec: Vec<C> = Vec::with_capacity(self.0.len() + 1);
+        vec.push(C::zero());
+        vec.extend(self.0.iter().enumerate().map(|(i, c)| c.ref_div(C::from_usize(i+1).unwrap())));
+        Polynomial::new_raw_dense(vec)
+    }
+
+    // /// self.0[[n]] / k;
+    // fn integ_coeff(&self, n: usize, k: &C) -> C {
+    //     self.0.get(n).unwrap().ref_div(k)
+    // } 
+
+    // pub(crate) fn n_integrate(&mut self, n: usize) {
+    //     debug_assert!(n > 1);
+
+    //     todo!()
+    // }
+
+    // pub(crate) fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
+    //     debug_assert!(n > 1);
+
+    //     // let d = self.degree();
+    //     // let mut vec: Vec<C> = Vec::with_capacity(d+n+1);
+    //     // vec.fill_with(|| C::one());
+    //     // for _ in 0..n { vec.push(C::zero()); } 
+
+    //     // let mut k: C = factorial(n);
+    //     // vec.push(self.integ_coeff(0, &k));
+
+    //     // for i in 1..d {
+    //     //     k = k * C::from_usize(n+i).unwrap() / C::from_usize(i).unwrap();
+    //     //     vec.push(self.integ_coeff(i, &k));
+    //     // }
+    //     let vec: Vec<C> = vec![C::zero(), C::zero(), C::one() / C::from_usize(2).unwrap()];
+    //     Polynomial::new_raw_dense(vec)
+    // }
 }
 
 //********** Add **********/
@@ -603,7 +749,7 @@ pub(crate) fn mul<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> 
         }
     }
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::new_raw_dense(v)
 }
 //********** Div & Rem **********/
 pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, Polynomial<C>) 
@@ -623,8 +769,9 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
             let offset = u.len() - d_rhs;  // the last of u is already popped
             for (i, c_rhs) in rhs.nonzero_coeffs() {
                 if i == d_rhs { break; }
-                let c_lhs = u.get_mut(offset + i).unwrap();
-                *c_lhs = c_lhs.ref_sub(c_rhs.ref_mul(&q0));
+                if let Some(c_lhs) = u.get_mut(offset + i) {
+                    *c_lhs = c_lhs.ref_sub(c_rhs.ref_mul(&q0));
+                }
             }
             q.push(q0);
         }

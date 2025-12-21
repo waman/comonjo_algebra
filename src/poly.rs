@@ -95,16 +95,36 @@ macro_rules! sparse {
 //********** Factory Methods ******
 impl<C> Polynomial<C> where C: Semiring {
 
+    /// Omit to check the arg not to be zero.
+    pub(crate) fn new_raw_const(c: C) -> Polynomial<C> {
+        debug_assert!(!c.is_zero());
+
+        Polynomial::Constant(ConstCoeff(c))
+    }
+
+    /// Omit to remove the tailing zeros, to check to be constant, and not to execute <code>shrink_to_fit()</code>
+    pub(crate) fn new_raw_dense(vec: Vec<C>) -> Polynomial<C> {
+        debug_assert!(!vec.last().unwrap().is_zero());
+        debug_assert!(vec.len() > 1);
+        debug_assert_eq!(vec.len(), vec.capacity());
+
+        Polynomial::Dense(DenseCoeffs(vec))
+    }
+
+    /// Omit to remove zero-value entries, and check to be const
+    pub(crate) fn new_raw_sparse(map: BTreeMap<usize, C>) -> Polynomial<C> {
+        debug_assert!(map.values().all(|v|!v.is_zero()));
+        debug_assert!(if map.contains_key(&0) { map.len() > 1 } else { !map.is_empty() } );
+
+        Polynomial::Sparse(SparseCoeffs(map))
+    }
+
     pub fn constant(c: C) -> Polynomial<C> {
         if c.is_zero() {
             Polynomial::Zero()
         } else {
             Polynomial::new_raw_const(c)
         }
-    }
-
-    pub(crate) fn new_raw_const(c: C) -> Polynomial<C> {
-        Polynomial::Constant(ConstCoeff(c))
     }
 
     pub fn dense_from_vec(mut coeffs: Vec<C>) -> Polynomial<C>  {
@@ -116,7 +136,7 @@ impl<C> Polynomial<C> where C: Semiring {
             1 => Polynomial::new_raw_const(coeffs.pop().unwrap()),
             _ => {
                 coeffs.shrink_to_fit();
-                Polynomial::Dense(DenseCoeffs(coeffs))
+                Polynomial::new_raw_dense(coeffs)
             }
         }
     }
@@ -131,10 +151,10 @@ impl<C> Polynomial<C> where C: Semiring {
                 if coeffs.contains_key(&0) {
                     Polynomial::new_raw_const(coeffs.remove(&0).unwrap())
                 } else {
-                    Polynomial::Sparse(SparseCoeffs(coeffs))
+                    Polynomial::new_raw_sparse(coeffs)
                 }
             },
-            _ => Polynomial::Sparse(SparseCoeffs(coeffs))
+            _ => Polynomial::new_raw_sparse(coeffs)
         }
     }
 
@@ -268,6 +288,16 @@ pub(crate) fn remove_tail_zeros<C>(vec: &mut Vec<C>) where C: Semiring {
     }
 }
 
+pub(crate) fn factorial<C>(n: usize) -> C where C: Semiring + num::FromPrimitive {
+    if n == 0 || n == 1 { return C::one(); }
+
+    let mut result = C::one();
+    for i in 2..=n {
+        result = result * C::from_usize(i).unwrap();
+    }
+    result
+}
+
 //********** METHODS with Semiring coefficients ******
 impl<C> Polynomial<C> where C: Semiring {
     
@@ -328,11 +358,29 @@ impl<C> Polynomial<C> where C: Semiring {
             Polynomial::Sparse(sc) => sc.is_x(),
         }
     }
+
+    /// Return true if self is dense.
+    /// Note that this returns false if self is Zero or Constant.
+    pub fn is_dense(&self) -> bool {
+        match self {
+            Polynomial::Dense(_) => true,
+            _ => false,
+        }
+    }
+
+    /// Return true if self is sparse.
+    /// Note that this returns false if self is Zero or Constant.
+    pub fn is_sparse(&self) -> bool {
+        match self {
+            Polynomial::Sparse(_) => true,
+            _ => false,
+        }
+    }
      
     /// Return dense expression of this polynomial if this is sparse, otherwise (zero or constant) self.
     pub fn to_dense(self) -> Polynomial<C> {
         match self {
-            Polynomial::Sparse(sc) => Polynomial::dense_from_vec(sc.to_vec()),
+            Polynomial::Sparse(sc) => Polynomial::new_raw_dense(sc.to_vec()),
             _ => self,
         }
     }
@@ -340,7 +388,7 @@ impl<C> Polynomial<C> where C: Semiring {
     /// Return sparse expression of this polynomial if this is dense, otherwise (zero or constant) self.
     pub fn to_sparse(self) -> Polynomial<C> {
         match self {
-            Polynomial::Dense(dc) => Polynomial::sparse_from_map(dc.to_map()),
+            Polynomial::Dense(dc) => Polynomial::new_raw_sparse(dc.to_map()),
             _ => self
         }
     }
@@ -441,7 +489,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
                         None => v.push(C::zero()),
                     } 
                 }
-                Polynomial::dense_from_vec(v)
+                Polynomial::new_raw_dense(v)
             },
             _ => self.clone()
         }
@@ -455,7 +503,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
                 for (i, c) in d.nonzero_coeffs() {
                     map.insert(i, c.clone());  // note c is not zero
                 }
-                Polynomial::sparse_from_map(map)
+                Polynomial::new_raw_sparse(map)
             },
             _ => self.clone()
         }
@@ -648,7 +696,7 @@ impl<C> ConstZero for Polynomial<C> where C: Semiring + ConstZero + Clone {
     const ZERO: Self = Polynomial::Zero();
 }
 
-impl<C> num::One for Polynomial<C> where C: Semiring + Clone {
+impl<C> One for Polynomial<C> where C: Semiring + Clone {
 
     fn one() -> Self { 
         Polynomial::new_raw_const(C::one())
@@ -744,15 +792,15 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     }
 }
 
-//********** Semiring Polynomial Operations **********/
-pub trait SemiringPolyOps<C> where C: Semiring {
+//********** Polynomial Basic Operations **********/
+pub trait PolynomialOps<C> where C: Semiring {
     
     fn to_vec(self) -> Vec<C>;
     fn to_map(self) -> BTreeMap<usize, C>;
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D;
 }
 
-impl<C> SemiringPolyOps<C> for Polynomial<C> where C: Semiring {
+impl<C> PolynomialOps<C> for Polynomial<C> where C: Semiring {
     
     fn to_vec(self) -> Vec<C> {
         match self {
@@ -783,7 +831,7 @@ impl<C> SemiringPolyOps<C> for Polynomial<C> where C: Semiring {
     }
 }
 
-impl<'a, C> SemiringPolyOps<C> for &'a Polynomial<C> where C: Semiring + Clone {
+impl<'a, C> PolynomialOps<C> for &'a Polynomial<C> where C: Semiring + Clone {
     
     fn to_vec(self) -> Vec<C> {
         self.coeffs().map(|option_c| match option_c {
@@ -803,18 +851,6 @@ impl<'a, C> SemiringPolyOps<C> for &'a Polynomial<C> where C: Semiring + Clone {
             Polynomial::Constant(cc) => Polynomial::constant(f(0, cc.0.clone())),
             Polynomial::Dense(dc) => dc.map_nonzero(f),
             Polynomial::Sparse(sc) => sc.map_nonzero(f),
-        }
-    }
-}
-    
-
-impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
-    
-    pub fn new_derivative(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.new_derivative(),
-            Polynomial::Sparse(sc) => sc.new_derivative(),
-            _ => Polynomial::Zero(),
         }
     }
 }
@@ -856,6 +892,58 @@ impl<'a, 'b, C> Compose<C, &'b Polynomial<C>> for &'a Polynomial<C> where C: Sem
             },
             (lhs, rhs) if rhs.is_x() => lhs.clone(),
             (lhs, rhs) => compose_polynomials(lhs, rhs),
+        }
+    }
+}
+    
+//********** Methods with Semiring Coefficients **********/
+impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
+
+    pub fn differentiate(&mut self) {
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.differentiate() { *self = p },
+            Polynomial::Sparse(sc) => 
+                if let Some(p) = sc.differentiate() { *self = p },
+            _ => *self = Polynomial::Zero(),
+        }
+    }
+    
+    pub fn new_derivative(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_derivative(),
+            Polynomial::Sparse(sc) => sc.new_derivative(),
+            _ => Polynomial::Zero(),
+        }
+    }
+
+    pub fn n_differentiate(&mut self, n: usize) {
+        if n == 0 { return; }
+        if n == 1 { 
+            self.differentiate();
+            return;
+        }
+
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.n_differentiate(n) { *self = p; },
+            Polynomial::Sparse(sc) => 
+                if let Some(p) = sc.n_differentiate(n) { *self = p },
+            _ => *self = Polynomial::Zero(),
+        }
+    }
+}    
+
+impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive + Clone {
+
+    pub fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
+        if n == 0 { return self.clone(); }
+        if n == 1 { return self.new_derivative(); }
+
+        match self {
+            Polynomial::Dense(dc) => dc.new_nth_derivative(n),
+            Polynomial::Sparse(sc) => sc.new_nth_derivative(n),
+            _ => Polynomial::Zero(),
         }
     }
 }
@@ -947,31 +1035,84 @@ impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone {
     // }
 
 
+impl<C> Polynomial<C> where C: Field {
+
+    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. ``max_order_term().1`) is 1.
+    pub fn monic(&mut self) {
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(_) => *self = Polynomial::new_raw_const(C::one()),
+            Polynomial::Dense(dc) => dc.monic(),
+            Polynomial::Sparse(sc) => sc.monic(),
+        }
+    }
+}
+
 impl<C> Polynomial<C> where C: Field + Clone {
 
-    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. ``max_order_term_coeff`) is 1.
-    pub fn monic(&self) -> Polynomial<C> {
+    /// Returns this polynomial as a monic polynomial, where the leading coefficient (ie. ``max_order_term().1`) is 1.
+    pub fn new_monic(&self) -> Polynomial<C> {
         match self {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(_) => Polynomial::one(),
-            _ => {
-                let c = self.max_order_term().unwrap().1.clone();
-                self / c
-            },
+            Polynomial::Dense(dc) => dc.new_monic(),
+            Polynomial::Sparse(sc) => sc.new_monic(),
         }
     }
 }
 
 impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone {
 
-    pub fn integral(&self) -> Polynomial<C> {
+    pub fn integrate(&mut self) {
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(cc) => *self = Polynomial::linear_monomial(cc.0.clone()),
+            Polynomial::Dense(dc) => dc.integrate(),
+            Polynomial::Sparse(sc) => sc.integrate(),
+        }
+    }
+
+    pub fn new_integral(&self) -> Polynomial<C> {
         match self {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
-            Polynomial::Dense(dc) => dc.integral(),
-            Polynomial::Sparse(sc) => sc.integral(),
+            Polynomial::Dense(dc) => dc.new_integral(),
+            Polynomial::Sparse(sc) => sc.new_integral(),
         }
     }
+
+    // pub fn n_integrate(&mut self, n: usize) {
+    //     if n == 0 { return; }
+    //     if n == 1 { 
+    //         self.integrate();
+    //         return;
+    //     }
+
+    //     match self {
+    //         Polynomial::Zero() => (),
+    //         Polynomial::Constant(cc) => {
+    //             let f: C = factorial(n);
+    //             *self = sparse![(n, cc.0.ref_div(f))]
+    //         },
+    //         Polynomial::Dense(dc) => dc.n_integrate(n),
+    //         Polynomial::Sparse(sc) => sc.n_integrate(n),
+    //     }
+    // }
+
+    // pub fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
+    //     if n == 0 { return self.clone(); }
+    //     if n == 1 { return self.new_integral(); }
+
+    //     match self {
+    //         Polynomial::Zero() => Polynomial::Zero(),
+    //         Polynomial::Constant(cc) => {
+    //             let f: C = factorial(n);
+    //             sparse![(n, cc.0.clone() / f)]
+    //         },
+    //         Polynomial::Dense(dc) => dc.new_nth_integral(n),
+    //         Polynomial::Sparse(sc) => sc.new_nth_integral(n),
+    //     }
+    // }
 }
 
 //********** Operator Overloads **********
