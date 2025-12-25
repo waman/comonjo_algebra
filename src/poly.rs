@@ -96,6 +96,7 @@ macro_rules! sparse {
 impl<C> Polynomial<C> where C: Semiring {
 
     /// Omit to check the arg not to be zero.
+    #[inline]
     pub(crate) fn new_raw_const(c: C) -> Polynomial<C> {
         debug_assert!(!c.is_zero());
 
@@ -103,18 +104,20 @@ impl<C> Polynomial<C> where C: Semiring {
     }
 
     /// Omit to remove the tailing zeros, to check to be constant, and not to execute <code>shrink_to_fit()</code>
+    #[inline]
     pub(crate) fn new_raw_dense(vec: Vec<C>) -> Polynomial<C> {
-        debug_assert!(!vec.last().unwrap().is_zero());
         debug_assert!(vec.len() > 1);
+        debug_assert!(!vec.last().unwrap().is_zero());
         debug_assert_eq!(vec.len(), vec.capacity());
 
         Polynomial::Dense(DenseCoeffs(vec))
     }
 
     /// Omit to remove zero-value entries, and check to be const
+    #[inline]
     pub(crate) fn new_raw_sparse(map: BTreeMap<usize, C>) -> Polynomial<C> {
-        debug_assert!(map.values().all(|v|!v.is_zero()));
         debug_assert!(if map.contains_key(&0) { map.len() > 1 } else { !map.is_empty() } );
+        debug_assert!(map.values().all(|v|!v.is_zero()));
 
         Polynomial::Sparse(SparseCoeffs(map))
     }
@@ -599,13 +602,13 @@ pub(crate) fn term_to_string<C>(exp: usize, coeff: &C) -> String where C: Semiri
                 format!(" + {}{}", coeff_str, exp_str)
             }
 
-        } else {
+        } else {  // Rational, Complex, etc.
             match exp {
                 0 => if coeff_str.starts_with("-") {
-                    format!(" + ({})", coeff)
-                } else {
-                    format!(" + {}", coeff)  // this sign may be removed
-                },
+                        format!(" + ({})", coeff)
+                    } else {
+                        format!(" + {}", coeff)  // this sign may be removed
+                    },
                 1 => format!(" + ({})x", coeff),
                 _ => format!(" + ({})x{}", coeff, to_superscript(exp)),
             }       
@@ -622,7 +625,7 @@ impl<C> Display for Polynomial<C> where C: Semiring + Display {
             Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
             _ => {
                 let s: String = self.nonzero_coeffs().map(|(i, c)|term_to_string(i, c)).collect();
-                let first_sign = if s.starts_with(" - ") { "-" } else { "" }; 
+                let first_sign = if s.starts_with(" - ") { "-" } else { "" };
                 f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
             },
         }
@@ -1061,7 +1064,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
     }
 }
 
-impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone {
+impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone + Debug{
 
     pub fn integrate(&mut self) {
         match self {

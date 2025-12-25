@@ -1074,12 +1074,9 @@ fn test_integral(){  // integrate(), new_integral()
 
         fn test_op<'a>(mut x: PolyR64, exp: &'a PolyR64){
             assert_eq!(x.new_integral(), *exp);
-            
-            if !x.is_dense() {
 
-                x.integrate();
-                assert_eq!(x, *exp);
-            }
+            x.integrate();
+            assert_eq!(x, *exp);
         }
 
         for x_ in get_impls(&x) {
@@ -1155,6 +1152,8 @@ fn test_nth_derivative(){  // n_differentiate(), new_nth_derivative()
 //             let mut exp = x.clone();
 //             for i in 0..3 {
 //                 if !x.is_sparse() {
+//                     println!("{}th-integral of {}", i, x);
+//                     println!("is? {}", exp);
 //                     assert_eq!(x.new_nth_integral(i), exp);
 
 //                     // let mut y = x.clone();

@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
+use std::{collections::BTreeMap, fmt::Debug, iter::Enumerate, slice::Iter, vec::IntoIter};
 
 use num::Integer;
 
@@ -419,20 +419,21 @@ impl<C> DenseCoeffs<C> where C: Field + Clone {
     }
 }
     
-impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
+impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive + Debug {
 
     pub(crate) fn integrate(&mut self) {
         let d = self.degree();
-        self.0.reserve(d+1);
+        self.0.reserve(1);
+
+        let v_last = self.0.get(d).unwrap().ref_div(C::from_usize(d+1).unwrap());
+        self.0.push(v_last);
 
         for i in 1..=d {
-            let v = self.0.get(i-1).unwrap().ref_div(C::from_usize(i).unwrap());
-            if let Some(c) = self.0.get_mut(i) {
-                *c = v;
-            }
+            let j = d - i + 1;
+            self.0[j] = self.0.get(j-1).unwrap().ref_div(C::from_usize(j).unwrap());
         }
 
-        if let Some(c) = self.0.get_mut(0) { *c = C::zero(); }
+        self.0[0] = C::zero();
     }
 
     pub(crate) fn new_integral(&self) -> Polynomial<C> {
@@ -454,22 +455,22 @@ impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
     // }
 
     // pub(crate) fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
-    //     debug_assert!(n > 1);
+        // debug_assert!(n > 1);
 
-    //     // let d = self.degree();
-    //     // let mut vec: Vec<C> = Vec::with_capacity(d+n+1);
-    //     // vec.fill_with(|| C::one());
-    //     // for _ in 0..n { vec.push(C::zero()); } 
+        // let d = self.degree();
+        // let mut vec: Vec<C> = Vec::with_capacity(d+n+1);
+        // vec.fill_with(|| C::one());
+        // for _ in 0..n { vec.push(C::zero()); } 
 
-    //     // let mut k: C = factorial(n);
-    //     // vec.push(self.integ_coeff(0, &k));
+        // let mut k: C = factorial(n);
+        // vec.push(self.integ_coeff(0, &k));
 
-    //     // for i in 1..d {
-    //     //     k = k * C::from_usize(n+i).unwrap() / C::from_usize(i).unwrap();
-    //     //     vec.push(self.integ_coeff(i, &k));
-    //     // }
-    //     let vec: Vec<C> = vec![C::zero(), C::zero(), C::one() / C::from_usize(2).unwrap()];
-    //     Polynomial::new_raw_dense(vec)
+        // for i in 1..d {
+        //     k = k * C::from_usize(n+i).unwrap() / C::from_usize(i).unwrap();
+        //     vec.push(self.integ_coeff(i, &k));
+        // }
+
+        // Polynomial::new_raw_dense(vec)
     // }
 }
 
