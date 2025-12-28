@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fmt::Debug, iter::Enumerate, slice::Iter, vec::IntoIter};
+use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
 
 use num::Integer;
 
@@ -254,13 +254,6 @@ impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
         self.0.shrink_to_fit();
         None
     }
-    
-    pub(crate) fn new_derivative(&self) -> Polynomial<C> {
-        let mut ite = self.0.iter().enumerate();
-        ite.next();
-        let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
-        Polynomial::dense_from_vec(vec)
-    }
 
     /// k * self.0[[n]]
     fn deriv_coeff<'a>(&self, n: usize, k: u128) -> C
@@ -290,6 +283,16 @@ impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
                 None
             }
         }
+    }
+}
+
+impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive + Clone {
+    
+    pub(crate) fn new_derivative(&self) -> Polynomial<C> {
+        let mut ite = self.0.iter().enumerate();
+        ite.next();
+        let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
+        Polynomial::dense_from_vec(vec)
     }
     
     pub(crate) fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
@@ -419,59 +422,48 @@ impl<C> DenseCoeffs<C> where C: Field + Clone {
     }
 }
     
-impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive + Debug {
+impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
 
-    pub(crate) fn integrate(&mut self) {
-        let d = self.degree();
-        self.0.reserve(1);
-
-        let v_last = self.0.get(d).unwrap().ref_div(C::from_usize(d+1).unwrap());
-        self.0.push(v_last);
-
-        for i in 1..=d {
-            let j = d - i + 1;
-            self.0[j] = self.0.get(j-1).unwrap().ref_div(C::from_usize(j).unwrap());
-        }
-
-        self.0[0] = C::zero();
-    }
-
-    pub(crate) fn new_integral(&self) -> Polynomial<C> {
+    fn new_integral_coeffs(&self) -> Vec<C> {
         let mut vec: Vec<C> = Vec::with_capacity(self.0.len() + 1);
         vec.push(C::zero());
         vec.extend(self.0.iter().enumerate().map(|(i, c)| c.ref_div(C::from_usize(i+1).unwrap())));
-        Polynomial::new_raw_dense(vec)
+        vec
     }
 
-    // /// self.0[[n]] / k;
-    // fn integ_coeff(&self, n: usize, k: &C) -> C {
-    //     self.0.get(n).unwrap().ref_div(k)
-    // } 
+    pub(crate) fn integrate(&mut self) {
+        self.0 = self.new_integral_coeffs();
+    }
 
-    // pub(crate) fn n_integrate(&mut self, n: usize) {
-    //     debug_assert!(n > 1);
+    pub(crate) fn new_integral(&self) -> Polynomial<C> {
+        Polynomial::new_raw_dense(self.new_integral_coeffs())
+    }
 
-    //     todo!()
-    // }
+    fn new_n_integral_coeffs(&self, n: usize) -> Vec<C> {
+        let d = self.degree();
+        let mut vec: Vec<C> = Vec::with_capacity(d+n+1);
+        for _ in 0..n { vec.push(C::zero()); } 
 
-    // pub(crate) fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
-        // debug_assert!(n > 1);
+        let mut k: C = factorial(n);
+        vec.push(self.0.get(0).unwrap().ref_div(&k));
 
-        // let d = self.degree();
-        // let mut vec: Vec<C> = Vec::with_capacity(d+n+1);
-        // vec.fill_with(|| C::one());
-        // for _ in 0..n { vec.push(C::zero()); } 
+        for i in 1..=d {
+            k = k * C::from_usize(n+i).unwrap() / C::from_usize(i).unwrap();
+            vec.push(self.0.get(i).unwrap().ref_div(&k));
+        }
 
-        // let mut k: C = factorial(n);
-        // vec.push(self.integ_coeff(0, &k));
+        vec
+    }
 
-        // for i in 1..d {
-        //     k = k * C::from_usize(n+i).unwrap() / C::from_usize(i).unwrap();
-        //     vec.push(self.integ_coeff(i, &k));
-        // }
+    pub(crate) fn n_integrate(&mut self, n: usize) {
+        debug_assert!(n > 1);
+        self.0 = self.new_n_integral_coeffs(n);
+    }
 
-        // Polynomial::new_raw_dense(vec)
-    // }
+    pub(crate) fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
+        debug_assert!(n > 1);
+        Polynomial::new_raw_dense(self.new_n_integral_coeffs(n))
+    }
 }
 
 //********** Add **********/

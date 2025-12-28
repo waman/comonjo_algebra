@@ -911,14 +911,6 @@ impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
             _ => *self = Polynomial::Zero(),
         }
     }
-    
-    pub fn new_derivative(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.new_derivative(),
-            Polynomial::Sparse(sc) => sc.new_derivative(),
-            _ => Polynomial::Zero(),
-        }
-    }
 
     pub fn n_differentiate(&mut self, n: usize) {
         if n == 0 { return; }
@@ -938,6 +930,14 @@ impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
 }    
 
 impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive + Clone {
+    
+    pub fn new_derivative(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_derivative(),
+            Polynomial::Sparse(sc) => sc.new_derivative(),
+            _ => Polynomial::Zero(),
+        }
+    }
 
     pub fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
         if n == 0 { return self.clone(); }
@@ -1084,38 +1084,38 @@ impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone + Debug{
         }
     }
 
-    // pub fn n_integrate(&mut self, n: usize) {
-    //     if n == 0 { return; }
-    //     if n == 1 { 
-    //         self.integrate();
-    //         return;
-    //     }
+    pub fn n_integrate(&mut self, n: usize) {
+        if n == 0 { return; }
+        if n == 1 { 
+            self.integrate();
+            return;
+        }
 
-    //     match self {
-    //         Polynomial::Zero() => (),
-    //         Polynomial::Constant(cc) => {
-    //             let f: C = factorial(n);
-    //             *self = sparse![(n, cc.0.ref_div(f))]
-    //         },
-    //         Polynomial::Dense(dc) => dc.n_integrate(n),
-    //         Polynomial::Sparse(sc) => sc.n_integrate(n),
-    //     }
-    // }
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(cc) => {
+                let f: C = factorial(n);
+                *self = sparse![(n, cc.0.ref_div(f))]
+            },
+            Polynomial::Dense(dc) => dc.n_integrate(n),
+            Polynomial::Sparse(sc) => sc.n_integrate(n),
+        }
+    }
 
-    // pub fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
-    //     if n == 0 { return self.clone(); }
-    //     if n == 1 { return self.new_integral(); }
+    pub fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
+        if n == 0 { return self.clone(); }
+        if n == 1 { return self.new_integral(); }
 
-    //     match self {
-    //         Polynomial::Zero() => Polynomial::Zero(),
-    //         Polynomial::Constant(cc) => {
-    //             let f: C = factorial(n);
-    //             sparse![(n, cc.0.clone() / f)]
-    //         },
-    //         Polynomial::Dense(dc) => dc.new_nth_integral(n),
-    //         Polynomial::Sparse(sc) => sc.new_nth_integral(n),
-    //     }
-    // }
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => {
+                let f: C = factorial(n);
+                sparse![(n, cc.0.clone() / f)]
+            },
+            Polynomial::Dense(dc) => dc.new_nth_integral(n),
+            Polynomial::Sparse(sc) => sc.new_nth_integral(n),
+        }
+    }
 }
 
 //********** Operator Overloads **********

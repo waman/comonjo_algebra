@@ -1068,41 +1068,6 @@ fn test_derivative(){  // derivative(), new_derivative()
 }
 
 #[test]
-fn test_integral(){  // integrate(), new_integral()
-
-    fn test(x: PolyR64, exp: PolyR64){
-
-        fn test_op<'a>(mut x: PolyR64, exp: &'a PolyR64){
-            assert_eq!(x.new_integral(), *exp);
-
-            x.integrate();
-            assert_eq!(x, *exp);
-        }
-
-        for x_ in get_impls(&x) {
-            test_op(x_, &exp);
-        }
-    }
-
-    let table = [
-        (zero(),           zero()),
-        (cst(ri(5)),       dense![ri(0), ri(5)]),
-        (cst(ri(-4)),      dense![ri(0), ri(-4)]),
-        (Polynomial::x(),  dense![ri(0), ri(0), r(1, 2)]),
-        (Polynomial::x2(), dense![ri(0), ri(0), ri(0), r(1, 3)]),
-        (pr0(),            dense![ri(0), ri(1), ri(1), ri(1)]),
-        (pr1(),            dense![ri(0), ri(4), r(5, 2), ri(0), r(3, 2), r(7, 5)]),
-        (pr2(),            dense![ri(0), ri(4), ri(0), ri(0), r(5, 4), ri(0), ri(0), ri(0), r(3, 4)]),
-        (pr3(),            dense![ri(0), ri(1), ri(0), ri(0), ri(0), r(2, 5)]),
-        (pr4(),            dense![ri(0), ri(0), ri(0), ri(0), r(3, 2)]),
-    ];
-
-    for entry in table {
-        test(entry.0, entry.1);
-    }
-}
-
-#[test]
 fn test_nth_derivative(){  // n_differentiate(), new_nth_derivative()
 
     fn test(x: Polynomial<i64>){
@@ -1142,51 +1107,6 @@ fn test_nth_derivative(){  // n_differentiate(), new_nth_derivative()
         test(entry);
     }
 }
-
-// #[test]
-// fn test_nth_integral(){  // n_integrate(), new_nth_integral()
-
-//     fn test(x: PolyR64){
-
-//         fn test_op(x: PolyR64){
-//             let mut exp = x.clone();
-//             for i in 0..3 {
-//                 if !x.is_sparse() {
-//                     println!("{}th-integral of {}", i, x);
-//                     println!("is? {}", exp);
-//                     assert_eq!(x.new_nth_integral(i), exp);
-
-//                     // let mut y = x.clone();
-//                     // y.n_integrate(i);
-//                     // assert_eq!(y, exp);
-//                 }
-
-//                 exp.integrate();
-//             }
-//         }
-
-//         for x_ in get_impls(&x) {
-//             test_op(x_);
-//         }
-//     }
-
-//     let table = [
-//         zero(),
-//         cst(ri(5)),
-//         cst(ri(-4)),
-//         Polynomial::x(),
-//         // Polynomial::x2(),
-//         // pr0(),
-//         // pr1(),
-//         // pr2(),
-//         // pr3(),
-//         // pr4(),
-//     ];
-
-//     for entry in table {
-//         test(entry);
-//     }
-// }
 
 #[test]
 fn test_reciprocal(){  // reciprocal(), new_reciprocal()
@@ -1383,5 +1303,81 @@ fn test_monic(){  // monic(), new_monic()
 
     for entry in table {
         test(entry.0, entry.1);
+    }
+}
+
+#[test]
+fn test_integral(){  // integrate(), new_integral()
+
+    fn test(x: PolyR64, exp: PolyR64){
+
+        fn test_op<'a>(mut x: PolyR64, exp: &'a PolyR64){
+            assert_eq!(x.new_integral(), *exp);
+
+            x.integrate();
+            assert_eq!(x, *exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(x_, &exp);
+        }
+    }
+
+    let table = [
+        (zero(),           zero()),
+        (cst(ri(5)),       dense![ri(0), ri(5)]),
+        (cst(ri(-4)),      dense![ri(0), ri(-4)]),
+        (Polynomial::x(),  dense![ri(0), ri(0), r(1, 2)]),
+        (Polynomial::x2(), dense![ri(0), ri(0), ri(0), r(1, 3)]),
+        (pr0(),            dense![ri(0), ri(1), ri(1), ri(1)]),
+        (pr1(),            dense![ri(0), ri(4), r(5, 2), ri(0), r(3, 2), r(7, 5)]),
+        (pr2(),            dense![ri(0), ri(4), ri(0), ri(0), r(5, 4), ri(0), ri(0), ri(0), r(3, 4)]),
+        (pr3(),            dense![ri(0), ri(1), ri(0), ri(0), ri(0), r(2, 5)]),
+        (pr4(),            dense![ri(0), ri(0), ri(0), ri(0), r(3, 2)]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
+fn test_nth_integral(){  // n_integrate(), new_nth_integral()
+
+    fn test(x: PolyR64){
+
+        fn test_op(x: PolyR64){
+            let mut exp = x.clone();
+            for i in 0..7 {
+                assert_eq!(x.new_nth_integral(i), exp);
+
+                // let mut y = x.clone();
+                // y.n_integrate(i);
+                // assert_eq!(y, exp);
+
+                exp.integrate();
+            }
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(x_);
+        }
+    }
+
+    let table = [
+        zero(),
+        cst(ri(5)),
+        cst(ri(-4)),
+        Polynomial::x(),
+        Polynomial::x2(),
+        pr0(),
+        pr1(),
+        pr2(),
+        pr3(),
+        pr4(),
+    ];
+
+    for entry in table {
+        test(entry);
     }
 }
