@@ -596,7 +596,6 @@ fn test_sub_c(){
     }
 }
 
-
 #[test]
 fn test_mul(){
 
@@ -983,12 +982,12 @@ fn test_reductum(){  // reductum(), new_reductum()
         (cst(5),           zero()),
         (cst(-4),          zero()),
         (Polynomial::x(),  zero()),
-        // (Polynomial::x2(), zero()),
-        // (p0(),             dense![1, 2]),
-        // (p1(),             dense![4, 5, 0, 6]),
-        // (p2(),             dense![4, 0, 0, 5]),
-        // (p3(),             dense![1]),
-        // (p4(),             zero()),
+        (Polynomial::x2(), zero()),
+        (p0(),             dense![1, 2]),
+        (p1(),             dense![4, 5, 0, 6]),
+        (p2(),             dense![4, 0, 0, 5]),
+        (p3(),             dense![1]),
+        (p4(),             zero()),
     ];
 
     for entry in table {
@@ -1188,35 +1187,39 @@ fn test_flip(){  // flip(), new_flipped()
 }
 
 #[test]
-fn test_shift_and_shift_f(){
+fn test_shift_and_shift_f(){  // shift(), new_shifted(), shift_f(), new_shifted_f()
 
     fn test(x: Polynomial<i64>, h: i64, exp: Polynomial<i64>){
 
-        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, h: i64, exp: &'b Polynomial<i64>){
-            // shift
-            assert_eq!(x.shift(h), *exp);
-            assert_eq!(x.clone().shift(h), *exp);
+        fn test_op<'a>(x: Polynomial<i64>, h: i64, exp: &'a Polynomial<i64>){
+            //***** shift(), new_shifted() *****
+            assert_eq!(x.new_shifted(h), *exp);
+
+            let mut y = x.clone();
+            y.shift(h);
+            assert_eq!(y, *exp);
 
             // a shifted polynomial of p(x) by h equals p(x + h) 
-            let exp2 = x.compose(Polynomial::x() + h);
-            assert_eq!(x.shift(h), exp2.clone());
+            assert_eq!(x.compose(Polynomial::x() + h), *exp);
 
-            // shift_f
+
+            //***** shift_f(), new_shifted_f() *****
             let z: &Polynomial<f64> = &x.map_nonzero(|_, c|c.to_f64().unwrap());
             let t: f64 = h.to_f64().unwrap();
             let exp_f: &Polynomial<f64> = &exp.map_nonzero(|_, c|c.to_f64().unwrap());
-            assert_eq!(z.clone().shift_f(t), *exp_f);
-            assert_eq!(z.shift_f(t), *exp_f);
-            assert_eq!(z.clone().shift_f(t), *exp_f);
+
+            assert_eq!(z.new_shifted_f(t), *exp_f);
+
+            let mut w = z.clone();
+            w.shift_f(t);
+            assert_eq!(w, *exp_f);
 
             // a shifted polynomial of p(x) by t equals p(x + t) 
-            let exp_f2 = z.compose(Polynomial::x() + t);
-            assert_eq!(z.shift_f(t), exp_f2.clone());
-            assert_eq!(z.clone().shift_f(t), exp_f2);
+            assert_eq!(z.compose(Polynomial::x() + t), *exp_f);
         }
 
         for x_ in get_impls(&x) {
-            test_op(&x_, h, &exp);
+            test_op(x_, h, &exp);
         }
     }
 
@@ -1351,9 +1354,9 @@ fn test_nth_integral(){  // n_integrate(), new_nth_integral()
             for i in 0..7 {
                 assert_eq!(x.new_nth_integral(i), exp);
 
-                // let mut y = x.clone();
-                // y.n_integrate(i);
-                // assert_eq!(y, exp);
+                let mut y = x.clone();
+                y.n_integrate(i);
+                assert_eq!(y, exp);
 
                 exp.integrate();
             }

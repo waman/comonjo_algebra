@@ -356,9 +356,9 @@ impl<C> DenseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Intege
     // This is a heavily optimized version of the same idea. This is fairly
     // critical method to be fast, since it is the most expensive part of the
     // VAS root isolation algorithm.
-    pub(crate) fn shift(&self, h: C) -> Polynomial<C> {
-
+    fn new_shifted_coeffs(&self, h: C) -> Vec<C> {
         let mut coeffs: Vec<C> = self.0.clone();
+
         for (deg, c) in self.nonzero_coeffs_iter() {
             if deg == 0 { continue; }
             let mut i: C = C::one();
@@ -375,15 +375,24 @@ impl<C> DenseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Intege
                 i = i + C::one();
             }
         }
-        Polynomial::new_raw_dense(coeffs)
+        
+        coeffs
+    }
+
+    pub(crate) fn shift(&mut self, h: C) {
+        self.0 = self.new_shifted_coeffs(h);
+    }
+
+    pub(crate) fn new_shifted(&self, h: C) -> Polynomial<C> {
+        Polynomial::new_raw_dense(self.new_shifted_coeffs(h))
     }
 }
 
 impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
 
-    pub(crate) fn shift_f(&self, h: C) -> Polynomial<C> {
-
+    pub fn new_shifted_coeffs_f(&self, h: C) -> Vec<C> {
         let mut coeffs: Vec<C> = self.0.clone();
+        
         for (deg, c) in self.nonzero_coeffs_iter() {
             if deg == 0 { continue; }
             let mut i: C = C::one();
@@ -400,7 +409,16 @@ impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
                 i = i + C::one();
             }
         }
-        Polynomial::new_raw_dense(coeffs)
+
+        coeffs
+    }
+
+    pub(crate) fn shift_f(&mut self, h: C) {
+        self.0 = self.new_shifted_coeffs_f(h);
+    }
+
+    pub(crate) fn new_shifted_f(&self, h: C) -> Polynomial<C> {
+        Polynomial::new_raw_dense(self.new_shifted_coeffs_f(h))
     }
 }
 

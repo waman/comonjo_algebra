@@ -989,11 +989,20 @@ pub(crate) fn mul_div_uint<C>(x: C, y: usize, z: C) -> C
 
 impl<C> Polynomial<C> where C: EuclideanRing + num::FromPrimitive + num::Integer + Clone {
 
-    pub fn shift(&self, h: C) -> Polynomial<C> {
-        if h.is_zero() { return self.clone() }
+    pub fn shift(&mut self, h: C) {
+        if h.is_zero() { return; }
         match self {
             Polynomial::Dense(dc) => dc.shift(h),
             Polynomial::Sparse(sc) => sc.shift(h),
+            _ => (),
+        }
+    }
+
+    pub fn new_shifted(&self, h: C) -> Polynomial<C> {
+        if h.is_zero() { return self.clone(); }
+        match self {
+            Polynomial::Dense(dc) => dc.new_shifted(h),
+            Polynomial::Sparse(sc) => sc.new_shifted(h),
             _ => self.clone(),
         }
     }
@@ -1001,11 +1010,20 @@ impl<C> Polynomial<C> where C: EuclideanRing + num::FromPrimitive + num::Integer
 
 impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone {
 
-    pub fn shift_f(&self, h: C) -> Polynomial<C> {
-        if h.is_zero() { return self.clone() }
+    pub fn shift_f(&mut self, h: C) {
+        if h.is_zero() { return; }
         match self {
             Polynomial::Dense(dc) => dc.shift_f(h),
             Polynomial::Sparse(sc) => sc.shift_f(h),
+            _ => (),
+        }
+    }
+
+    pub fn new_shifted_f(&self, h: C) -> Polynomial<C> {
+        if h.is_zero() { return self.clone(); }
+        match self {
+            Polynomial::Dense(dc) => dc.new_shifted_f(h),
+            Polynomial::Sparse(sc) => sc.new_shifted_f(h),
             _ => self.clone(),
         }
     }
