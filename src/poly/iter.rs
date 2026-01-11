@@ -1,4 +1,4 @@
-use crate::{algebra::Semiring, poly::{dense::{DCoeffsIter, DIntoCoeffsIter, DIntoNonzeroCoeffsIter, DNonzeroCoeffsIter}, sparse::{SCoeffsIter, SIntoCoeffsIter, SIntoNonzeroCoeffsIter, SNonzeroCoeffsIter}}};
+use crate::{algebra::Semiring, poly::{dense_coeffs::{DCoeffsIter, DIntoCoeffsIter, DIntoNonzeroCoeffsIter, DNonzeroCoeffsIter}, sparse_coeffs::{SCoeffsIter, SIntoCoeffsIter, SIntoNonzeroCoeffsIter, SNonzeroCoeffsIter}}};
 
 fn const_iter_size_hint<'a, C>(c: &'a Option<C>) -> (usize, Option<usize>) {
     if c.is_some() { (1, Some(1)) } else { (0, Some(0)) }

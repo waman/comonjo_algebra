@@ -1,12 +1,12 @@
-pub(crate) mod dense;
-pub(crate) mod sparse;
+pub(crate) mod dense_coeffs;
+pub(crate) mod sparse_coeffs;
 pub(crate) mod iter;
 
 use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{self, BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
 
-use crate::{algebra::*, poly::{dense::DenseCoeffs, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse::SparseCoeffs}};
+use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse_coeffs::SparseCoeffs}};
 
 /// Polynomial type.
 /// Refer to spire's [Polynomial](https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala).
@@ -1518,7 +1518,7 @@ impl<C> Add for Polynomial<C> where C: Semiring {
                 dc.0.get_mut(0).map(|c_lhs| *c_lhs = c_lhs.ref_add(c_rhs.0));
                 Polynomial::Dense(dc)
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::add_vv(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::add_vv(lhs, rhs),
 
             // Sparse
             (Polynomial::Sparse(mut sc), Polynomial::Constant(c_rhs)) => {
@@ -1530,7 +1530,7 @@ impl<C> Add for Polynomial<C> where C: Semiring {
                 }
                 Polynomial::Sparse(sc)
             },
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::add_vv(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::add_vv(lhs, rhs),
         }
     }
 }
@@ -1547,15 +1547,15 @@ impl<'b, C> Add<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
             // Constant
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 + &rhs.0),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense::add_vr(lhs, rhs),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse::add_vr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_coeffs::add_vr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_coeffs::add_vr(lhs, rhs),
 
             // Dense
             (Polynomial::Dense(mut dc), Polynomial::Constant(c_rhs)) => {
                 dc.0.get_mut(0).map(|c_lhs| *c_lhs = c_lhs.ref_add(&c_rhs.0));
                 Polynomial::Dense(dc)
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::add_vr(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::add_vr(lhs, rhs),
 
             // Sparse
             (Polynomial::Sparse(mut sc), Polynomial::Constant(c_rhs)) => {
@@ -1567,7 +1567,7 @@ impl<'b, C> Add<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
                 }
                 Polynomial::Sparse(sc)
             },
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::add_vr(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::add_vr(lhs, rhs),
         }
     }
 }
@@ -1599,10 +1599,10 @@ impl<'a, C> Add<Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
             },
 
             // Dense
-            (lhs @ Polynomial::Dense(_), rhs) => dense::add_rv(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::add_rv(lhs, rhs),
 
             // Sparse
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::add_rv(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::add_rv(lhs, rhs),
         }
     }
 }
@@ -1619,14 +1619,14 @@ impl<'a, 'b, C> Add<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
 
             // Const
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0.ref_add(&rhs.0)),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense::add_rr(lhs, rhs),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse::add_rr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_coeffs::add_rr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_coeffs::add_rr(lhs, rhs),
 
             // Dense
-            (lhs @ Polynomial::Dense(_), rhs) => dense::add_rr(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::add_rr(lhs, rhs),
 
             // Sparse
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::add_rr(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::add_rr(lhs, rhs),
         }
     }
 }
@@ -1695,15 +1695,15 @@ impl<C> Sub for Polynomial<C> where C: Ring {
 
             // Constant
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 - rhs.0),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense::sub_vv(lhs, rhs),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse::sub_vv(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_coeffs::sub_vv(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_coeffs::sub_vv(lhs, rhs),
 
             // Dense
             (Polynomial::Dense(mut dc), Polynomial::Constant(c_rhs)) => {
                 dc.0.get_mut(0).map(|c_lhs| *c_lhs = (*c_lhs).ref_sub(c_rhs.0));
                 Polynomial::Dense(dc)
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::sub_vv(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::sub_vv(lhs, rhs),
 
             // Sparse
             (Polynomial::Sparse(mut sc), Polynomial::Constant(c_rhs)) => {
@@ -1715,7 +1715,7 @@ impl<C> Sub for Polynomial<C> where C: Ring {
                 }
                 Polynomial::Sparse(sc)
             },
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::sub_vv(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::sub_vv(lhs, rhs),
         }
     }
 }
@@ -1732,15 +1732,15 @@ impl<'b, C> Sub<&'b Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
 
             // Constant
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0 - &rhs.0),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense::sub_vr(lhs, rhs),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse::sub_vr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_coeffs::sub_vr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_coeffs::sub_vr(lhs, rhs),
 
             // Dense
             (Polynomial::Dense(mut dc), Polynomial::Constant(c_rhs)) => {
                 dc.0.get_mut(0).map(|c_lhs| *c_lhs = c_lhs.ref_sub(&c_rhs.0));
                 Polynomial::Dense(dc)
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::sub_vr(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::sub_vr(lhs, rhs),
 
             // Sparse
             (Polynomial::Sparse(mut sc), Polynomial::Constant(c_rhs)) => {
@@ -1752,7 +1752,7 @@ impl<'b, C> Sub<&'b Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
                 }
                 Polynomial::Sparse(sc)
             },
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::sub_vr(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::sub_vr(lhs, rhs),
         }
     }
 }
@@ -1769,14 +1769,14 @@ impl<'a, C> Sub<Polynomial<C>> for &'a Polynomial<C> where C: Ring + Clone {
 
             // Constant
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0.ref_sub(rhs.0)),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense::sub_rv(lhs, rhs),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse::sub_rv(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_coeffs::sub_rv(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_coeffs::sub_rv(lhs, rhs),
 
             // Dense
-            (lhs @ Polynomial::Dense(_), rhs) => dense::sub_rv(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::sub_rv(lhs, rhs),
 
             // Sparse
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::sub_rv(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::sub_rv(lhs, rhs),
         }
     }
 }
@@ -1793,14 +1793,14 @@ impl<'a, 'b, C> Sub<&'b Polynomial<C>> for &'a Polynomial<C> where C: Ring + Clo
 
             // Const
             (Polynomial::Constant(lhs), Polynomial::Constant(rhs)) => Polynomial::constant(lhs.0.ref_sub(&rhs.0)),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense::sub_rr(lhs, rhs),
-            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse::sub_rr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Dense(_)) => dense_coeffs::sub_rr(lhs, rhs),
+            (lhs @ Polynomial::Constant(_), rhs @ Polynomial::Sparse(_)) => sparse_coeffs::sub_rr(lhs, rhs),
 
             // Dense
-            (lhs @ Polynomial::Dense(_), rhs) => dense::sub_rr(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::sub_rr(lhs, rhs),
 
             // Sparse
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::sub_rr(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::sub_rr(lhs, rhs),
         }
     }
 }
@@ -1873,8 +1873,8 @@ impl<C> Mul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
                 if rhs.0.is_one() { return lhs }
                 lhs.map_nonzero(|_, c| c * &rhs.0)
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(&lhs, &rhs),
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(&lhs, &rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(&lhs, &rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(&lhs, &rhs),
         }
     }
 }
@@ -1895,8 +1895,8 @@ impl<'b, C> Mul<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
                 if rhs.0.is_one() { return lhs }
                 lhs.map_nonzero(|_, c| c * &rhs.0)
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(&lhs, rhs),
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(&lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(&lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(&lhs, rhs),
         }
     }
 }
@@ -1917,8 +1917,8 @@ impl<'a, C> Mul<Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
                 if rhs.0.is_one() { return lhs.clone() }
                 lhs.map_nonzero(|_, c| c.ref_mul(&rhs.0))
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(lhs, &rhs),
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(lhs, &rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(lhs, &rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(lhs, &rhs),
         }
     }
 }
@@ -1939,8 +1939,8 @@ impl<'a, 'b, C> Mul<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
                 if rhs.0.is_one() { return lhs.clone() }
                 lhs.map_nonzero(|_, c| c.ref_mul(&rhs.0))
             },
-            (lhs @ Polynomial::Dense(_), rhs) => dense::mul(lhs, rhs),
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::mul(lhs, rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(lhs, rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(lhs, rhs),
         }
     }
 }
@@ -2021,8 +2021,8 @@ impl<C> Polynomial<C> where C: Field + Clone {
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
             (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero(|_, c| c / (&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs),
-            (lhs @ Polynomial::Dense(_), rhs) => dense::div_rem(lhs.to_vec(), rhs),
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::div_rem(lhs.to_map(), rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::div_rem(lhs.to_vec(), rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::div_rem(lhs.to_map(), rhs),
         }
     }
 
@@ -2033,8 +2033,8 @@ impl<C> Polynomial<C> where C: Field + Clone {
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
             (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero(|_, c| c.ref_div(&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs.clone()),
-            (lhs @ Polynomial::Dense(_), rhs) => dense::div_rem(lhs.to_vec(), rhs),
-            (lhs @ Polynomial::Sparse(_), rhs) => sparse::div_rem(lhs.to_map(), rhs),
+            (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::div_rem(lhs.to_vec(), rhs),
+            (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::div_rem(lhs.to_map(), rhs),
         }
     }
 }
