@@ -261,7 +261,7 @@ impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive {
         C::from_u128(k).unwrap().ref_mul(self.0.get(n).unwrap())
     }
     
-    pub(crate) fn n_differentiate(&mut self, n: usize) -> Option<Polynomial<C>> {
+    pub(crate) fn differentiate_n(&mut self, n: usize) -> Option<Polynomial<C>> {
         debug_assert!(n > 1);
 
         match self.degree() {
@@ -473,7 +473,7 @@ impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
         vec
     }
 
-    pub(crate) fn n_integrate(&mut self, n: usize) {
+    pub(crate) fn integrate_n(&mut self, n: usize) {
         debug_assert!(n > 1);
         self.0 = self.new_n_integral_coeffs(n);
     }

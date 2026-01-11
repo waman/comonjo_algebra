@@ -306,7 +306,7 @@ impl<C> SparseCoeffs<C> where C: Semiring + num::FromPrimitive {
         map
     }
     
-    pub(crate) fn n_differentiate(&mut self, n: usize) -> Option<Polynomial<C>> {
+    pub(crate) fn differentiate_n(&mut self, n: usize) -> Option<Polynomial<C>> {
         debug_assert!(n > 1);
 
         match self.degree() {
@@ -488,7 +488,7 @@ impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive {
         }).collect()
     }
 
-    pub(crate) fn n_integrate(&mut self, n: usize) {
+    pub(crate) fn integrate_n(&mut self, n: usize) {
         debug_assert!(n > 1);
         
         self.0 = self.new_nth_integral_coeffs(n);

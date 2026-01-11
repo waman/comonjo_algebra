@@ -1067,7 +1067,7 @@ fn test_derivative(){  // derivative(), new_derivative()
 }
 
 #[test]
-fn test_nth_derivative(){  // n_differentiate(), new_nth_derivative()
+fn test_nth_derivative(){  // differentiate_n(), new_nth_derivative()
 
     fn test(x: Polynomial<i64>){
 
@@ -1077,7 +1077,7 @@ fn test_nth_derivative(){  // n_differentiate(), new_nth_derivative()
                 assert_eq!(x.new_nth_derivative(i), exp);
 
                 let mut y = x.clone();
-                y.n_differentiate(i);
+                y.differentiate_n(i);
                 assert_eq!(y, exp);
 
                 exp.differentiate();
@@ -1345,7 +1345,7 @@ fn test_integral(){  // integrate(), new_integral()
 }
 
 #[test]
-fn test_nth_integral(){  // n_integrate(), new_nth_integral()
+fn test_nth_integral(){  // integrate_n(), new_nth_integral()
 
     fn test(x: PolyR64){
 
@@ -1355,7 +1355,7 @@ fn test_nth_integral(){  // n_integrate(), new_nth_integral()
                 assert_eq!(x.new_nth_integral(i), exp);
 
                 let mut y = x.clone();
-                y.n_integrate(i);
+                y.integrate_n(i);
                 assert_eq!(y, exp);
 
                 exp.integrate();
