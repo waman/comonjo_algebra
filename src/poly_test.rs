@@ -226,7 +226,7 @@ fn test_coeffs_iter_methods(){
             let exp_nonzero_coeffs: HashMap<usize, i64> = exp.clone().into_iter().enumerate().filter(|(_, c)|*c != 0).collect();
 
             // into_iter() for Polynomial
-            let cs0: HashMap<usize, i64> = p.clone().nonzero_coeffs().collect();
+            let cs0: HashMap<usize, i64> = p.clone().into_iter().collect();
             assert_eq!(cs0, exp_nonzero_coeffs);
 
             // nonzero_coeffs() for Polynomial (= into_iter())
@@ -237,18 +237,16 @@ fn test_coeffs_iter_methods(){
             let cs2: Vec<i64> = p.clone().coeffs().collect();
             assert_eq!(cs2, *exp);
 
-            let p_ref: &Polynomial<i64> = &p;
-
             // into_iter() for &Polynomial
-            let cs3: HashMap<usize, i64> = p_ref.into_iter().map(|(e, c)|(e, *c)).collect();
+            let cs3: HashMap<usize, i64> = (&p).into_iter().map(|(e, c)|(e, *c)).collect();
             assert_eq!(cs3, exp_nonzero_coeffs);
 
             // nonzero_coeffs() for &Polynomial (= into_iter())
-            let cs4: HashMap<usize, i64> = p_ref.nonzero_coeffs().map(|(e, c)|(e, *c)).collect();
+            let cs4: HashMap<usize, i64> = (&p).nonzero_coeffs().map(|(e, c)|(e, *c)).collect();
             assert_eq!(cs4, exp_nonzero_coeffs);
 
             // coeffs() for &Polynomial
-            let cs5: Vec<i64> = p_ref.coeffs().map(|c| match c {
+            let cs5: Vec<i64> = (&p).coeffs().map(|c| match c {
                 Some(c) => *c,
                 _ => 0,
             }).collect();
