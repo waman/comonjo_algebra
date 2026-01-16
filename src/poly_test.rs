@@ -1141,6 +1141,39 @@ fn test_reciprocal(){  // reciprocal(), new_reciprocal()
 }
 
 #[test]
+fn test_sign_vibrations(){
+
+    fn test(x: Polynomial<i64>, exp: usize){
+
+        fn test_op<'a>(x: Polynomial<i64>, exp: usize){
+            assert_eq!(x.sign_variations(), exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(x_, exp);
+        }
+    }
+
+    let table = [
+        (zero(),           0),
+        (cst(5),           0),
+        (cst(-4),          0),
+        (Polynomial::x(),  0),
+        (Polynomial::x2(), 0),
+        (p0(),             0),
+        (p1(),             0),
+        (p2(),             0),
+        (p3(),             0),
+        (p4(),             0),
+        (dense![1, 0, 2, -3, -4, 0, 5, 6, -7], 3)
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
 fn test_flip(){  // flip(), new_flipped()
 
     fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
