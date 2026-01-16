@@ -542,6 +542,38 @@ impl<C> Polynomial<C> where C: Semiring {
     }
 }
 
+impl<C> FromIterator<C> for Polynomial<C> where C: Semiring {
+
+    /// Creates a `Polynomial` instance from an iterator of `C`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let vec_iter = (1..7).into_iter();
+    ///     let p: Polynomial<i64> = vec_iter.collect();
+    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+    /// 
+    fn from_iter<T: IntoIterator<Item = C>>(iter: T) -> Self {
+        let vec: Vec<C> = iter.into_iter().collect();
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<C> FromIterator<(usize, C)> for Polynomial<C> where C: Semiring {
+
+    /// Creates a `Polynomial` instance from an iteartor of `(usize, C)`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let map_iter = (1..7).into_iter().enumerate();
+    ///     let p: Polynomial<i64> = map_iter.collect();
+    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+    /// 
+    fn from_iter<T: IntoIterator<Item = (usize, C)>>(iter: T) -> Self {
+        let map: BTreeMap<usize, C> = iter.into_iter().collect();
+        Polynomial::sparse_from_map(map)
+    }
+}
+
 //********** Clone related Methods **********/
 impl<C> Clone for Polynomial<C> where C: Semiring + Clone {
 
@@ -1223,9 +1255,9 @@ impl<C> Polynomial<C> where C: Semiring + num::traits::Signed {
     ///     # use comonjo_algebra::dense;
     ///     let p = dense![1, 0, 2, -3, -4, 0, 5, 6, -7];
     ///     //                     ^          ^     ^
-    ///     assert_eq!(p.sign_vibrations, 3);
+    ///     assert_eq!(p.sign_vibrations(), 3);
     /// 
-    pub fn sign_variations(&self) -> usize {
+    pub fn sign_vibrations(&self) -> usize {
         if self.is_constant() { return 0; }
 
         let mut prev = C::zero().signum();

@@ -50,6 +50,17 @@ fn test_sparse_macro(){
 }
 
 #[test]
+fn test_from_iterator(){
+    let vec_iter = (1..7).into_iter();
+    let p: Polynomial<i64> = vec_iter.collect();
+    assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+
+    let map_iter = (1..7).into_iter().enumerate();
+    let q: Polynomial<i64> = map_iter.collect();
+    assert_eq!(q, dense![1, 2, 3, 4, 5, 6]);
+}
+
+#[test]
 fn test_display(){
     fn test(p: Polynomial<i64>, exp: &str){
         assert_eq!(format!("{}", p), exp);
@@ -1146,7 +1157,7 @@ fn test_sign_vibrations(){
     fn test(x: Polynomial<i64>, exp: usize){
 
         fn test_op<'a>(x: Polynomial<i64>, exp: usize){
-            assert_eq!(x.sign_variations(), exp);
+            assert_eq!(x.sign_vibrations(), exp);
         }
 
         for x_ in get_impls(&x) {
