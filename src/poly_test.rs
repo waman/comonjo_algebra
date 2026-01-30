@@ -23,17 +23,68 @@ fn get_impls<'a, C>(x: &'a Polynomial<C>) -> Vec<Polynomial<C>> where C: Semirin
     }
 }
 
+/// 1 + 2x + 3x² (= dense![[1, 2, 3]])
+fn p0() -> Polynomial<i64> { dense![1, 2, 3] }
+
+/// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
+fn p1() -> Polynomial<i64> { dense![4, 5, 0, 6, 7] }
+
+/// 4 + 5x³ + 6x⁷ (= dense![[4, 0, 0, 5, 0, 0, 0, 6]])
+fn p2() -> Polynomial<i64> { dense![4, 0, 0, 5, 0, 0, 0, 6] }
+
+/// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
+fn p3() -> Polynomial<i64> { dense![1, 0, 0, 0, 2] }
+
+/// 6x³ (= dense![[0, 0, 0, 6]])
+fn p4() -> Polynomial<i64> { dense![0, 0, 0, 6] }
+
+/// 5x + 7x⁴ (= dense![[0, 5, 0, 0, 7]])
+fn p5() -> Polynomial<i64> { dense![0, 5, 0, 0, 7] }
+    
+/// 1 + 2x + 3x² (= dense![[1, 2, 3]])
+fn pr0() -> PolyR64 { to_poly_r64(p0()) }
+
+/// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
+fn pr1() -> PolyR64 { to_poly_r64(p1()) }
+
+/// 4 + 5x³ + 6x⁷ (= dense![[4, 0, 0, 5, 0, 0, 0, 6]])
+fn pr2() -> PolyR64 { to_poly_r64(p2()) }
+
+/// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
+fn pr3() -> PolyR64 { to_poly_r64(p3()) }
+
+/// 6x³ (= dense![[0, 0, 0, 6]])
+fn pr4() -> PolyR64 { to_poly_r64(p4()) }
+
 // ⁰¹²³⁴⁵⁶⁷⁸⁹
 #[test]
 fn test_dense_macro(){
     let p0 = dense![1, 2, 3];
     assert_eq!(format!("{}", p0), "1 + 2x + 3x²");
 
-    let p1 = dense![0, 4, 5, 6, 0, 7, 0, 0];
-    assert_eq!(format!("{}", p1), "4x + 5x² + 6x³ + 7x⁵");
+    let p2 = dense![4, 0, 0, 5, 0, 0, 0, 6];
+    assert_eq!(format!("{}", p2), "4 + 5x³ + 6x⁷");
 
-    let p2 = dense![0, 0, 8];
-    assert_eq!(format!("{}", p2), "8x²");
+    let p4 = dense![0, 0, 0, 6];
+    assert_eq!(format!("{}", p4), "6x³");
+
+    let empty: Polynomial<i64> = dense![];
+    assert_eq!(empty, Polynomial::Zero());
+
+    let zero = dense![0];
+    assert_eq!(zero, Polynomial::Zero());
+
+    let zeros = dense![0, 0, 0];
+    assert_eq!(zeros, Polynomial::Zero());
+
+    let cst = dense![5];
+    assert_eq!(cst, Polynomial::constant(5));
+
+    let cst_with_0 = dense![5, 0, 0];
+    assert_eq!(cst_with_0, Polynomial::constant(5));
+
+    let p0_with_0 = dense![1, 2, 3];
+    assert_eq!(p0_with_0, p0);
 }
 
 #[test]
@@ -41,103 +92,26 @@ fn test_sparse_macro(){
     let p0 = sparse![(0, 1), (1, 2), (2, 3)];
     assert_eq!(format!("{}", p0), "1 + 2x + 3x²");
 
-    let p1 = sparse![(0, 0), (1, 4), (2, 5), (5, 7), (6, 0), (3, 6)];
-    assert_eq!(format!("{}", p1), "4x + 5x² + 6x³ + 7x⁵");
+    let p2 = sparse![(0, 4), (3, 5), (7, 6)];
+    assert_eq!(format!("{}", p2), "4 + 5x³ + 6x⁷");
 
+    let p4 = sparse![(3, 6)];
+    assert_eq!(format!("{}", p4), "6x³");
 
-    let p2 = sparse![(2, 8)];
-    assert_eq!(format!("{}", p2), "8x²");
-}
+    let empty: Polynomial<i64> = sparse![];
+    assert_eq!(empty, Polynomial::Zero());
 
-#[test]
-fn test_from_iterator(){
-    let vec_iter = (1..7).into_iter();
-    let p: Polynomial<i64> = vec_iter.collect();
-    assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+    let zeros = sparse![(0, 0), (4, 0), (7, 0)];
+    assert_eq!(zeros, Polynomial::Zero());
 
-    let map_iter = (1..7).into_iter().enumerate();
-    let q: Polynomial<i64> = map_iter.collect();
-    assert_eq!(q, dense![1, 2, 3, 4, 5, 6]);
-}
+    let cst = sparse![(0, 5)];
+    assert_eq!(cst, Polynomial::constant(5));
 
-#[test]
-fn test_display(){
-    fn test(p: Polynomial<i64>, exp: &str){
-        assert_eq!(format!("{}", p), exp);
-    }
+    let cst_with_0 = sparse![(0, 5), (7, 0)];
+    assert_eq!(cst_with_0, Polynomial::constant(5));
 
-    let table = [
-        (zero(), "(0)"),
-        (one(), "(1)"),
-
-        (cst(0),  "(0)"),
-        (cst(1),  "(1)"),
-        (cst(-1), "(-1)"),
-        (cst(2),  "(2)"),
-
-        (dense![],      "(0)"),
-        (dense![0, 0], "(0)"),
-        (dense![1],    "(1)"),
-        (dense![-1],   "(-1)"),
-        (dense![2],    "(2)"),
-
-        (dense![1, 2, 3],        "1 + 2x + 3x²"),
-        (dense![-1, -2, -3],     "-1 - 2x - 3x²"),
-        (dense![0, 2, 3],        "2x + 3x²"),
-        (dense![1, 2, 3, 0, 0],  "1 + 2x + 3x²"),
-        (dense![1, 1, 1, 1],     "1 + x + x² + x³"),
-        (dense![-1, -1, -1, -1], "-1 - x - x² - x³"),
-
-
-        (sparse![], "(0)"),
-        (sparse![(0, 0), (1, 0)], "(0)"),
-        (sparse![(0, 1)],  "(1)"),
-        (sparse![(0, -1)], "(-1)"),
-        (sparse![(0, 2)],   "(2)"),
-
-        (sparse![(0, 1), (2, 3)],   "1 + 3x²"),
-        (sparse![(0, -1), (2, -3)], "-1 - 3x²"),
-        (sparse![(1, 2), (2, 3)],   "2x + 3x²"),
-        (sparse![(0, 1), (2, 3), (4, 0)], "1 + 3x²"),
-        (sparse![(0, 1), (1, 1), (2, 1), (3, 1)],     "1 + x + x² + x³"),
-        (sparse![(0, -1), (1, -1), (2, -1), (3, -1)], "-1 - x - x² - x³"),
-    ];
-
-    for entry in table {
-        test(entry.0, entry.1);
-    }
-}
-
-#[test]
-fn test_display_for_rational_and_complex(){
-    // rational
-    let p_rat = dense![r(1, 2), r(1, 3), r(2, 3)];
-    assert_eq!(format!("{}", p_rat), "1/2 + (1/3)x + (2/3)x²");
-
-    // complex
-    let p_cx = dense![c64(1., 2.), c64(3., 4.), c64(5., 6.)];
-    assert_eq!(format!("{}", p_cx), "1+2i + (3+4i)x + (5+6i)x²");
-}
-
-#[test]
-fn test_debug(){
-    fn test(p: Polynomial<i64>, exp: &str){
-        assert_eq!(format!("{:?}", p), exp);
-    }
-
-    let table = [
-        (zero(), "Polynomial::<i64>::Zero[(0)]"),
-        (one(), "Polynomial::<i64>::Constant[(1)]"),
-        (cst(2),  "Polynomial::<i64>::Constant[(2)]"),
-        (dense![1, 2, 3],  "Polynomial::<i64>::Dense[1 + 2x + 3x²]"),
-        (dense![-1, -2, -3],  "Polynomial::<i64>::Dense[-1 - 2x - 3x²]"),
-        (sparse![(0, 1), (1, 2), (2, 3)],   "Polynomial::<i64>::Sparse[1 + 2x + 3x²]"),
-        (sparse![(0, -1), (1, -2), (2, -3)],   "Polynomial::<i64>::Sparse[-1 - 2x - 3x²]"),
-    ];
-
-    for entry in table {
-        test(entry.0, entry.1);
-    }
+    let p0_with_0 = sparse![(0, 1), (1, 2), (2, 3), (5, 0)];
+    assert_eq!(p0_with_0, p0);
 }
 
 #[test]
@@ -229,6 +203,175 @@ fn test_max_and_min_term(){
 }
 
 #[test]
+fn test_eval(){
+
+    fn test(p: Polynomial<i64>, x: i64, exp: i64){
+    
+        fn test_op(p: Polynomial<i64>, x: i64, exp: i64){
+            assert_eq!(p.eval(x), exp);
+        }
+
+        for p_ in get_impls(&p) {
+            test_op(p_, x, exp);
+        }
+    }
+
+    let table = [
+        (zero(), 0, 0),
+        (zero(), 3, 0),
+        (zero(), -4, 0),
+        
+        (cst(5), 0, 5),
+        (cst(5), 3, 5),
+        (cst(5), -4, 5),
+
+        (p0(), 0, 1),
+        (p0(), 3, 1 + 2*3 + 3*3*3),
+        (p0(), -4, 1 + 2*-4 + 3*-4*-4),
+
+        (p1(), 0, 4),
+        (p1(), 3, 4 + 5*3 + 6*3*3*3 + 7*3*3*3*3),
+        (p1(), -4, 4 + 5*-4 + 6*-4*-4*-4 + 7*-4*-4*-4*-4),
+
+        (p2(), 0, 4),
+        (p2(), 3, 4 + 5*3*3*3 + 6*3*3*3*3*3*3*3),
+        (p2(), -4, 4 + 5*-4*-4*-4 + 6*-4*-4*-4*-4*-4*-4*-4),
+
+        (p3(), 0, 1),
+        (p3(), 3, 1 + 2*3*3*3*3),
+        (p3(), -4, 1 + 2*-4*-4*-4*-4),
+
+        (p4(), 0, 0),
+        (p4(), 3, 6*3*3*3),
+        (p4(), -4, 6*-4*-4*-4),
+
+        (p5(), 0, 0),
+        (p5(), 3, 5*3 + 7*3*3*3*3),
+        (p5(), -4, 5*-4 + 7*-4*-4*-4*-4),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
+
+#[test]
+fn test_clone_methods(){  // clone(), dense_clone(), sparse_clone(), to_dense() and to_sparse()
+    fn test_with_clones<F>(p: Polynomial<i64>, test: F) where F: Fn(Polynomial<i64>) {
+        for p_clone in [
+            p.clone(),
+            p.dense_clone(),
+            p.sparse_clone(),
+            p.clone().to_dense(),
+            p.clone().to_sparse()
+        ]{
+            test(p_clone)
+        }
+    }
+
+    test_with_clones(zero(), |p| assert!(p.is_zero()));
+    test_with_clones(one(), |p| assert!(p.is_one()));
+    test_with_clones(cst(5), |p| {
+        assert!(p.is_constant());
+        assert_eq!(p.nth(0), Some(&5));
+    });
+    
+    // 1 + 2x² + 4x³ + x⁶
+    let pd = dense![1, 0, 2, 4, 0, 0, 1];
+    let ps = sparse![(0, 1), (2, 2), (3, 4), (6, 1)];
+
+    test_with_clones(dense![1, 0, 2, 4, 0, 0, 1], |p|{
+        assert_eq!(p, pd);
+        assert_eq!(p, ps);
+    });
+    test_with_clones(sparse![(0, 1), (2, 2), (3, 4), (6, 1)], |p|{
+        assert_eq!(p, pd);
+        assert_eq!(p, ps);
+    });
+}
+
+#[test]
+fn test_display(){
+    fn test(p: Polynomial<i64>, exp: &str){
+        assert_eq!(format!("{}", p), exp);
+    }
+
+    let table = [
+        (zero(), "(0)"),
+        (one(), "(1)"),
+
+        (cst(0),  "(0)"),
+        (cst(1),  "(1)"),
+        (cst(-1), "(-1)"),
+        (cst(2),  "(2)"),
+
+        (dense![],      "(0)"),
+        (dense![0, 0], "(0)"),
+        (dense![1],    "(1)"),
+        (dense![-1],   "(-1)"),
+        (dense![2],    "(2)"),
+
+        (dense![1, 2, 3],        "1 + 2x + 3x²"),
+        (dense![-1, -2, -3],     "-1 - 2x - 3x²"),
+        (dense![0, 2, 3],        "2x + 3x²"),
+        (dense![1, 2, 3, 0, 0],  "1 + 2x + 3x²"),
+        (dense![1, 1, 1, 1],     "1 + x + x² + x³"),
+        (dense![-1, -1, -1, -1], "-1 - x - x² - x³"),
+
+
+        (sparse![], "(0)"),
+        (sparse![(0, 0), (1, 0)], "(0)"),
+        (sparse![(0, 1)],  "(1)"),
+        (sparse![(0, -1)], "(-1)"),
+        (sparse![(0, 2)],   "(2)"),
+
+        (sparse![(0, 1), (2, 3)],   "1 + 3x²"),
+        (sparse![(0, -1), (2, -3)], "-1 - 3x²"),
+        (sparse![(1, 2), (2, 3)],   "2x + 3x²"),
+        (sparse![(0, 1), (2, 3), (4, 0)], "1 + 3x²"),
+        (sparse![(0, 1), (1, 1), (2, 1), (3, 1)],     "1 + x + x² + x³"),
+        (sparse![(0, -1), (1, -1), (2, -1), (3, -1)], "-1 - x - x² - x³"),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
+fn test_display_for_rational_and_complex(){
+    // rational
+    let p_rat = dense![r(1, 2), r(1, 3), r(2, 3)];
+    assert_eq!(format!("{}", p_rat), "1/2 + (1/3)x + (2/3)x²");
+
+    // complex
+    let p_cx = dense![c64(1., 2.), c64(3., 4.), c64(5., 6.)];
+    assert_eq!(format!("{}", p_cx), "1+2i + (3+4i)x + (5+6i)x²");
+}
+
+#[test]
+fn test_debug(){
+    fn test(p: Polynomial<i64>, exp: &str){
+        assert_eq!(format!("{:?}", p), exp);
+    }
+
+    let table = [
+        (zero(), "Polynomial::<i64>::Zero[(0)]"),
+        (one(), "Polynomial::<i64>::Constant[(1)]"),
+        (cst(2),  "Polynomial::<i64>::Constant[(2)]"),
+        (dense![1, 2, 3],  "Polynomial::<i64>::Dense[1 + 2x + 3x²]"),
+        (dense![-1, -2, -3],  "Polynomial::<i64>::Dense[-1 - 2x - 3x²]"),
+        (sparse![(0, 1), (1, 2), (2, 3)],   "Polynomial::<i64>::Sparse[1 + 2x + 3x²]"),
+        (sparse![(0, -1), (1, -2), (2, -3)],   "Polynomial::<i64>::Sparse[-1 - 2x - 3x²]"),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
 fn test_coeffs_iter_methods(){
 
     fn test(x: Polynomial<i64>, exp: Vec<i64>){
@@ -287,6 +430,17 @@ fn test_coeffs_iter_methods(){
 }
 
 #[test]
+fn test_from_iterator(){
+    let vec_iter = (1..7).into_iter();
+    let p: Polynomial<i64> = vec_iter.collect();
+    assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+
+    let map_iter = (1..7).into_iter().enumerate();
+    let q: Polynomial<i64> = map_iter.collect();
+    assert_eq!(q, dense![1, 2, 3, 4, 5, 6]);
+}
+
+#[test]
 fn test_eq(){
     let p_dense = dense![1, 0, 2, 4, 0, 0, 1];
     assert_eq!(p_dense, dense![1, 0, 2, 4, 0, 0, 1]);
@@ -296,74 +450,6 @@ fn test_eq(){
 
     assert_eq!(p_dense, p_sparse);
 }
-
-#[test]
-fn test_clone_methods(){  // clone(), dense_clone(), sparse_clone(), to_dense() and to_sparse()
-    fn test_with_clones<F>(p: Polynomial<i64>, test: F) where F: Fn(Polynomial<i64>) {
-        for p_clone in [
-            p.clone(),
-            p.dense_clone(),
-            p.sparse_clone(),
-            p.clone().to_dense(),
-            p.clone().to_sparse()
-        ]{
-            test(p_clone)
-        }
-    }
-
-    test_with_clones(zero(), |p| assert!(p.is_zero()));
-    test_with_clones(one(), |p| assert!(p.is_one()));
-    test_with_clones(cst(5), |p| {
-        assert!(p.is_constant());
-        assert_eq!(p.nth(0), Some(&5));
-    });
-    
-    // 1 + 2x² + 4x³ + x⁶
-    let pd = dense![1, 0, 2, 4, 0, 0, 1];
-    let ps = sparse![(0, 1), (2, 2), (3, 4), (6, 1)];
-
-    test_with_clones(dense![1, 0, 2, 4, 0, 0, 1], |p|{
-        assert_eq!(p, pd);
-        assert_eq!(p, ps);
-    });
-    test_with_clones(sparse![(0, 1), (2, 2), (3, 4), (6, 1)], |p|{
-        assert_eq!(p, pd);
-        assert_eq!(p, ps);
-    });
-}
-
-/// 1 + 2x + 3x² (= dense![[1, 2, 3]])
-fn p0() -> Polynomial<i64> { dense![1, 2, 3] }
-
-/// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
-fn p1() -> Polynomial<i64> { dense![4, 5, 0, 6, 7] }
-
-/// 4 + 5x³ + 6x⁷ (= dense![[4, 0, 0, 5, 0, 0, 0, 6]])
-fn p2() -> Polynomial<i64> { dense![4, 0, 0, 5, 0, 0, 0, 6] }
-
-/// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
-fn p3() -> Polynomial<i64> { dense![1, 0, 0, 0, 2] }
-
-/// 6x³ (= dense![[0, 0, 0, 6]])
-fn p4() -> Polynomial<i64> { dense![0, 0, 0, 6] }
-
-/// 5x + 7x⁴ (= dense![[0, 5, 0, 0, 7]])
-fn p5() -> Polynomial<i64> { dense![0, 5, 0, 0, 7] }
-    
-/// 1 + 2x + 3x² (= dense![[1, 2, 3]])
-fn pr0() -> PolyR64 { to_poly_r64(p0()) }
-
-/// 4 + 5x + 6x³ + 7x⁴ (= dense![[4, 5, 0, 6, 7]])
-fn pr1() -> PolyR64 { to_poly_r64(p1()) }
-
-/// 4 + 5x³ + 6x⁷ (= dense![[4, 0, 0, 5, 0, 0, 0, 6]])
-fn pr2() -> PolyR64 { to_poly_r64(p2()) }
-
-/// 1 + 2x⁴ (= dense![[1, 0, 0, 0, 2]])
-fn pr3() -> PolyR64 { to_poly_r64(p3()) }
-
-/// 6x³ (= dense![[0, 0, 0, 6]])
-fn pr4() -> PolyR64 { to_poly_r64(p4()) }
 
 #[test]
 fn test_neg(){

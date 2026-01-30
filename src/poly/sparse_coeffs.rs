@@ -1,5 +1,7 @@
 use std::collections::{BTreeMap, btree_map::{IntoIter, Iter}};
 
+use num::pow::Pow;
+
 use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, PolynomialOps, factorial, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
 
 #[derive(Clone)]
@@ -28,6 +30,52 @@ impl<C> SparseCoeffs<C> where C: Semiring {
     pub(crate) fn is_x(&self) -> bool {
         self.0.len() == 1 && self.0.get(&1).is_some_and(|c|c.is_one())
     }
+}
+
+impl<C> SparseCoeffs<C> where C: Semiring + Pow<usize, Output=C> + Clone {
+
+    pub(crate) fn eval(&self, x: C) -> C {
+        if self.0.len() == 1 {
+            match self.max_order_term() {
+                Some((i, c)) => return c.ref_mul(x.pow(i)),
+                _ => panic!(),
+            }
+        }
+
+        let mut x_pows = PowerMap::new(x);
+        let mut ite = self.0.iter().rev();
+
+        let last = ite.next().unwrap();
+        let mut prev_i = *last.0;
+        let mut sum: C = last.1.clone();
+
+        for (i, c) in ite {
+            sum = sum * x_pows.get(prev_i - *i) + c;
+            prev_i = *i;
+        }
+
+        if prev_i == 0 {
+            sum
+        } else {
+            sum * x_pows.get(prev_i)
+        }
+    }
+
+//   def apply(x: C)(implicit ring: Semiring[C]): C = if (isZero) {
+//     ring.zero
+//   } else if (exp.length == 1) {
+//     if (exp(0) != 0) coeff(0) * (x.pow(exp(0))) else coeff(0)
+//   } else {
+//     // TODO: Rewrite this to be more like PolyDense.
+//     val bits = expBits(x)
+//     val e0 = exp(0)
+//     val c0 = coeff(0)
+//     var sum = if (e0 == 0) c0 else c0 * fastExp(bits, e0)
+//     cfor(1)(_ < exp.length, _ + 1) { i =>
+//       sum += coeff(i) * fastExp(bits, exp(i))
+//     }
+//     sum
+//   }
  
 //    final private def expBits(x: C)(implicit ring: Semiring[C]): Array[C] = {
 //      val bits = new Array[C](math.max(2, 32 - numberOfLeadingZeros(degree)))
@@ -56,6 +104,50 @@ impl<C> SparseCoeffs<C> where C: Semiring {
 //      val lb = numberOfTrailingZeros(e) + 1
 //      fastExp(bits, e >>> lb, lb, bits(lb - 1))
 //    }
+}
+
+struct PowerMap<C> where C: Semiring + Pow<usize, Output=C> + Clone {
+    /// *x^{2^i}*
+    vec: Vec<C>
+}
+
+impl<C> PowerMap<C> where C: Semiring + Pow<usize, Output=C> + Clone {
+
+    fn new(x: C) -> PowerMap<C> {
+        PowerMap { vec: vec![x.clone(), x.pow(2)] }  // Is good to Specify the Vec's capacity?
+    }
+
+    /// Returns *x^i*
+    fn get(&mut self, i: usize) -> C {
+        let mut exp: u32 = i as u32;
+        let mut result: C = C::one();
+        let mut j: u32 = 0;
+
+        while exp > 0 {
+            let lb = exp.trailing_zeros() + 1;
+            j = j + lb;
+            result = result * self.get_base_power(j - 1);
+            exp >>= lb;
+        }
+        
+        result
+    }
+
+    /// Returns *x^{2^i}*.
+    fn get_base_power(&mut self, i: u32) -> C {
+        let len = self.vec.len() as u32;
+        if i >= len {
+            let mut last = self.vec.last().unwrap().clone();
+            for _ in len..=i {
+                let next_last = last.ref_mul(&last);
+                self.vec.push(next_last.clone());
+                last = next_last;
+            }
+            last
+        } else {
+            self.vec.get(i as usize).unwrap().clone()
+        }
+    }
 }
 
 //********** Iterator **********/

@@ -28,7 +28,7 @@ use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, iter::{CoeffsIter, Int
 ///     // reciprocal()
 ///     let mut q = dense![1, 2, 0, 3];  // 1 + 2x + 3x³
 ///     q.reciprocal();
-///     assert_eq!(q, dense![3, 0, 2, 1]);  // r is mutated
+///     assert_eq!(q, dense![3, 0, 2, 1]);  // q is mutated
 /// 
 /// In a bit addition, `new_xxx()` methods demand `Clone` trait to coefficient type,
 /// while the others do not in almost all cases.
@@ -366,14 +366,6 @@ pub(crate) fn factorial<C>(n: usize) -> C where C: Semiring + num::FromPrimitive
 }
 
 impl<C> Polynomial<C> where C: Semiring {
-    
-    //   /**
-    //    * Evaluate the polynomial at `x`.
-    //    */
-    //   def apply(x: C)(implicit r: Semiring[C]): C
-    
-    //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
-    //     this.map(f).apply(x)
 
     /// Returns the degree of the `self` polynomial.
     /// 
@@ -542,36 +534,25 @@ impl<C> Polynomial<C> where C: Semiring {
     }
 }
 
-impl<C> FromIterator<C> for Polynomial<C> where C: Semiring {
+impl<C> Polynomial<C> where C: Semiring + Pow<usize, Output=C> + Clone {
 
-    /// Creates a `Polynomial` instance from an iterator of `C`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let vec_iter = (1..7).into_iter();
-    ///     let p: Polynomial<i64> = vec_iter.collect();
-    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
-    /// 
-    fn from_iter<T: IntoIterator<Item = C>>(iter: T) -> Self {
-        let vec: Vec<C> = iter.into_iter().collect();
-        Polynomial::dense_from_vec(vec)
+    pub fn eval(&self, x: C) -> C {
+        match self {
+            Polynomial::Zero() => C::zero(),
+            Polynomial::Constant(cc) => cc.0.clone(),
+            Polynomial::Dense(dc) => dc.eval(x),
+            Polynomial::Sparse(sc) => sc.eval(x),
+        }
     }
-}
-
-impl<C> FromIterator<(usize, C)> for Polynomial<C> where C: Semiring {
-
-    /// Creates a `Polynomial` instance from an iteartor of `(usize, C)`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let map_iter = (1..7).into_iter().enumerate();
-    ///     let p: Polynomial<i64> = map_iter.collect();
-    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
-    /// 
-    fn from_iter<T: IntoIterator<Item = (usize, C)>>(iter: T) -> Self {
-        let map: BTreeMap<usize, C> = iter.into_iter().collect();
-        Polynomial::sparse_from_map(map)
-    }
+    
+    //   /**
+    //    * Evaluate the polynomial at `x`.
+    //    */
+    //   def apply(x: C)(implicit r: Semiring[C]): C
+    
+    //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
+    //     this.map(f).apply(x){
+    
 }
 
 //********** Clone related Methods **********/
@@ -938,6 +919,38 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
             Polynomial::Dense(dc) => dc.coeffs_iter(),
             Polynomial::Sparse(sc) => sc.coeffs_iter(), 
         }
+    }
+}
+
+impl<C> FromIterator<C> for Polynomial<C> where C: Semiring {
+
+    /// Creates a `Polynomial` instance from an iterator of `C`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let vec_iter = (1..7).into_iter();
+    ///     let p: Polynomial<i64> = vec_iter.collect();
+    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+    /// 
+    fn from_iter<T: IntoIterator<Item = C>>(iter: T) -> Self {
+        let vec: Vec<C> = iter.into_iter().collect();
+        Polynomial::dense_from_vec(vec)
+    }
+}
+
+impl<C> FromIterator<(usize, C)> for Polynomial<C> where C: Semiring {
+
+    /// Creates a `Polynomial` instance from an iterator of `(usize, C)`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let map_iter = (1..7).into_iter().enumerate();
+    ///     let p: Polynomial<i64> = map_iter.collect();
+    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+    /// 
+    fn from_iter<T: IntoIterator<Item = (usize, C)>>(iter: T) -> Self {
+        let map: BTreeMap<usize, C> = iter.into_iter().collect();
+        Polynomial::sparse_from_map(map)
     }
 }
 
@@ -2291,7 +2304,7 @@ fn calc_pow<C>(base: &Polynomial<C>, p: u32, extra: &Polynomial<C>) -> Polynomia
 }
 
 /// Note that 0^0 returns 1 for simplicity.
-impl<C> num::pow::Pow<u32> for Polynomial<C> where C: Semiring + Clone {
+impl<C> Pow<u32> for Polynomial<C> where C: Semiring + Clone {
 
     type Output = Polynomial<C>;
 
@@ -2305,7 +2318,7 @@ impl<C> num::pow::Pow<u32> for Polynomial<C> where C: Semiring + Clone {
 }
 
 /// Note that 0^0 returns 1 for simplicity.
-impl<'a, C> num::pow::Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
+impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
 
     type Output = Polynomial<C>;
 
