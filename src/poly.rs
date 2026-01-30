@@ -536,6 +536,14 @@ impl<C> Polynomial<C> where C: Semiring {
 
 impl<C> Polynomial<C> where C: Semiring + Pow<usize, Output=C> + Clone {
 
+    /// Evaluates the `self` polynomial at `x`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<i64> = dense![1, 2, 3];  // 1 + 2x + 3x²
+    ///     assert_eq!(p.eval(4), 1 + 2*4 + 3*4*4);
+    ///     assert_eq!(p.eval(-5), 1 + 2*-5 + 3*-5*-5);
+    /// 
     pub fn eval(&self, x: C) -> C {
         match self {
             Polynomial::Zero() => C::zero(),
@@ -570,7 +578,8 @@ impl<C> Clone for Polynomial<C> where C: Semiring + Clone {
 
 impl<C> Polynomial<C> where C: Semiring + Clone {
 
-    /// Creates a dense clone of this polynomial if the `self` is sparse, otherwise (zero, constant or dense) returns `self`.
+    /// Creates a dense clone of this polynomial if the `self` is sparse,
+    /// otherwise (zero, constant or dense) returns `self`.
     pub fn dense_clone(&self) -> Polynomial<C> {
         match self {
             Polynomial::Sparse(sc) => {
@@ -588,7 +597,8 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
         }
     }
 
-    /// Creates a sparse clone of this polynomial if `self` is dense, otherwise (zero, constant or sparse) returns `self`.
+    /// Creates a sparse clone of this polynomial if `self` is dense,
+    /// otherwise (zero, constant or sparse) returns `self`.
     pub fn sparse_clone(&self) -> Polynomial<C> {
         match self {
             d @ Polynomial::Dense(_) => {
