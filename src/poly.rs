@@ -1,12 +1,13 @@
 pub(crate) mod dense_coeffs;
 pub(crate) mod sparse_coeffs;
 pub(crate) mod iter;
+pub mod eval;
 
 use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
 
-use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse_coeffs::SparseCoeffs}};
+use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::{Eval, PolynomialEvaluator}, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse_coeffs::SparseCoeffs}};
 
 /// Polynomial type.
 /// Refer to spire's [Polynomial](https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala).
@@ -82,11 +83,11 @@ pub enum Polynomial<C> where C: Semiring {
     Constant(ConstCoeff<C>),
 
     /// A polynomial type which holds the coefficients as `Vec`.
-    /// Use `Polynomial::dense_from_vec()` method or dense![]` macro to instantiate.
+    /// Use `Polynomial::from(Vec<C>)` method or dense![]` macro to instantiate.
     Dense(DenseCoeffs<C>),
     
     /// A polynomial type which holds the coefficients as `BTreeMap`.
-    /// Use `Polynomial::sparse_from_map()` method or `sparse![]` macro to instantiate.
+    /// Use `Polynomial::from(BTreeMap<usize, C>)` method or `sparse![]` macro to instantiate.
     Sparse(SparseCoeffs<C>)
 }
 
@@ -112,7 +113,7 @@ pub struct ConstCoeff<C: Semiring>(pub(crate) C);
 #[macro_export]
 macro_rules! dense {
     [ $( $x:expr ),* ] => {
-        $crate::poly::Polynomial::dense_from_vec(vec![ $( $x ),* ])
+        $crate::poly::Polynomial::from(vec![ $( $x ),* ])
     };
     [ $( $x:expr ),+ , ] => {
         dense![ $( $x ),* ]
@@ -139,7 +140,7 @@ macro_rules! dense {
 #[macro_export]
 macro_rules! sparse {
     [ $( ($order:expr, $coeff:expr) ),* ] => {
-        $crate::poly::Polynomial::sparse_from_map(std::collections::BTreeMap::from([ $( ($order, $coeff) ),* ]))
+        $crate::poly::Polynomial::from(std::collections::BTreeMap::from([ $( ($order, $coeff) ),* ]))
     };
     [ $( ($order:expr, $coeff:expr) ),+ , ] => {
         sparse![ $( ($order, $coeff) ),* ]
@@ -189,40 +190,40 @@ impl<C> Polynomial<C> where C: Semiring {
         }
     }
 
-    /// Returns a new `Dense` polynomial whose coefficients are specified by the argument.
-    /// If the length of the argument `Vec` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
-    pub fn dense_from_vec(mut coeffs: Vec<C>) -> Polynomial<C>  {
+    // /// Returns a new `Dense` polynomial whose coefficients are specified by the argument.
+    // /// If the length of the argument `Vec` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
+    // pub fn dense_from_vec(mut coeffs: Vec<C>) -> Polynomial<C>  {
 
-        remove_tail_zeros(&mut coeffs);
+    //     remove_tail_zeros(&mut coeffs);
 
-        match coeffs.len() {
-            0 => Polynomial::Zero(),
-            1 => Polynomial::new_raw_const(coeffs.pop().unwrap()),
-            _ => {
-                coeffs.shrink_to_fit();
-                Polynomial::new_raw_dense(coeffs)
-            }
-        }
-    }
+    //     match coeffs.len() {
+    //         0 => Polynomial::Zero(),
+    //         1 => Polynomial::new_raw_const(coeffs.pop().unwrap()),
+    //         _ => {
+    //             coeffs.shrink_to_fit();
+    //             Polynomial::new_raw_dense(coeffs)
+    //         }
+    //     }
+    // }
 
-    /// Returns a new `Sparse` polynomial whose coefficients are specified by the argument.
-    /// If the length of the argument `BTreeMap` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
-    pub fn sparse_from_map(mut coeffs: BTreeMap<usize, C>) -> Polynomial<C> {
+    // /// Returns a new `Sparse` polynomial whose coefficients are specified by the argument.
+    // /// If the length of the argument `BTreeMap` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
+    // pub fn sparse_from_map(mut coeffs: BTreeMap<usize, C>) -> Polynomial<C> {
 
-        coeffs.retain(|_, v| !v.is_zero());
+    //     coeffs.retain(|_, v| !v.is_zero());
 
-        match coeffs.len() {
-            0 => Polynomial::Zero(),
-            1 => {
-                if coeffs.contains_key(&0) {
-                    Polynomial::new_raw_const(coeffs.remove(&0).unwrap())
-                } else {
-                    Polynomial::new_raw_sparse(coeffs)
-                }
-            },
-            _ => Polynomial::new_raw_sparse(coeffs)
-        }
-    }
+    //     match coeffs.len() {
+    //         0 => Polynomial::Zero(),
+    //         1 => {
+    //             if coeffs.contains_key(&0) {
+    //                 Polynomial::new_raw_const(coeffs.remove(&0).unwrap())
+    //             } else {
+    //                 Polynomial::new_raw_sparse(coeffs)
+    //             }
+    //         },
+    //         _ => Polynomial::new_raw_sparse(coeffs)
+    //     }
+    // }
 
 //     pub fn parse(s: &str) -> Polynomial<C> {
     
@@ -284,25 +285,6 @@ impl<C> Polynomial<C> where C: Semiring {
 //     }
 
 //     pub fn parse_to_sparse(s: &str) -> Polynomial<C> {
-//         todo!()
-//     }
-    
-//     pub fn interpolate(points: &[(C, C)]) -> Polynomial<C> {
-//     //   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
-//     //     def loop(p: Polynomial[C], xs: List[C], pts: List[(C, C)]): Polynomial[C] =
-//     //       pts match {
-//     //         case Nil =>
-//     //           p
-//     //         case (x, y) :: tail =>
-//     //           val c = Polynomial.constant((y - p(x)) / xs.map(x - _).qproduct)
-//     //           val prod = xs.foldLeft(Polynomial.one[C]) { (prod, xn) =>
-//     //             prod * (Polynomial.x[C] - constant(xn))
-//     //           }
-//     //           loop(p + c * prod, x :: xs, tail)
-//     //       }
-//     //     loop(Polynomial.zero[C], Nil, points.toList)
-//     //   }
-//     // }
 //         todo!()
 //     }
 
@@ -534,7 +516,7 @@ impl<C> Polynomial<C> where C: Semiring {
     }
 }
 
-impl<C> Polynomial<C> where C: Semiring + Pow<usize, Output=C> + Clone {
+impl<C> Polynomial<C> where C: Semiring {
 
     /// Evaluates the `self` polynomial at `x`.
     ///
@@ -544,19 +526,9 @@ impl<C> Polynomial<C> where C: Semiring + Pow<usize, Output=C> + Clone {
     ///     assert_eq!(p.eval(4), 1 + 2*4 + 3*4*4);
     ///     assert_eq!(p.eval(-5), 1 + 2*-5 + 3*-5*-5);
     /// 
-    pub fn eval(&self, x: C) -> C {
-        match self {
-            Polynomial::Zero() => C::zero(),
-            Polynomial::Constant(cc) => cc.0.clone(),
-            Polynomial::Dense(dc) => dc.eval(x),
-            Polynomial::Sparse(sc) => sc.eval(x),
-        }
+    pub fn eval(&self, x: C) -> C where Eval: PolynomialEvaluator<C> {
+        Eval::eval(self, x)
     }
-    
-    //   /**
-    //    * Evaluate the polynomial at `x`.
-    //    */
-    //   def apply(x: C)(implicit r: Semiring[C]): C
     
     //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
     //     this.map(f).apply(x){
@@ -944,7 +916,7 @@ impl<C> FromIterator<C> for Polynomial<C> where C: Semiring {
     /// 
     fn from_iter<T: IntoIterator<Item = C>>(iter: T) -> Self {
         let vec: Vec<C> = iter.into_iter().collect();
-        Polynomial::dense_from_vec(vec)
+        Polynomial::from(vec)
     }
 }
 
@@ -960,7 +932,7 @@ impl<C> FromIterator<(usize, C)> for Polynomial<C> where C: Semiring {
     /// 
     fn from_iter<T: IntoIterator<Item = (usize, C)>>(iter: T) -> Self {
         let map: BTreeMap<usize, C> = iter.into_iter().collect();
-        Polynomial::sparse_from_map(map)
+        Polynomial::from(map)
     }
 }
 

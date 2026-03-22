@@ -1,6 +1,6 @@
 use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
 
-use num::{Integer, pow::Pow};
+use num::Integer;
 
 use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, PolynomialOps, factorial, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint, remove_tail_zeros}};
 
@@ -27,28 +27,6 @@ impl<C> DenseCoeffs<C> where C: Semiring {
     
     pub(crate) fn is_x(&self) -> bool {
         self.0.len() == 2 && self.0[0].is_zero() && self.0[1].is_one()
-    }
-}
-
-impl<C> DenseCoeffs<C> where C: Semiring + Pow<usize, Output=C> + Clone {
-
-    pub(crate) fn eval(&self, x: C) -> C {
-        let x2: &C = &x.clone().pow(2);
-        let mut sum0 = C::zero();
-        let mut sum1 = C::zero();
-
-        let mut rchunks = self.0.rchunks_exact(2);
-        for cs in rchunks.by_ref() {
-            sum0 = sum0 * x2 + &cs[0];
-            sum1 = sum1 * x2 + &cs[1];
-        }
-
-        let rem = rchunks.remainder();
-        match rem.len() {
-            0 => sum0 + sum1 * x,
-            1 => sum0 * x + sum1 * x2 + &rem[0],
-            _ => panic!()
-        }
     }
 }
 

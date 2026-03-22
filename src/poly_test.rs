@@ -1,6 +1,6 @@
 use std::{collections::HashMap, vec};
 
-use num::{One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
+use num::{BigInt, One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
 use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Polynomial, PolynomialOps}, sparse};
 
@@ -114,6 +114,11 @@ fn test_sparse_macro(){
     assert_eq!(p0_with_0, p0);
 }
 
+// #[test]
+// fn test_interpolate(){
+//     let p0: Polynomial<f64> = Polynomial::interpolate(&[(1., 1.)]);
+// }
+
 #[test]
 fn test_degree_and_is_xxx_methods(){
 
@@ -203,7 +208,7 @@ fn test_max_and_min_term(){
 }
 
 #[test]
-fn test_eval(){
+fn test_eval_i64(){
 
     fn test(p: Polynomial<i64>, x: i64, exp: i64){
     
@@ -252,6 +257,36 @@ fn test_eval(){
 
     for entry in table {
         test(entry.0, entry.1, entry.2);
+    }
+}
+#[test]
+fn test_eval_for_some_types(){
+    // i32
+    let p_i32: Polynomial<i32> = dense![1, 2, 3];
+
+    for p in get_impls(&p_i32) {
+        assert_eq!(p.eval(3), 1 + 2*3 + 3*3*3);
+    }
+
+    // f64
+    let p_f64: Polynomial<f64> = dense![1., 2., 3.];
+
+    for p in get_impls(&p_f64) {
+        assert_eq!(p.eval(3.), 1. + 2.*3. + 3.*3.*3.);
+    }
+
+    // BigInt
+    let p_bi: Polynomial<BigInt> = dense![1, 2, 3].map_nonzero(|_, c| BigInt::from(c));
+
+    for p in get_impls(&p_bi) {
+        assert_eq!(p.eval(BigInt::from(3)), BigInt::from(1 + 2*3 + 3*3*3));
+    }
+
+    // Rational64
+    let p_r64: PolyR64 = dense![r(1, 2), r(3, 4), r(5, 6)];
+
+    for p in get_impls(&p_r64) {
+        assert_eq!(p.eval(r(7, 8)), r(1, 2) + r(3, 4)*r(7, 8) + r(5, 6)*r(7, 8)*r(7, 8));
     }
 }
 
