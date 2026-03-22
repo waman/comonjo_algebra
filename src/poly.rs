@@ -190,41 +190,6 @@ impl<C> Polynomial<C> where C: Semiring {
         }
     }
 
-    // /// Returns a new `Dense` polynomial whose coefficients are specified by the argument.
-    // /// If the length of the argument `Vec` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
-    // pub fn dense_from_vec(mut coeffs: Vec<C>) -> Polynomial<C>  {
-
-    //     remove_tail_zeros(&mut coeffs);
-
-    //     match coeffs.len() {
-    //         0 => Polynomial::Zero(),
-    //         1 => Polynomial::new_raw_const(coeffs.pop().unwrap()),
-    //         _ => {
-    //             coeffs.shrink_to_fit();
-    //             Polynomial::new_raw_dense(coeffs)
-    //         }
-    //     }
-    // }
-
-    // /// Returns a new `Sparse` polynomial whose coefficients are specified by the argument.
-    // /// If the length of the argument `BTreeMap` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
-    // pub fn sparse_from_map(mut coeffs: BTreeMap<usize, C>) -> Polynomial<C> {
-
-    //     coeffs.retain(|_, v| !v.is_zero());
-
-    //     match coeffs.len() {
-    //         0 => Polynomial::Zero(),
-    //         1 => {
-    //             if coeffs.contains_key(&0) {
-    //                 Polynomial::new_raw_const(coeffs.remove(&0).unwrap())
-    //             } else {
-    //                 Polynomial::new_raw_sparse(coeffs)
-    //             }
-    //         },
-    //         _ => Polynomial::new_raw_sparse(coeffs)
-    //     }
-    // }
-
 //     pub fn parse(s: &str) -> Polynomial<C> {
     
 // //    private[this] val termRe = "([0-9]+\\.[0-9]+|[0-9]+/[0-9]+|[0-9]+)?(?:([a-z])(?:\\^([0-9]+))?)?".r
@@ -345,6 +310,69 @@ pub(crate) fn factorial<C>(n: usize) -> C where C: Semiring + num::FromPrimitive
         result = result * C::from_usize(i).unwrap();
     }
     result
+}
+
+impl<C> From<Vec<C>> for Polynomial<C> where C: Semiring {
+    
+    /// Returns a new `Dense` polynomial whose coefficients are specified by the argument.
+    /// If the length of the argument `Vec` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
+    fn from(mut coeffs: Vec<C>) -> Self {
+        remove_tail_zeros(&mut coeffs);
+
+        match coeffs.len() {
+            0 => Polynomial::Zero(),
+            1 => Polynomial::new_raw_const(coeffs.pop().unwrap()),
+            _ => {
+                coeffs.shrink_to_fit();
+                Polynomial::new_raw_dense(coeffs)
+            }
+        }
+    }
+}
+
+impl<C> Into<Vec<C>> for Polynomial<C> where C: Semiring {
+
+    fn into(self) -> Vec<C> {
+        match self {
+            Polynomial::Zero() => Vec::new(),
+            Polynomial::Constant(cc) => vec![cc.0],
+            Polynomial::Dense(dc) => dc.0,
+            Polynomial::Sparse(sc) => sc.to_vec(),
+        }
+    }
+}
+
+impl<C> From<BTreeMap<usize, C>> for Polynomial<C> where C: Semiring {
+    
+    // /// Returns a new `Sparse` polynomial whose coefficients are specified by the argument.
+    // /// If the length of the argument `BTreeMap` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
+    fn from(mut coeffs: BTreeMap<usize, C>) -> Self {
+        coeffs.retain(|_, v| !v.is_zero());
+
+        match coeffs.len() {
+            0 => Polynomial::Zero(),
+            1 => {
+                if coeffs.contains_key(&0) {
+                    Polynomial::new_raw_const(coeffs.remove(&0).unwrap())
+                } else {
+                    Polynomial::new_raw_sparse(coeffs)
+                }
+            },
+            _ => Polynomial::new_raw_sparse(coeffs)
+        }
+    }
+}
+
+impl<C> Into<BTreeMap<usize, C>> for Polynomial<C> where C: Semiring {
+
+    fn into(self) -> BTreeMap<usize, C> {
+        match self {
+            Polynomial::Zero() => BTreeMap::new(),
+            Polynomial::Constant(cc) => BTreeMap::from([(0, cc.0)]),
+            Polynomial::Dense(dc) => dc.to_map(),
+            Polynomial::Sparse(sc) => sc.0,
+        }
+    }
 }
 
 impl<C> Polynomial<C> where C: Semiring {
@@ -946,23 +974,8 @@ pub trait PolynomialOps<C> where C: Semiring {
 
 impl<C> PolynomialOps<C> for Polynomial<C> where C: Semiring {
     
-    fn to_vec(self) -> Vec<C> {
-        match self {
-            Polynomial::Zero() => Vec::new(),
-            Polynomial::Constant(cc) => vec![cc.0],
-            Polynomial::Dense(dc) => dc.0,
-            Polynomial::Sparse(sc) => sc.to_vec(),
-        }
-    }
-    
-    fn to_map(self) -> BTreeMap<usize, C> {
-        match self {
-            Polynomial::Zero() => BTreeMap::new(),
-            Polynomial::Constant(cc) => BTreeMap::from([(0, cc.0)]),
-            Polynomial::Dense(dc) => dc.to_map(),
-            Polynomial::Sparse(sc) => sc.0,
-        }
-    }
+    fn to_vec(self) -> Vec<C> { self.into() }
+    fn to_map(self) -> BTreeMap<usize, C> { self.into() }
     
     /// Note that `f` is applied only to nonzero coefficients
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {

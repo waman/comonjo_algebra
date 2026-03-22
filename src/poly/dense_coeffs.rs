@@ -133,7 +133,7 @@ impl<C> PolynomialOps<C> for DenseCoeffs<C> where C: Semiring {
         let v: Vec<D> = self.0.into_iter().enumerate().map(|(i, c)|
             if c.is_zero() { D::zero() } else { f(i, c) }
         ).collect();
-        Polynomial::dense_from_vec(v)
+        Polynomial::from(v)
     }
 }
 
@@ -149,7 +149,7 @@ impl<'a, C> PolynomialOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
         let v: Vec<D> = self.0.iter().enumerate().map(|(i, c)|
             if c.is_zero() { D::zero() } else { f(i, c.clone()) }
         ).collect();
-        Polynomial::dense_from_vec(v)
+        Polynomial::from(v)
     }
 }
 
@@ -198,18 +198,18 @@ impl<C> DenseCoeffs<C> where C: Semiring + Clone {
     pub(crate) fn new_reciprocal(&self) -> Polynomial<C> {
         let mut vec = Vec::with_capacity(self.0.len());
         self.0.iter().rev().for_each(|c| vec.push(c.clone()));
-        Polynomial::dense_from_vec(vec)
+        Polynomial::from(vec)
     }
 
     pub(crate) fn new_zero_roots_removed(&self) -> Polynomial<C> {
         let vec: Vec<C> = self.0.iter().skip_while(|c|c.is_zero()).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
+        Polynomial::from(vec)
     }
 
     pub(crate) fn new_reductum(&self) -> Polynomial<C> {
         let n = self.0.len();
         let vec: Vec<C> = self.0.iter().take(n-1).map(|c|c.clone()).collect();
-        Polynomial::dense_from_vec(vec)
+        Polynomial::from(vec)
     }
 }
 
@@ -267,7 +267,7 @@ impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive + Clone {
         let mut ite = self.0.iter().enumerate();
         ite.next();
         let vec: Vec<C> = ite.map(|(i, c)| C::from_usize(i).unwrap() * c).collect();
-        Polynomial::dense_from_vec(vec)
+        Polynomial::from(vec)
     }
     
     pub(crate) fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
@@ -289,7 +289,7 @@ impl<C> DenseCoeffs<C> where C: Semiring + num::FromPrimitive + Clone {
                     k = mul_div_u128(k, i, i-n);
                     vec.push(self.deriv_coeff(i, k));
                 }
-                Polynomial::dense_from_vec(vec)
+                Polynomial::from(vec)
             }
         }
     }
@@ -485,7 +485,7 @@ pub(crate) fn add_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
     let rest_iter = if lhs_is_higher { lhs_iter } else { rhs_iter };
     v.extend(rest_iter);
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 fn clone_coeff<'a, C>(op_c: Option<&'a C>) -> C where C: Semiring + Clone {
@@ -521,7 +521,7 @@ pub(crate) fn add_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polyn
         v.extend(rhs_iter.map(clone_coeff));
     }
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 pub(crate) fn add_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
@@ -550,7 +550,7 @@ pub(crate) fn add_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polyn
         v.extend(rhs_iter); 
     }
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 pub(crate) fn add_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
@@ -578,7 +578,7 @@ pub(crate) fn add_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) 
     let rest_iter = if lhs_is_higher { lhs_iter } else { rhs_iter };
     v.extend(rest_iter.map(clone_coeff));
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 //********** Sub **********/
@@ -605,7 +605,7 @@ pub(crate) fn sub_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
         v.extend(rhs_iter.map(|c|-c));
     }
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 fn neg_coeff<'a, C>(op_c: Option<&'a C>) -> C where C: Ring + Clone {
@@ -641,7 +641,7 @@ pub(crate) fn sub_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polyn
         v.extend(rhs_iter.map(neg_coeff));
     }
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C> 
@@ -673,7 +673,7 @@ pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polyn
         v.extend(rhs_iter.map(|c|-c));
     }
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 
@@ -710,7 +710,7 @@ pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) 
         }));
     }
 
-    Polynomial::dense_from_vec(v)
+    Polynomial::from(v)
 }
 
 //********** Mul **********/
@@ -764,5 +764,5 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
     }
 
     q.reverse();
-    (Polynomial::dense_from_vec(q), Polynomial::dense_from_vec(u))
+    (Polynomial::from(q), Polynomial::from(u))
 }

@@ -154,7 +154,7 @@ impl<C> PolynomialOps<C> for SparseCoeffs<C> where C: Semiring {
 
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
         let m: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
-        Polynomial::sparse_from_map(m)
+        Polynomial::from(m)
     }
 }
 
@@ -173,7 +173,7 @@ impl<'a, C> PolynomialOps<C> for &'a SparseCoeffs<C> where C: Semiring + Clone {
 
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
         let m: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c.clone()))).collect();
-        Polynomial::sparse_from_map(m)
+        Polynomial::from(m)
     }
 }
 
@@ -193,7 +193,7 @@ impl<C> SparseCoeffs<C> where C: Semiring {
         for i in keys {
             map.insert(d-i, map0.remove(&i).unwrap());
         }
-        Some(Polynomial::sparse_from_map(map))
+        Some(Polynomial::from(map))
     }
 
     pub(crate) fn remove_zero_roots(&mut self) -> Option<Polynomial<C>> {
@@ -207,7 +207,7 @@ impl<C> SparseCoeffs<C> where C: Semiring {
         for i in keys {
             map.insert(i-i0, map0.remove(&i).unwrap());
         }
-        Some(Polynomial::sparse_from_map(map))
+        Some(Polynomial::from(map))
     }
 
     pub(crate) fn reductum(&mut self) -> Option<Polynomial<C>> {
@@ -227,7 +227,7 @@ impl<C> SparseCoeffs<C> where C: Semiring + Clone {
     pub(crate) fn new_reciprocal(&self) -> Polynomial<C> {
         let d = self.degree();
         let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)| (d-i, c.clone())).collect();
-        Polynomial::sparse_from_map(map)
+        Polynomial::from(map)
     }
 
     pub(crate) fn new_zero_roots_removed(&self) -> Polynomial<C> {
@@ -236,14 +236,14 @@ impl<C> SparseCoeffs<C> where C: Semiring + Clone {
             Polynomial::Sparse(SparseCoeffs(self.0.clone()))
         } else {
             let map: BTreeMap<usize, C> = self.0.iter().map(|(i, c)|(i-i0, c.clone())).collect();
-            Polynomial::sparse_from_map(map)
+            Polynomial::from(map)
         }
     }
 
     pub(crate) fn new_reductum(&self) -> Polynomial<C> {
         let n = self.0.len();
         let map: BTreeMap<usize, C> = self.0.iter().take(n-1).map(|(i, c)| (*i, c.clone())).collect();
-        Polynomial::sparse_from_map(map)
+        Polynomial::from(map)
     }
 }
 
@@ -377,7 +377,7 @@ impl<C> SparseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Integ
     }
 
     pub(crate) fn new_shifted(&self, h: C) -> Polynomial<C> {
-        Polynomial::sparse_from_map(self.new_shifted_coeffs(h))
+        Polynomial::from(self.new_shifted_coeffs(h))
     }
 }
 
@@ -411,7 +411,7 @@ impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
     }
 
     pub(crate) fn new_shifted_f(&self, h: C) -> Polynomial<C> {
-        Polynomial::sparse_from_map(self.new_shifted_coeffs_f(h))
+        Polynomial::from(self.new_shifted_coeffs_f(h))
     }
 }
 
@@ -469,7 +469,7 @@ impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive {
     pub(crate) fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
         debug_assert!(n > 1);
         
-        Polynomial::sparse_from_map(self.new_nth_integral_coeffs(n))
+        Polynomial::from(self.new_nth_integral_coeffs(n))
     }
 }
 
@@ -521,7 +521,7 @@ pub(crate) fn add_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
         map.extend(y_iter);
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 pub(crate) fn add_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
@@ -571,7 +571,7 @@ pub(crate) fn add_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polyn
         map.extend(y_iter.map(|(i, c)| (i, c.clone())));
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 pub(crate) fn add_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
@@ -621,7 +621,7 @@ pub(crate) fn add_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polyn
         map.extend(y_iter);
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 pub(crate) fn add_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
@@ -671,7 +671,7 @@ pub(crate) fn add_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) 
         map.extend(y_iter.map(|(e, c)|(e, c.clone())));
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 //********** Sub **********/
@@ -722,7 +722,7 @@ pub(crate) fn sub_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
         map.extend(y_iter.map(|(i, c)| (i, -c)));
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 pub(crate) fn sub_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
@@ -772,7 +772,7 @@ pub(crate) fn sub_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polyn
         map.extend(y_iter.map(|(i, c)| (i, c.ref_neg())));
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
@@ -822,7 +822,7 @@ pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polyn
         map.extend(y_iter.map(|(i, c)| (i, -c)));
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) -> Polynomial<C>
@@ -872,7 +872,7 @@ pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) 
         map.extend(y_iter.map(|(e, c)|(e, c.ref_neg())));
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 } 
 
 //********** Mul **********/
@@ -891,7 +891,7 @@ pub(crate) fn mul<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> 
         }
     }
 
-    Polynomial::sparse_from_map(map)
+    Polynomial::from(map)
 }
 
 //********** Div & Rem **********/
@@ -917,5 +917,5 @@ pub(crate) fn div_rem<C>(mut u: BTreeMap<usize, C>, rhs: &Polynomial<C>) -> (Pol
         q.insert(i_last - d_rhs, q0);
     }
 
-    (Polynomial::sparse_from_map(q), Polynomial::sparse_from_map(u))
+    (Polynomial::from(q), Polynomial::from(u))
 }
