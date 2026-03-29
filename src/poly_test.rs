@@ -1,8 +1,8 @@
-use std::{collections::HashMap, vec};
+use std::{collections::{BTreeMap, HashMap}, vec};
 
 use num::{BigInt, One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
-use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Polynomial, PolynomialOps}, sparse};
+use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Polynomial}, sparse};
 
 type PolyR64 = Polynomial<Rational64>;
 
@@ -293,6 +293,7 @@ fn test_eval_for_some_types(){
 
 #[test]
 fn test_clone_methods(){  // clone(), dense_clone(), sparse_clone(), to_dense() and to_sparse()
+
     fn test_with_clones<F>(p: Polynomial<i64>, test: F) where F: Fn(Polynomial<i64>) {
         for p_clone in [
             p.clone(),
@@ -327,7 +328,72 @@ fn test_clone_methods(){  // clone(), dense_clone(), sparse_clone(), to_dense() 
 }
 
 #[test]
+fn test_clone_to_vec(){
+
+    fn test(x: Polynomial<i64>, exp: Vec<i64>){
+    
+        fn test_op(p: Polynomial<i64>, exp: Vec<i64>){
+            assert_eq!(p.clone_to_vec(), exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(x_, exp.clone());
+        }
+    }
+
+    let table = [
+        (zero(), vec![]),
+        (one(),  vec![1]),
+        (cst(5), vec![5]),
+
+        (p0(), vec![1, 2, 3]),
+        (p1(), vec![4, 5, 0, 6, 7]),
+        (p2(), vec![4, 0, 0, 5, 0, 0, 0, 6]),
+        (p3(), vec![1, 0, 0, 0, 2]),
+        (p4(), vec![0, 0, 0, 6]),
+        (p5(), vec![0, 5, 0, 0, 7]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
+fn test_clone_to_map(){
+
+    fn test(x: Polynomial<i64>, exp: BTreeMap<usize, i64>){
+    
+        fn test_op(p: Polynomial<i64>, exp: BTreeMap<usize, i64>){
+            assert_eq!(p.clone_to_map(), exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(x_, exp.clone());
+        }
+    }
+
+    let table = [
+        (zero(), BTreeMap::new()),
+        (one(),  [(0, 1)].into_iter().collect()),
+        (cst(5), [(0, 5)].into_iter().collect()),
+
+        (p0(), [(0, 1), (1, 2), (2, 3)].into_iter().collect()),
+        (p1(), [(0, 4), (1, 5), (3, 6), (4, 7)].into_iter().collect()),
+        (p2(), [(0, 4), (3, 5), (7, 6)].into_iter().collect()),
+        (p3(), [(0, 1), (4, 2)].into_iter().collect()),
+        (p4(), [(3, 6)].into_iter().collect()),
+        (p5(), [(1, 5), (4, 7)].into_iter().collect()),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
 fn test_display(){
+
     fn test(p: Polynomial<i64>, exp: &str){
         assert_eq!(format!("{}", p), exp);
     }
@@ -451,12 +517,12 @@ fn test_coeffs_iter_methods(){
         (Polynomial::zero(), vec![]),
         (Polynomial::one(), vec![1]),
         (cst(5), vec![5]),
-        (p0(), p0().to_vec()),
-        (p1(), p1().to_vec()),
-        (p2(), p2().to_vec()),
-        (p3(), p3().to_vec()),
-        (p4(), p4().to_vec()),
-        (p5(), p5().to_vec()),
+        (p0(), p0().into()),
+        (p1(), p1().into()),
+        (p2(), p2().into()),
+        (p3(), p3().into()),
+        (p4(), p4().into()),
+        (p5(), p5().into()),
     ];
 
     for entry in table {
@@ -1369,7 +1435,7 @@ fn test_shift_and_shift_f(){  // shift(), new_shifted(), shift_f(), new_shifted_
             //***** shift_f(), new_shifted_f() *****
             let z: &Polynomial<f64> = &x.map_nonzero(|_, c|c.to_f64().unwrap());
             let t: f64 = h.to_f64().unwrap();
-            let exp_f: &Polynomial<f64> = &exp.map_nonzero(|_, c|c.to_f64().unwrap());
+            let exp_f: &Polynomial<f64> = &exp.map_nonzero_ref(|_, c|c.to_f64().unwrap());
 
             assert_eq!(z.new_shifted_f(t), *exp_f);
 

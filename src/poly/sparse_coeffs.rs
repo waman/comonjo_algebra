@@ -1,6 +1,6 @@
-use std::collections::{BTreeMap, btree_map::{IntoIter, Iter}};
+use std::collections::BTreeMap;
 
-use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, PolynomialOps, factorial, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint}};
+use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, factorial, mul_div_uint}};
 
 #[derive(Clone)]
 pub struct SparseCoeffs<C>(pub(crate) BTreeMap<usize, C>);
@@ -28,152 +28,32 @@ impl<C> SparseCoeffs<C> where C: Semiring {
     pub(crate) fn is_x(&self) -> bool {
         self.0.len() == 1 && self.0.get(&1).is_some_and(|c|c.is_one())
     }
-}
 
-//********** Iterator **********/
-impl<C> SparseCoeffs<C> where C: Semiring {
-    
-    pub(crate) fn into_nonzero_coeffs_iter(self) -> IntoNonzeroCoeffsIter<C> {
-        IntoNonzeroCoeffsIter::Sparse(SIntoNonzeroCoeffsIter(self.0.into_iter()))
-    }
-
-    pub(crate) fn nonzero_coeffs_iter<'a>(&'a self) -> NonzeroCoeffsIter<'a, C> {
-        NonzeroCoeffsIter::Sparse(SNonzeroCoeffsIter(self.0.iter()))
-    }
-
-    pub(crate) fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
-        let mut map_iter = self.0.into_iter();
-        IntoCoeffsIter::Sparse(SIntoCoeffsIter{ index: 0, current: map_iter.next(), map_iter })
-    }
-
-    pub(crate) fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
-        let mut map_iter = self.0.iter();
-        CoeffsIter::Sparse(SCoeffsIter{ index: 0, current: map_iter.next(), map_iter})
-    }
-}
-
-pub struct SIntoNonzeroCoeffsIter<C>(pub(crate) IntoIter<usize, C>) where C: Semiring;
-
-impl<C> Iterator for SIntoNonzeroCoeffsIter<C> where C: Semiring {
-    type Item = (usize, C);
-
-    fn next(&mut self) -> Option<Self::Item> { self.0.next() }
-
-    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
-}
-
-pub struct SNonzeroCoeffsIter<'a, C>(pub(crate) Iter<'a, usize, C>) where C: Semiring;
-
-impl<'a, C> Iterator for SNonzeroCoeffsIter<'a, C> where C: Semiring {
-
-    type Item = (usize, &'a C);
-
-    fn next(&mut self) -> Option<Self::Item> { self.0.next().map(|(i, c)| (*i, c)) }
-
-    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
-}
-
-pub struct SIntoCoeffsIter<C> where C: Semiring {
-    pub(crate) index: usize,
-    pub(crate) current: Option<(usize, C)>,
-    pub(crate) map_iter: IntoIter<usize, C>,
-}
-
-impl<C> Iterator for SIntoCoeffsIter<C> where C: Semiring {
-
-    type Item = C;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let result = match &mut self.current {
-            Some(c) => 
-                if c.0 == self.index {
-                    let r = match self.map_iter.next() {
-                        Some(nxt) => self.current.replace(nxt),
-                        None => self.current.take(),
-                    };
-                    Some(r.unwrap().1)
-                } else { 
-                    Some(C::zero())
-                }
-            _ => None,
-        };
-
-        self.index += 1;
-        return result;
-    }
-    
-    fn size_hint(&self) -> (usize, Option<usize>) { self.map_iter.size_hint() }
-}
-
-/// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
-pub struct SCoeffsIter<'a, C> where C: Semiring {
-    pub(crate) index: usize,
-    pub(crate) current: Option<(&'a usize, &'a C)>,
-    pub(crate) map_iter: Iter<'a, usize, C>,
-}
-
-impl<'a, C> Iterator for SCoeffsIter<'a, C> where C: Semiring {
-
-    type Item = Option<&'a C>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        if let Some(c) = self.current {
-            let result = if *c.0 == self.index { 
-                let r = Some(c.1);
-                self.current = self.map_iter.next();
-                r
-            } else {
-                None
-            };
-            self.index += 1;
-            Some(result)
-        } else {
-            return None;
-        }
-    }
-    
-    fn size_hint(&self) -> (usize, Option<usize>) { self.map_iter.size_hint() }
-}
-
-impl<C> PolynomialOps<C> for SparseCoeffs<C> where C: Semiring {
-
-    fn to_vec(mut self) -> Vec<C> {
-        let n = self.degree() + 1;
-        let mut v: Vec<C> = Vec::with_capacity(n);
-        for i in 0..n {
-            match self.0.remove(&i) {
-                Some(e) => v.push(e),
-                None => v.push(C::zero()),
-            } 
-        }
-        debug_assert!(self.0.is_empty());
-        v
-    }
-    
-    fn to_map(self) -> BTreeMap<usize, C> { self.0 }
-
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+    pub(crate) fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
         let m: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
         Polynomial::from(m)
     }
-}
 
-impl<'a, C> PolynomialOps<C> for &'a SparseCoeffs<C> where C: Semiring + Clone {
-    
-    fn to_vec(self) -> Vec<C> {
-        self.coeffs_iter().map(|c|{
-            match c {
-                Some(v) => v.clone(),
-                _ => C::zero(),
-            }
-        }).collect()
-    }
-    
-    fn to_map(self) -> BTreeMap<usize, C> { self.0.clone() }
-
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
-        let m: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c.clone()))).collect();
+    pub(crate) fn map_nonzero_ref<D, F>(&self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &C) -> D {
+        let m: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c))).collect();
         Polynomial::from(m)
+    }
+
+    pub(crate) fn to_vec(self) -> Vec<C> {
+        let mut vec = Vec::with_capacity(self.degree() + 1);
+
+        for (i, c) in self.0.into_iter() {
+            while vec.len() < i {
+                vec.push(C::zero());
+            }
+            vec.push(c);
+        }
+
+        vec
+    }
+
+    fn nonzero_coeffs_iter(&self) -> impl Iterator<Item=(&usize, &C)> {
+        self.0.iter()
     }
 }
 
@@ -354,9 +234,9 @@ impl<C> SparseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Integ
         let mut coeffs: BTreeMap<usize, C> = self.0.clone();
 
         for (deg, c) in self.nonzero_coeffs_iter() {
-            if deg == 0 { continue; }
+            if *deg == 0 { continue; }
             let mut i: C = C::one();
-            let mut d: usize = deg;
+            let mut d: usize = *deg;
             let mut m: C = C::one();
             let mut k: C = c.clone();
             while d > 0 {
@@ -388,9 +268,9 @@ impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
         let mut coeffs: BTreeMap<usize, C> = self.0.clone();
 
         for (deg, c) in self.nonzero_coeffs_iter() {
-            if deg == 0 { continue; }
+            if *deg == 0 { continue; }
             let mut i: C = C::one();
-            let mut d: usize = deg;
+            let mut d: usize = *deg;
             let mut m: C = C::one();
             let mut k: C = c.clone();
             while d > 0 {

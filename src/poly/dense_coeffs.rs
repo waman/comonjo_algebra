@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, iter::Enumerate, slice::Iter, vec::IntoIter};
+use std::collections::BTreeMap;
 
 use num::Integer;
 
-use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, PolynomialOps, factorial, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, mul_div_uint, remove_tail_zeros}};
+use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, factorial, mul_div_uint, remove_tail_zeros}};
 
 #[derive(Clone)]
 pub struct DenseCoeffs<C>(pub(crate) Vec<C>);
@@ -28,128 +28,27 @@ impl<C> DenseCoeffs<C> where C: Semiring {
     pub(crate) fn is_x(&self) -> bool {
         self.0.len() == 2 && self.0[0].is_zero() && self.0[1].is_one()
     }
-}
 
-//********** Iterator **********/
-impl<C> DenseCoeffs<C> where C: Semiring {
-
-    pub fn into_nonzero_coeffs_iter(self) -> IntoNonzeroCoeffsIter<C> {
-        IntoNonzeroCoeffsIter::Dense(DIntoNonzeroCoeffsIter(self.0.into_iter().enumerate()))
-    }
-
-    pub fn nonzero_coeffs_iter<'a>(&'a self) -> NonzeroCoeffsIter<'a, C> {
-        NonzeroCoeffsIter::Dense(DNonzeroCoeffsIter(self.0.iter().enumerate()))
-    }
-
-    pub fn into_coeffs_iter(self) -> IntoCoeffsIter<C> {
-        IntoCoeffsIter::Dense(DIntoCoeffsIter(self.0.into_iter()))
-    }
-
-    pub fn coeffs_iter<'a>(&'a self) -> CoeffsIter<'a, C> {
-        CoeffsIter::Dense(DCoeffsIter(self.0.iter()))
-    }
-}
-
-pub struct DIntoNonzeroCoeffsIter<C>(pub(crate) Enumerate<IntoIter<C>>) where C: Semiring;
-
-impl<C> Iterator for DIntoNonzeroCoeffsIter<C> where C: Semiring {
-
-    type Item = (usize, C);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.0.next() {
-                Some((i, c)) =>  if !c.is_zero() { return Some((i, c)); },
-                None => return None,
-            }
-        }
-    }
-    
-    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
-}
-
-pub struct DNonzeroCoeffsIter<'a, C>(pub(crate) Enumerate<Iter<'a, C>>) where C: Semiring;
-
-impl<'a, C> Iterator for DNonzeroCoeffsIter<'a, C> where C: Semiring {
-
-    type Item = (usize, &'a C);
-
-    fn next(&mut self) -> Option<Self::Item> {
-        loop {
-            match self.0.next() {
-                Some((i, c)) =>  if !c.is_zero() { return Some((i, c)); },
-                None => return None,
-            }
-        }
-    }
-    
-    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
-}
-
-pub struct DIntoCoeffsIter<C>(pub(crate) IntoIter<C>) where C: Semiring;
-
-impl<C> Iterator for DIntoCoeffsIter<C> where C: Semiring {
-
-    type Item = C;
-
-    fn next(&mut self) -> Option<Self::Item> { self.0.next() }
-
-    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
-}
-
-/// <code>next()</code> method returns <code>Some(None)</code> or <code>Some(Some(0))</code> if the coefficient is zero.
-pub struct DCoeffsIter<'a, C>(pub(crate) Iter<'a, C>) where C: Semiring;
-
-impl<'a, C> Iterator for DCoeffsIter<'a, C> where C: Semiring {
-
-    type Item = Option<&'a C>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.0.next() {
-            Some(c) => Some(Some(c)),
-            None => None,
-        }
-    }
-    
-    fn size_hint(&self) -> (usize, Option<usize>) { self.0.size_hint() }
-}
-
-impl<C> PolynomialOps<C> for DenseCoeffs<C> where C: Semiring {
-    
-    fn to_vec(self) -> Vec<C> { self.0 }
-    
-    fn to_map(mut self) -> BTreeMap<usize, C> {
-        let mut map = BTreeMap::new();
-        while let Some(c) = self.0.pop() {
-            if !c.is_zero() {
-                map.insert(self.0.len(), c);
-            }
-        }
-        debug_assert!(self.0.is_empty());
-        map
-    }
-
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+    pub(crate) fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
         let v: Vec<D> = self.0.into_iter().enumerate().map(|(i, c)|
             if c.is_zero() { D::zero() } else { f(i, c) }
         ).collect();
         Polynomial::from(v)
     }
-}
 
-impl<'a, C> PolynomialOps<C> for &'a DenseCoeffs<C> where C: Semiring + Clone {
-    
-    fn to_vec(self) -> Vec<C> { self.0.clone() }
-    
-    fn to_map(self) -> BTreeMap<usize, C> {
-        self.nonzero_coeffs_iter().map(|(i, c)|(i, c.clone())).collect()
-    }
-
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+    pub(crate) fn map_nonzero_ref<D, F>(&self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &C) -> D {
         let v: Vec<D> = self.0.iter().enumerate().map(|(i, c)|
-            if c.is_zero() { D::zero() } else { f(i, c.clone()) }
+            if c.is_zero() { D::zero() } else { f(i, c) }
         ).collect();
         Polynomial::from(v)
+    }
+
+    pub(crate) fn to_map(self) -> BTreeMap<usize, C> {
+        self.0.into_iter().enumerate().filter(|(_, c)| !c.is_zero()).collect()
+    }
+
+    fn nonzero_coeffs_iter(&self) -> impl Iterator<Item=(usize, &C)> {
+        self.0.iter().enumerate().filter(|(_, c)| !c.is_zero())
     }
 }
 
