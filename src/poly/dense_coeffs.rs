@@ -564,10 +564,7 @@ pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polyn
     }
 
     if lhs_is_longer {
-        v.extend(lhs_iter.map(|c|match c {
-            Some(x) => x.clone(),
-            None => C::zero(),
-        }));
+        v.extend(lhs_iter.map(clone_coeff));
     } else {
         v.extend(rhs_iter.map(|c|-c));
     }
@@ -598,15 +595,9 @@ pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) 
     }
 
     if lhs_is_longer {
-        v.extend(lhs_iter.map(|c| match c {
-            Some(x) => x.clone(),
-            None => C::zero(),
-        }));
+        v.extend(lhs_iter.map(clone_coeff));
     } else {
-        v.extend(rhs_iter.map(|c| match c {
-            Some(x) => x.ref_neg(),
-            None => C::zero(),
-        }));
+        v.extend(rhs_iter.map(neg_coeff));
     }
 
     Polynomial::from(v)

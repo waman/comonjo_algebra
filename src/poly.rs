@@ -884,9 +884,10 @@ impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
     }
 }
 
-pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring, Self::IntoCoeffsIter: Iterator<Item=Self::Coeff>{
+pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring {
+    
     type Coeff;
-    type IntoCoeffsIter;
+    type IntoCoeffsIter: Iterator<Item=Self::Coeff>;
 
     fn coeffs(self) -> Self::IntoCoeffsIter;
 
