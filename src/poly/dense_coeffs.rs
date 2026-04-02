@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::{collections::BTreeMap};
 
 use num::Integer;
 
@@ -47,7 +47,7 @@ impl<C> DenseCoeffs<C> where C: Semiring {
         self.0.into_iter().enumerate().filter(|(_, c)| !c.is_zero()).collect()
     }
 
-    fn nonzero_coeffs_iter(&self) -> impl Iterator<Item=(usize, &C)> {
+    pub(crate) fn nonzero_coeffs_iter(&self) -> impl Iterator<Item=(usize, &C)> {
         self.0.iter().enumerate().filter(|(_, c)| !c.is_zero())
     }
 }
@@ -388,10 +388,7 @@ pub(crate) fn add_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
 }
 
 fn clone_coeff<'a, C>(op_c: Option<&'a C>) -> C where C: Semiring + Clone {
-    match op_c {
-        Some(c) => c.clone(),
-        _ => C::zero(),
-    }
+    op_c.map_or_else(||C::zero(), |c|c.clone())
 }
 
 pub(crate) fn add_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
@@ -508,10 +505,7 @@ pub(crate) fn sub_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
 }
 
 fn neg_coeff<'a, C>(op_c: Option<&'a C>) -> C where C: Ring + Clone {
-    match op_c {
-        Some(c) => c.ref_neg(),
-        _ => C::zero(),
-    }
+    op_c.map_or_else(||C::zero(), |c|c.ref_neg())
 }
 
 pub(crate) fn sub_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C> 

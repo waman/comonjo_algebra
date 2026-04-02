@@ -30,11 +30,8 @@ impl<C> Iterator for IntoNonzeroCoeffsIter<C> where C: Semiring {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             IntoNonzeroCoeffsIter::Zero() => None,
-            IntoNonzeroCoeffsIter::Constant(value) => 
-                match value.take() {
-                    Some(c) => Some((0, c)),
-                    None => None,
-                },
+            IntoNonzeroCoeffsIter::Constant(c) => 
+                if let Some(c) = c.take() { Some((0, c)) } else { None },
             IntoNonzeroCoeffsIter::Dense(it) => 
                 loop {
                     match it.next() {
@@ -80,11 +77,8 @@ impl<'a, C> Iterator for NonzeroCoeffsIter<'a, C> where C: Semiring {
     fn next(&mut self) -> Option<Self::Item> {
         match self {
             NonzeroCoeffsIter::Zero() => None,
-            NonzeroCoeffsIter::Constant(value) => 
-                match value.take() {
-                    Some(c) => Some((0, c)),
-                    None => None,
-                },
+            NonzeroCoeffsIter::Constant(c) => 
+                if let Some(c) = c.take() { Some((0, c)) } else { None },
             NonzeroCoeffsIter::Dense(it) => 
                 loop {
                     match it.next() {
@@ -139,7 +133,7 @@ impl<C> Iterator for IntoCoeffsIter<C> where C: Semiring {
             IntoCoeffsIter::Zero()          => None,
             IntoCoeffsIter::Constant(value) => value.take(),
             IntoCoeffsIter::Dense(it)       => it.next(),
-            IntoCoeffsIter::Sparse{ index, current, map_iter }      => {
+            IntoCoeffsIter::Sparse{ index, current, map_iter } => {
                 let result = match current {
                     Some(c) => 
                         if c.0 == *index {
@@ -165,7 +159,7 @@ impl<C> Iterator for IntoCoeffsIter<C> where C: Semiring {
             IntoCoeffsIter::Zero()      => (0, Some(0)),
             IntoCoeffsIter::Constant(c) => const_iter_size_hint(c),
             IntoCoeffsIter::Dense(it)   => it.size_hint(),
-            IntoCoeffsIter::Sparse{ index: _, current: _, map_iter}  => map_iter.size_hint(),
+            IntoCoeffsIter::Sparse{ index: _, current: _, map_iter} => map_iter.size_hint(),
         }
     }
 }
@@ -203,11 +197,8 @@ impl<'a, C> Iterator for CoeffsIter<'a, C> where C: Semiring {
         match self {
             CoeffsIter::Zero() => None,
             CoeffsIter::Constant(value) => value.take(),
-            CoeffsIter::Dense(it) =>                 
-                match it.next() {
-                    Some(c) => Some(Some(c)),
-                    None => None,
-                },
+            CoeffsIter::Dense(it) =>
+                if let Some(c) = it.next() { Some(Some(c)) } else { None },
             CoeffsIter::Sparse{ index, current, map_iter } => {
                 if let Some(c) = current {
                     let result = if c.0 == index { 
@@ -231,7 +222,7 @@ impl<'a, C> Iterator for CoeffsIter<'a, C> where C: Semiring {
             CoeffsIter::Zero()      => (0, Some(0)),
             CoeffsIter::Constant(_) => (1, Some(1)),
             CoeffsIter::Dense(it)   => it.size_hint(),
-            CoeffsIter::Sparse{ index: _, current: _, map_iter }  => map_iter.size_hint(),
+            CoeffsIter::Sparse{ index: _, current: _, map_iter } => map_iter.size_hint(),
         }
     }
 }
