@@ -34,7 +34,7 @@ impl<C> SparseCoeffs<C> where C: Semiring {
         Polynomial::from(m)
     }
 
-    pub(crate) fn map_nonzero_ref<D, F>(&self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &C) -> D {
+    pub(crate) fn map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
         let m: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c))).collect();
         Polynomial::from(m)
     }

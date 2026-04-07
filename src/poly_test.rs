@@ -1435,7 +1435,7 @@ fn test_shift_and_shift_f(){  // shift(), new_shifted(), shift_f(), new_shifted_
             //***** shift_f(), new_shifted_f() *****
             let z: &Polynomial<f64> = &x.map_nonzero(|_, c|c.to_f64().unwrap());
             let t: f64 = h.to_f64().unwrap();
-            let exp_f: &Polynomial<f64> = &exp.map_nonzero_ref(|_, c|c.to_f64().unwrap());
+            let exp_f: &Polynomial<f64> = &exp.map_nonzero(|_, c|c.to_f64().unwrap());
 
             assert_eq!(z.new_shifted_f(t), *exp_f);
 

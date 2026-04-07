@@ -36,7 +36,7 @@ impl<C> DenseCoeffs<C> where C: Semiring {
         Polynomial::from(v)
     }
 
-    pub(crate) fn map_nonzero_ref<D, F>(&self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &C) -> D {
+    pub(crate) fn map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
         let v: Vec<D> = self.0.iter().enumerate().map(|(i, c)|
             if c.is_zero() { D::zero() } else { f(i, c) }
         ).collect();
