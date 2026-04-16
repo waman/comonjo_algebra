@@ -6,7 +6,6 @@ pub mod eval;
 use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
-
 use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::{Eval, PolynomialEvaluator}, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse_coeffs::SparseCoeffs}};
 
 /// Polynomial type.
@@ -316,6 +315,13 @@ impl<C> From<Vec<C>> for Polynomial<C> where C: Semiring {
     
     /// Returns a new `Dense` polynomial whose coefficients are specified by the argument.
     /// If the length of the argument `Vec` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let v = vec![1, 2, 3, 4];
+    ///     let p = Polynomial::from(v);  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p, dense![1, 2, 3, 4]);
+    /// 
     fn from(mut coeffs: Vec<C>) -> Self {
         remove_tail_zeros(&mut coeffs);
 
@@ -344,8 +350,21 @@ impl<C> Into<Vec<C>> for Polynomial<C> where C: Semiring {
 
 impl<C> From<BTreeMap<usize, C>> for Polynomial<C> where C: Semiring {
     
-    // /// Returns a new `Sparse` polynomial whose coefficients are specified by the argument.
-    // /// If the length of the argument `BTreeMap` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
+    /// Returns a new `Sparse` polynomial whose coefficients are specified by the argument.
+    /// If the length of the argument `BTreeMap` is 0 or 1, return `Zero` or `Constant` polynomial respectively.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::sparse;
+    ///     use std::collections::BTreeMap;
+    /// 
+    ///     let mut m = BTreeMap::new();
+    ///     m.insert(0, 1);
+    ///     m.insert(2, 3);
+    ///     m.insert(5, 6);
+    /// 
+    ///     let p = Polynomial::from(m);  // 1 + 3x² + 6x⁵
+    ///     assert_eq!(p, sparse![(0, 1), (2, 3), (5, 6)]);
+    /// 
     fn from(mut coeffs: BTreeMap<usize, C>) -> Self {
         coeffs.retain(|_, v| !v.is_zero());
 
@@ -980,9 +999,9 @@ impl<C> FromIterator<C> for Polynomial<C> where C: Semiring {
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::dense;
-    ///     let vec_iter = (1..7).into_iter();
+    ///     let vec_iter = (1..8).into_iter();
     ///     let p: Polynomial<i64> = vec_iter.collect();
-    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6, 7]);
     /// 
     fn from_iter<T: IntoIterator<Item = C>>(iter: T) -> Self {
         let vec: Vec<C> = iter.into_iter().collect();
@@ -996,9 +1015,10 @@ impl<C> FromIterator<(usize, C)> for Polynomial<C> where C: Semiring {
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::dense;
-    ///     let map_iter = (1..7).into_iter().enumerate();
+    ///     let map_iter = (1..8).into_iter().enumerate()
+    ///                          .filter(|(i, c)|i % 2 == 0);
     ///     let p: Polynomial<i64> = map_iter.collect();
-    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6]);
+    ///     assert_eq!(p, sparse![(0, 1), (2, 3), (4, 5), (6, 7)]);
     /// 
     fn from_iter<T: IntoIterator<Item = (usize, C)>>(iter: T) -> Self {
         let map: BTreeMap<usize, C> = iter.into_iter().collect();
