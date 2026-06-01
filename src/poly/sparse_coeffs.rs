@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use crate::{algebra::{EuclideanRing, Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, factorial, mul_div_uint}};
+use crate::{algebra::{Field, Ring, Semiring}, poly::{CoeffsIterator, Polynomial, factorial}};
 
 #[derive(Clone)]
 pub struct SparseCoeffs<C>(pub(crate) BTreeMap<usize, C>);
@@ -29,14 +29,46 @@ impl<C> SparseCoeffs<C> where C: Semiring {
         self.0.len() == 1 && self.0.get(&1).is_some_and(|c|c.is_one())
     }
 
-    pub(crate) fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
-        let m: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
-        Polynomial::from(m)
+    pub(crate) fn map_nonzero<D, F>(self, f: F) -> Polynomial<D>
+            where D: Semiring, F: Fn(usize, C) -> D {
+        let map: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
+        Polynomial::from(map)
     }
 
-    pub(crate) fn map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
-        let m: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c))).collect();
-        Polynomial::from(m)
+    pub(crate) fn map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D>
+            where D: Semiring, F: Fn(usize, &'a C) -> D {
+        let map: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c))).collect();
+        Polynomial::from(map)
+    }
+
+    pub(crate) fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>>
+            where D: Semiring, F: Fn(usize, C) -> Option<D> {
+
+        let mut map: BTreeMap<usize, D> = BTreeMap::new();
+        
+        for (i, c) in self.0.into_iter() {
+            match f(i, c) {
+                Some(d) => map.insert(i, d),
+                None => return None,
+            };
+        }
+
+        Some(Polynomial::from(map))
+    }
+
+    pub(crate) fn try_map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Option<Polynomial<D>>
+            where D: Semiring, F: Fn(usize, &'a C) -> Option<D> {
+
+        let mut map: BTreeMap<usize, D> = BTreeMap::new();
+        
+        for (i, c) in self.0.iter() {
+            match f(*i, c) {
+                Some(d) => map.insert(*i, d),
+                None => return None,
+            };
+        }
+
+        Some(Polynomial::from(map))
     }
 
     pub(crate) fn to_vec(self) -> Vec<C> {
@@ -52,7 +84,7 @@ impl<C> SparseCoeffs<C> where C: Semiring {
         vec
     }
 
-    fn nonzero_coeffs_iter(&self) -> impl Iterator<Item=(&usize, &C)> {
+    pub(crate) fn nonzero_coeffs_iter(&self) -> impl Iterator<Item=(&usize, &C)> {
         self.0.iter()
     }
 }
@@ -220,7 +252,7 @@ impl<C> SparseCoeffs<C> where C: Ring + Clone {
     }
 }
 
-impl<C> SparseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Integer + Clone {
+impl<C> SparseCoeffs<C> where C: Semiring + Clone {
     
     // ** From spire code *****
     // The trick here came from this answer:
@@ -230,7 +262,7 @@ impl<C> SparseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Integ
     // VAS root isolation algorithm.
     
     /// the returned value may have 0-value entries.
-    fn new_shifted_coeffs(&self, h: C) -> BTreeMap<usize, C> {
+    fn new_shifted_coeffs(&self, h: C, mul_div: fn(C, usize, C) -> C) -> BTreeMap<usize, C> {
         let mut coeffs: BTreeMap<usize, C> = self.0.clone();
 
         for (deg, c) in self.nonzero_coeffs_iter() {
@@ -240,7 +272,7 @@ impl<C> SparseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Integ
             let mut m: C = C::one();
             let mut k: C = c.clone();
             while d > 0 {
-                m = mul_div_uint(m, d, i.clone());  // m * d / i
+                m = mul_div(m, d, i.clone());  // m * d / i
                 k = k * &h;
                 let dif = m.ref_mul(&k);
                 coeffs.entry(d-1).and_modify(|v| *v = v.ref_add(&dif)).or_insert(dif);
@@ -252,46 +284,12 @@ impl<C> SparseCoeffs<C> where C: EuclideanRing + num::FromPrimitive + num::Integ
         coeffs
     }
 
-    pub(crate) fn shift(&mut self, h: C) {
-        self.0 = self.new_shifted_coeffs(h);
+    pub(crate) fn shift(&mut self, h: C, mul_div: fn(C, usize, C) -> C) {
+        self.0 = self.new_shifted_coeffs(h, mul_div);
     }
 
-    pub(crate) fn new_shifted(&self, h: C) -> Polynomial<C> {
-        Polynomial::from(self.new_shifted_coeffs(h))
-    }
-}
-
-impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
-    
-    /// the returned value may have 0-value entries.
-    fn new_shifted_coeffs_f(&self, h: C) -> BTreeMap<usize, C> {
-        let mut coeffs: BTreeMap<usize, C> = self.0.clone();
-
-        for (deg, c) in self.nonzero_coeffs_iter() {
-            if *deg == 0 { continue; }
-            let mut i: C = C::one();
-            let mut d: usize = *deg;
-            let mut m: C = C::one();
-            let mut k: C = c.clone();
-            while d > 0 {
-                m = m * C::from_usize(d).unwrap() / i.clone();  // m * d / i
-                k = k * &h;
-                let dif = m.ref_mul(&k);
-                coeffs.entry(d-1).and_modify(|v| *v = v.ref_add(&dif)).or_insert(dif);
-                d = d - 1;
-                i = i + C::one();
-            }
-        }
-        
-        coeffs
-    }
-
-    pub(crate) fn shift_f(&mut self, h: C) {
-        self.0 = self.new_shifted_coeffs_f(h);
-    }
-
-    pub(crate) fn new_shifted_f(&self, h: C) -> Polynomial<C> {
-        Polynomial::from(self.new_shifted_coeffs_f(h))
+    pub(crate) fn new_shifted(&self, h: C, mul_div: fn(C, usize, C) -> C) -> Polynomial<C> {
+        Polynomial::from(self.new_shifted_coeffs(h, mul_div))
     }
 }
 

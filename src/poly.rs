@@ -2,11 +2,12 @@ pub(crate) mod dense_coeffs;
 pub(crate) mod sparse_coeffs;
 pub(crate) mod iter;
 pub mod eval;
+pub mod shift;
 
 use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
-use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::{Eval, PolynomialEvaluator}, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, sparse_coeffs::SparseCoeffs}};
+use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::{Eval, PolynomialEvaluator}, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, shift::{PolynomialShifter, Shift}, sparse_coeffs::SparseCoeffs}};
 
 /// Polynomial type.
 /// Refer to spire's [Polynomial](https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala).
@@ -394,6 +395,7 @@ impl<C> Into<BTreeMap<usize, C>> for Polynomial<C> where C: Semiring {
     }
 }
 
+//********** Basic Methods ******
 impl<C> Polynomial<C> where C: Semiring {
 
     /// Returns the degree of the `self` polynomial.
@@ -739,6 +741,273 @@ impl<C> Debug for Polynomial<C> where C: Semiring + Display {
     }
 }
 
+//********** Iterators **********
+/// Iterates nonzero coefficients.
+impl<C> IntoIterator for Polynomial<C> where C: Semiring {
+
+    type Item = (usize, C);
+    type IntoIter = IntoNonzeroCoeffsIter<C>;
+
+    /// Creates an iterator that iterates the non-zero coefficients with its term's degree.
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=(usize, C)>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<i64> = dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.into_iter();
+    ///     
+    ///     assert_eq!(ite.next(), Some((0, 1)));
+    ///     assert_eq!(ite.next(), Some((1, 2)));
+    ///     assert_eq!(ite.next(), Some((3, 4)));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn into_iter(self) -> Self::IntoIter {
+        iter::into_nonzero_coeffs_iter(self)
+    }
+}
+
+/// Iterates reference of nonzero coefficient.
+impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
+
+    type Item = (usize, &'a C);
+    type IntoIter = NonzeroCoeffsIter<'a, C>;
+
+    /// Creates an iterator that iterates references of the non-zero coefficients with its term's degree.
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=(usize, &C)>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: &Polynomial<i64> = &dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.into_iter();
+    ///     
+    ///     assert_eq!(ite.next(), Some((0, &1)));
+    ///     assert_eq!(ite.next(), Some((1, &2)));
+    ///     assert_eq!(ite.next(), Some((3, &4)));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn into_iter(self) -> Self::IntoIter {
+        iter::nonzero_coeffs_iter(self)
+    }
+}
+
+pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring {
+    
+    type Coeff;
+    type IntoCoeffsIter: Iterator<Item=Self::Coeff>;
+    type MapArgType;
+
+    fn coeffs(self) -> Self::IntoCoeffsIter;
+
+    #[inline]
+    fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
+
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D>
+        where D: Semiring, F: Fn(usize, Self::MapArgType) -> D;
+
+    fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>>
+        where D: Semiring, F: Fn(usize, Self::MapArgType) -> Option<D>;
+}
+
+impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
+    
+    type Coeff = C;
+    type IntoCoeffsIter = IntoCoeffsIter<C>;
+    type MapArgType = C;
+
+    /// Creates an iterator that iterates the coefficients including zeros.
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=C>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.coeffs();
+    ///     
+    ///     assert_eq!(ite.next(), Some(1));
+    ///     assert_eq!(ite.next(), Some(2));
+    ///     assert_eq!(ite.next(), Some(0));
+    ///     assert_eq!(ite.next(), Some(4));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn coeffs(self) -> Self::IntoCoeffsIter {
+        iter::into_coeffs_iter(self)
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.map_nonzero(|_, c| c * 2);
+    ///     assert_eq!(q, dense![2, 0, 4, 0, 6]);
+    /// 
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::constant(f(0, cc.0)),
+            Polynomial::Dense(dc) => dc.map_nonzero(f),
+            Polynomial::Sparse(sc) => sc.map_nonzero(f),
+        }
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    ///     use num::traits::ToPrimitive;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.try_map_nonzero(|_, c|c.to_f64());
+    ///     assert_eq!(q.unwrap(), dense![1., 0., 2., 0., 3.]);
+    /// 
+    fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, C) -> Option<D> {
+        match self {
+            Polynomial::Zero() => Some(Polynomial::Zero()),
+            Polynomial::Constant(cc) => match f(0, cc.0) {
+                Some(c) => Some(Polynomial::constant(c)),
+                _ => None,
+            },
+            Polynomial::Dense(dc) => dc.try_map_nonzero(f),
+            Polynomial::Sparse(sc) => sc.try_map_nonzero(f),
+        }
+    }
+}
+
+impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
+    
+    type Coeff = Option<&'a C>;
+    type IntoCoeffsIter = CoeffsIter<'a, C>;
+    type MapArgType = &'a C;
+
+    /// Creates an iterator that iterates references of the coefficients including zeros.
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=Option<Option<&C>>>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: &Polynomial<i64> = &dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.coeffs();
+    ///     
+    ///     assert_eq!(ite.next(), Some(Some(&1)));
+    ///     assert_eq!(ite.next(), Some(Some(&2)));
+    ///     assert_eq!(ite.next(), Some(Some(&0)));
+    ///     assert_eq!(ite.next(), Some(Some(&4)));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    /// If a coefficient is zero, the `next()` method may return `Some(None)`: 
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::sparse;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: &Polynomial<i64> = &sparse![(0, 1), (1, 2), (3, 4)];  // 1 + 2x + 4x³
+    ///     let mut ite = p.coeffs();
+    ///     
+    ///     assert_eq!(ite.next(), Some(Some(&1)));
+    ///     assert_eq!(ite.next(), Some(Some(&2)));
+    ///     assert_eq!(ite.next(), Some(None));
+    ///     assert_eq!(ite.next(), Some(Some(&4)));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn coeffs(self) -> Self::IntoCoeffsIter {
+        iter::coeffs_iter(self)
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.map_nonzero(|_, c| c * &2);
+    ///     assert_eq!(q, dense![2, 0, 4, 0, 6]);
+    /// 
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::constant(f(0, &cc.0)),
+            Polynomial::Dense(dc) => dc.map_nonzero_ref(f),
+            Polynomial::Sparse(sc) => sc.map_nonzero_ref(f),
+        }
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    ///     use num::traits::ToPrimitive;
+    /// 
+    ///     let p: &Polynomial<i64> = &dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.try_map_nonzero(|_, c|c.to_f64());
+    ///     assert_eq!(q.unwrap(), dense![1., 0., 2., 0., 3.]);
+    /// 
+    fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, &'a C) -> Option<D> {
+        match self {
+            Polynomial::Zero() => Some(Polynomial::Zero()),
+            Polynomial::Constant(cc) => match f(0, &cc.0) {
+                Some(c) => Some(Polynomial::constant(c)),
+                _ => None,
+            },
+            Polynomial::Dense(dc) => dc.try_map_nonzero_ref(f),
+            Polynomial::Sparse(sc) => sc.try_map_nonzero_ref(f),
+        }
+    }
+}
+
+impl<C> FromIterator<C> for Polynomial<C> where C: Semiring {
+
+    /// Creates a `Polynomial` instance from an iterator of `C`.
+    /// 
+    ///     use comonjo_algebra::poly::Polynomial;
+    ///     use comonjo_algebra::dense;
+    /// 
+    ///     let vec_iter = (1..8).into_iter();
+    ///     let p: Polynomial<i64> = vec_iter.collect();
+    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6, 7]);
+    /// 
+    fn from_iter<T: IntoIterator<Item = C>>(iter: T) -> Self {
+        let vec: Vec<C> = iter.into_iter().collect();
+        Polynomial::from(vec)
+    }
+}
+
+impl<C> FromIterator<(usize, C)> for Polynomial<C> where C: Semiring {
+
+    /// Creates a `Polynomial` instance from an iterator of `(usize, C)`.
+    /// 
+    ///     use comonjo_algebra::poly::Polynomial;
+    ///     use comonjo_algebra::sparse;
+    /// 
+    ///     let map_iter = (1..8).into_iter().enumerate()
+    ///                          .filter(|(i, c)|i % 2 == 0);
+    ///     let p: Polynomial<i64> = map_iter.collect();
+    ///     assert_eq!(p, sparse![(0, 1), (2, 3), (4, 5), (6, 7)]);
+    /// 
+    fn from_iter<T: IntoIterator<Item = (usize, C)>>(iter: T) -> Self {
+        let map: BTreeMap<usize, C> = iter.into_iter().collect();
+        Polynomial::from(map)
+    }
+}
+
 //********** Eq, PartialEq, Zero and One **********
 impl<C> PartialEq for Polynomial<C> where C: Semiring {
 
@@ -814,218 +1083,6 @@ impl<C> ConstOne for Polynomial<C> where C: Semiring + ConstOne + Clone {
     const ONE: Self = Polynomial::Constant(ConstCoeff(C::ONE));
 }
 
-//********** Iterator **********
-/// Iterates nonzero coefficients.
-impl<C> IntoIterator for Polynomial<C> where C: Semiring {
-
-    type Item = (usize, C);
-    type IntoIter = IntoNonzeroCoeffsIter<C>;
-
-    /// Creates an iterator that iterates the non-zero coefficients with its term's degree.
-    /// Iteration order is in the ascendant of degree.
-    /// The returned iterator implements `Iterator<Item=(usize, C)>`.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p: Polynomial<i64> = dense![1, 2, 0, 4];  // 1 + 2x + 4x³
-    ///     let mut ite = p.into_iter();
-    ///     
-    ///     assert_eq!(ite.next(), Some((0, 1)));
-    ///     assert_eq!(ite.next(), Some((1, 2)));
-    ///     assert_eq!(ite.next(), Some((3, 4)));
-    ///     assert_eq!(ite.next(), None);
-    /// 
-    fn into_iter(self) -> Self::IntoIter {
-        iter::into_nonzero_coeffs_iter(self)
-    }
-}
-
-/// Iterates reference of nonzero coefficient.
-impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
-
-    type Item = (usize, &'a C);
-    type IntoIter = NonzeroCoeffsIter<'a, C>;
-
-    /// Creates an iterator that iterates references of the non-zero coefficients with its term's degree.
-    /// Iteration order is in the ascendant of degree.
-    /// The returned iterator implements `Iterator<Item=(usize, &C)>`.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p: &Polynomial<i64> = &dense![1, 2, 0, 4];  // 1 + 2x + 4x³
-    ///     let mut ite = p.into_iter();
-    ///     
-    ///     assert_eq!(ite.next(), Some((0, &1)));
-    ///     assert_eq!(ite.next(), Some((1, &2)));
-    ///     assert_eq!(ite.next(), Some((3, &4)));
-    ///     assert_eq!(ite.next(), None);
-    /// 
-    fn into_iter(self) -> Self::IntoIter {
-        iter::nonzero_coeffs_iter(self)
-    }
-}
-
-pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring {
-    
-    type Coeff;
-    type IntoCoeffsIter: Iterator<Item=Self::Coeff>;
-    type MapArgType;
-
-    fn coeffs(self) -> Self::IntoCoeffsIter;
-
-    #[inline]
-    fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
-
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D>
-        where D: Semiring, F: Fn(usize, Self::MapArgType) -> D;
-}
-
-impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
-    
-    type Coeff = C;
-    type IntoCoeffsIter = IntoCoeffsIter<C>;
-    type MapArgType = C;
-
-    /// Creates an iterator that iterates the coefficients including zeros.
-    /// Iteration order is in the ascendant of degree.
-    /// The returned iterator implements `Iterator<Item=C>`.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
-    /// 
-    ///     let p: Polynomial<i64> = dense![1, 2, 0, 4];  // 1 + 2x + 4x³
-    ///     let mut ite = p.coeffs();
-    ///     
-    ///     assert_eq!(ite.next(), Some(1));
-    ///     assert_eq!(ite.next(), Some(2));
-    ///     assert_eq!(ite.next(), Some(0));
-    ///     assert_eq!(ite.next(), Some(4));
-    ///     assert_eq!(ite.next(), None);
-    /// 
-    fn coeffs(self) -> Self::IntoCoeffsIter {
-        iter::into_coeffs_iter(self)
-    }
-    
-    /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
-    /// Note that the mapping is applied only to nonzero coefficients.
-    /// The returned `Polynomial` can have a different coefficient type.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
-    /// 
-    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.map_nonzero(|_, c| c * 2);
-    ///     assert_eq!(q, dense![2, 0, 4, 0, 6]);
-    /// 
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => Polynomial::constant(f(0, cc.0)),
-            Polynomial::Dense(dc) => dc.map_nonzero(f),
-            Polynomial::Sparse(sc) => sc.map_nonzero(f),
-        }
-    }
-}
-
-impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
-    
-    type Coeff = Option<&'a C>;
-    type IntoCoeffsIter = CoeffsIter<'a, C>;
-    type MapArgType = &'a C;
-
-    /// Creates an iterator that iterates references of the coefficients including zeros.
-    /// Iteration order is in the ascendant of degree.
-    /// The returned iterator implements `Iterator<Item=Option<Option<&C>>>`.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
-    /// 
-    ///     let p: &Polynomial<i64> = &dense![1, 2, 0, 4];  // 1 + 2x + 4x³
-    ///     let mut ite = p.coeffs();
-    ///     
-    ///     assert_eq!(ite.next(), Some(Some(&1)));
-    ///     assert_eq!(ite.next(), Some(Some(&2)));
-    ///     assert_eq!(ite.next(), Some(Some(&0)));
-    ///     assert_eq!(ite.next(), Some(Some(&4)));
-    ///     assert_eq!(ite.next(), None);
-    /// 
-    /// If a coefficient is zero, the `next()` method may return `Some(None)`: 
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::sparse;
-    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
-    /// 
-    ///     let p: &Polynomial<i64> = &sparse![(0, 1), (1, 2), (3, 4)];  // 1 + 2x + 4x³
-    ///     let mut ite = p.coeffs();
-    ///     
-    ///     assert_eq!(ite.next(), Some(Some(&1)));
-    ///     assert_eq!(ite.next(), Some(Some(&2)));
-    ///     assert_eq!(ite.next(), Some(None));
-    ///     assert_eq!(ite.next(), Some(Some(&4)));
-    ///     assert_eq!(ite.next(), None);
-    /// 
-    fn coeffs(self) -> Self::IntoCoeffsIter {
-        iter::coeffs_iter(self)
-    }
-    
-    /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
-    /// Note that the mapping is applied only to nonzero coefficients.
-    /// The returned `Polynomial` can have a different coefficient type.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
-    /// 
-    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.map_nonzero(|_, c| c * &2);
-    ///     assert_eq!(q, dense![2, 0, 4, 0, 6]);
-    /// 
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => Polynomial::constant(f(0, &cc.0)),
-            Polynomial::Dense(dc) => dc.map_nonzero_ref(f),
-            Polynomial::Sparse(sc) => sc.map_nonzero_ref(f),
-        }
-    }
-}
-
-impl<C> FromIterator<C> for Polynomial<C> where C: Semiring {
-
-    /// Creates a `Polynomial` instance from an iterator of `C`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let vec_iter = (1..8).into_iter();
-    ///     let p: Polynomial<i64> = vec_iter.collect();
-    ///     assert_eq!(p, dense![1, 2, 3, 4, 5, 6, 7]);
-    /// 
-    fn from_iter<T: IntoIterator<Item = C>>(iter: T) -> Self {
-        let vec: Vec<C> = iter.into_iter().collect();
-        Polynomial::from(vec)
-    }
-}
-
-impl<C> FromIterator<(usize, C)> for Polynomial<C> where C: Semiring {
-
-    /// Creates a `Polynomial` instance from an iterator of `(usize, C)`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let map_iter = (1..8).into_iter().enumerate()
-    ///                          .filter(|(i, c)|i % 2 == 0);
-    ///     let p: Polynomial<i64> = map_iter.collect();
-    ///     assert_eq!(p, sparse![(0, 1), (2, 3), (4, 5), (6, 7)]);
-    /// 
-    fn from_iter<T: IntoIterator<Item = (usize, C)>>(iter: T) -> Self {
-        let map: BTreeMap<usize, C> = iter.into_iter().collect();
-        Polynomial::from(map)
-    }
-}
-
 //********** Compose **********/
 fn compose_polynomials<'a, 'b, C> (lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
         where C: Semiring + Clone {
@@ -1063,586 +1120,6 @@ impl<'a, 'b, C> Compose<C, &'b Polynomial<C>> for &'a Polynomial<C> where C: Sem
             },
             (lhs, rhs) if rhs.is_x() => lhs.clone(),
             (lhs, rhs) => compose_polynomials(lhs, rhs),
-        }
-    }
-}
-
-//********** Methods with Semiring coefficients ******
-impl<C> Polynomial<C> where C: Semiring {
-
-    /// Returns the reciprocal polynomial 
-    /// (Reference: [Reciprocal polynomial](http://en.wikipedia.org/wiki/Reciprocal_polynomial)).
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     p.reciprocal();
-    ///     assert_eq!(p, dense![4, 3, 2, 1]);  // 4 + 3x + 2x² + x³
-    /// 
-    pub fn reciprocal(&mut self) {
-        match self {
-            Polynomial::Dense(dc) => 
-                if let Some(p) = dc.reciprocal() { *self = p; },
-            Polynomial::Sparse(sc) => 
-                if let Some(p) = sc.reciprocal() { *self = p; },
-            _ => (),
-        }
-    }
-
-    /// Removes all zero roots from the `self` polynomial.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p = dense![0, 0, 1, 2, 3];  // x² + 2x³ +3x⁵
-    ///     p.remove_zero_roots();
-    ///     assert_eq!(p, dense![1, 2, 3]);  // 1 + 2x + 3x²
-    /// 
-    pub fn remove_zero_roots(&mut self) {
-        match self {
-            Polynomial::Dense(dc) => 
-                if let Some(p) = dc.remove_zero_roots() { *self = p; },
-            Polynomial::Sparse(sc) =>
-                if let Some(p) = sc.remove_zero_roots() { *self = p; },
-            _ => (),
-        }
-    }
-
-    /// Removes the max order term from the `self` polynomial.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     p.reductum();
-    ///     assert_eq!(p, dense![1, 2, 3]);  // 1 + 2x + 3x²
-    /// 
-    pub fn reductum(&mut self) {
-        match self {
-            Polynomial::Zero() => (),
-            Polynomial::Constant(_) => *self = Polynomial::Zero(),
-            Polynomial::Dense(dc) =>
-                if let Some(p) = dc.reductum() { *self = p; },
-            Polynomial::Sparse(sc) =>
-                if let Some(p) = sc.reductum() { *self = p; },
-        }
-    }
-}
-
-impl<C> Polynomial<C> where C: Semiring + Clone {
-    
-    /// Creates a reciprocal polynomial of the `self` as a new instance.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_reciprocal(), dense![4, 3, 2, 1]);  // 4 + 3x + 2x² + x
-    /// 
-    pub fn new_reciprocal(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            c @ Polynomial::Constant(_)=> c.clone(),
-            Polynomial::Dense(dc) => dc.new_reciprocal(),
-            Polynomial::Sparse(sc) => sc.new_reciprocal(),
-        }
-    }
-
-    /// Returns a polynomial that zero roots are removed from the `self` polynomial, as a new instance.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![0, 0, 1, 2, 3];  // x² + 2x³ + 3x⁴
-    ///     assert_eq!(p.new_zero_roots_removed(), dense![1, 2, 3]);  // 1 + 2x + 3x²
-    /// 
-    pub fn new_zero_roots_removed(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.new_zero_roots_removed(),
-            Polynomial::Sparse(sc) => sc.new_zero_roots_removed(),
-            _ => self.clone(),
-        }
-    }
-
-    /// Creates a polynomial that the max-order term is removed from the `self` polynomial, as a new instance.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_reductum(), dense![1, 2, 3]);  // 1 + 2x + 3x²
-    /// 
-    pub fn new_reductum(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.new_reductum(),
-            Polynomial::Sparse(sc) => sc.new_reductum(),
-            _ => Polynomial::Zero(),
-        }
-    }
-
-    fn scale_by_left(self, k: &C) -> Polynomial<C> {
-        if k.is_zero() { return Polynomial::Zero() }
-        if k.is_one() { return self }
-        self.map_nonzero(|_, c| k.ref_mul(c))
-    }
-
-    fn ref_scale_by_left(&self, k: &C) -> Polynomial<C> {
-        if k.is_zero() { return Polynomial::Zero() }
-        if k.is_one() { return self.clone() }
-        self.map_nonzero(|_, c| k.ref_mul(c))
-    }
-}
-
-impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
-
-    /// Differentiates the `self` polynomial.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     p.differentiate();
-    ///     assert_eq!(p, dense![2, 6, 12]);  // 2 + 6x + 12x²
-    /// 
-    pub fn differentiate(&mut self) {
-        match self {
-            Polynomial::Dense(dc) => 
-                if let Some(p) = dc.differentiate() { *self = p },
-            Polynomial::Sparse(sc) => 
-                if let Some(p) = sc.differentiate() { *self = p },
-            _ => *self = Polynomial::Zero(),
-        }
-    }
-
-    /// differentiates the `self` polynomial `n` times.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     p.differentiate_n(2);
-    ///     assert_eq!(p, dense![6, 24]);  // 6 + 24x
-    /// 
-    pub fn differentiate_n(&mut self, n: usize) {
-        if n == 0 { return; }
-        if n == 1 { 
-            self.differentiate();
-            return;
-        }
-
-        match self {
-            Polynomial::Dense(dc) => 
-                if let Some(p) = dc.differentiate_n(n) { *self = p; },
-            Polynomial::Sparse(sc) => 
-                if let Some(p) = sc.differentiate_n(n) { *self = p },
-            _ => *self = Polynomial::Zero(),
-        }
-    }
-}    
-
-impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive + Clone {
-    
-    /// Creates the derivative of the `self` polynomial.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_derivative(), dense![2, 6, 12]);  // 2 + 6x + 12x²
-    /// 
-    pub fn new_derivative(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Dense(dc) => dc.new_derivative(),
-            Polynomial::Sparse(sc) => sc.new_derivative(),
-            _ => Polynomial::Zero(),
-        }
-    }
-    
-    /// Creates the n-th derivative of the `self` polynomial.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_nth_derivative(2), dense![6, 24]);  // 6 + 24x
-    /// 
-    pub fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
-        if n == 0 { return self.clone(); }
-        if n == 1 { return self.new_derivative(); }
-
-        match self {
-            Polynomial::Dense(dc) => dc.new_nth_derivative(n),
-            Polynomial::Sparse(sc) => sc.new_nth_derivative(n),
-            _ => Polynomial::Zero(),
-        }
-    }
-}
-
-impl<C> Polynomial<C> where C: Semiring + num::traits::Signed {
-
-    /// Returns the number of sign variations in the coefficients of the `self` polynomial.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![1, 0, 2, -3, -4, 0, 5, 6, -7];
-    ///     //                     ^          ^     ^
-    ///     assert_eq!(p.sign_vibrations(), 3);
-    /// 
-    pub fn sign_vibrations(&self) -> usize {
-        if self.is_constant() { return 0; }
-
-        let mut prev = C::zero().signum();
-        let mut has_prev = false;
-        let mut vibrations = 0;
-
-        for (_, c) in self.nonzero_coeffs() {
-            let current = c.signum();
-            if has_prev && prev != current {
-                vibrations += 1;
-            }
-
-            prev = current;
-            has_prev = true;
-        }
-
-        vibrations
-    }
-}
-
-//********** Methods with Ring Coefficients **********/
-impl<C> Polynomial<C> where C: Ring {
-
-    /// Flips the `self` polynomial, that is, changes the sign of the odd-order term's coefficients.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     p.flip();
-    ///     assert_eq!(p, dense![1, -2, 3, -4]);  // 1 - 2x + 3x² - 4x³
-    /// 
-    /// The `flip()` method returns the same result as `compose()` with `-x`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
-    /// 
-    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     let q = p.clone();
-    /// 
-    ///     p.flip();
-    ///     assert_eq!(p, q.compose(-Polynomial::x()));
-    /// 
-    pub fn flip(&mut self){
-        match self {
-            Polynomial::Dense(dc) => dc.flip(),
-            Polynomial::Sparse(sc) => sc.flip(),
-            _ => (),
-        }
-    }
-}
-
-impl<'a, C> Polynomial<C> where C: Ring + Clone {
-
-    /// Creates the flipped polynomial of the `self` polynomial,
-    /// that is, the polynomial whose odd-order terms' coefficients are changed.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_flipped(), dense![1, -2, 3, -4]);  // 1 - 2x + 3x² - 4x³
-    /// 
-    /// The `new_flipped()` method returns the same result as `compose()` with `-x`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
-    /// 
-    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_flipped(), p.compose(-Polynomial::x()));
-    /// 
-    pub fn new_flipped(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(_) => self.clone(),
-            Polynomial::Dense(dc) => dc.new_flipped(),
-            Polynomial::Sparse(sc) => sc.new_flipped(),
-        }
-    }
-}
-
-//********** Methods with Euclidean Ring Coefficients **********/
-/// x * y / z
-pub(crate) fn mul_div_uint<C>(x: C, y: usize, z: C) -> C
-        where C: EuclideanRing + num::FromPrimitive + num::Integer + Clone {
-
-    let gcd_xz = x.gcd(&z);
-    let x_red = x / gcd_xz.clone();
-    let z_red = z / gcd_xz;
-    let y_red = C::from_usize(y).unwrap() / z_red;
-    x_red * y_red
-}
-
-impl<C> Polynomial<C> where C: EuclideanRing + num::FromPrimitive + num::Integer + Clone {
-
-    /// Shifts the `self` polynomial by `h`, that is, substitutes `x + h` into `x`, and expands.
-    /// The coefficient type must be Euclidean ring (and num::Integer).
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p = dense![0, 0, 0, 1];  // x³
-    ///     p.shift(1);
-    ///     assert_eq!(p, dense![1, 3, 3, 1]);  // (x + 1)³ = 1 + 3x + 3x² + x³
-    /// 
-    /// The `shift()` method returns the same result as `compose()` with `x + h`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
-    /// 
-    ///     let mut p = dense![0, 0, 0, 3];  // x³
-    ///     let q = p.clone();
-    /// 
-    ///     p.shift(1);
-    ///     assert_eq!(p, q.compose(Polynomial::x() + 1));
-    /// 
-    pub fn shift(&mut self, h: C) {
-        if h.is_zero() { return; }
-        match self {
-            Polynomial::Dense(dc) => dc.shift(h),
-            Polynomial::Sparse(sc) => sc.shift(h),
-            _ => (),
-        }
-    }
-
-    /// Creates a polynomial that the `self` is shifted by `h`, that is, `x + h` is substituted into `x`, and expanded.
-    /// The coefficient type must be Euclidean ring (and num::Integer).
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p = dense![0, 0, 0, 1];  // x³
-    ///     assert_eq!(p.new_shifted(1), dense![1, 3, 3, 1]);  // (x + 1)³ = 1 + 3x + 3x² + x³
-    /// 
-    /// The `new_shifted()` method returns the same result as `compose()` with `x + h`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
-    /// 
-    ///     let p = dense![0, 0, 0, 3];  // x³
-    ///     assert_eq!(p.new_shifted(1), p.compose(Polynomial::x() + 1));
-    /// 
-    pub fn new_shifted(&self, h: C) -> Polynomial<C> {
-        if h.is_zero() { return self.clone(); }
-        match self {
-            Polynomial::Dense(dc) => dc.new_shifted(h),
-            Polynomial::Sparse(sc) => sc.new_shifted(h),
-            _ => self.clone(),
-        }
-    }
-}
-
-impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone {
-
-    /// Shifts the `self` polynomial by `h`, that is, substitutes `x + h` into `x`, and expands.
-    /// The coefficient type must implement `comonjo_algebra::algebra::Field`.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p: Polynomial<f64> = dense![0., 0., 0., 1.];  // x³
-    ///     p.shift_f(1.);
-    ///     assert_eq!(p, dense![1., 3., 3., 1.]);  // (x + 1)³ = 1 + 3x + 3x² + x³
-    /// 
-    /// The `shift_f()` method returns the same result as `compose()` with `x + h`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
-    /// 
-    ///     let mut p: Polynomial<f64> = dense![0., 0., 0., 3.];  // x³
-    ///     let q = p.clone();
-    /// 
-    ///     p.shift_f(1.);
-    ///     assert_eq!(p, q.compose(Polynomial::x() + 1.));
-    /// 
-    pub fn shift_f(&mut self, h: C) {
-        if h.is_zero() { return; }
-        match self {
-            Polynomial::Dense(dc) => dc.shift_f(h),
-            Polynomial::Sparse(sc) => sc.shift_f(h),
-            _ => (),
-        }
-    }
-
-    /// Creates a polynomial that the `self` is shifted by `h`, that is, `x + h` is substituted into `x`, and expanded.
-    /// The coefficient type must implement `comonjo_algebra::algebra::Field`.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p: Polynomial<f64> = dense![0., 0., 0., 1.];  // x³
-    ///     assert_eq!(p.new_shifted_f(1.), dense![1., 3., 3., 1.]);  // (x + 1)³ = 1 + 3x + 3x² + x³
-    /// 
-    /// The `new_shifted_f()` method returns the same result as `compose()` with `x + h`.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
-    /// 
-    ///     let p: Polynomial<f64> = dense![0., 0., 0., 3.];  // x³
-    ///     assert_eq!(p.new_shifted_f(1.), p.compose(Polynomial::x() + 1.));
-    /// 
-    pub fn new_shifted_f(&self, h: C) -> Polynomial<C> {
-        if h.is_zero() { return self.clone(); }
-        match self {
-            Polynomial::Dense(dc) => dc.new_shifted_f(h),
-            Polynomial::Sparse(sc) => sc.new_shifted_f(h),
-            _ => self.clone(),
-        }
-    }
-}
-
-//********** Methods with Field Coefficients **********/
-
-
-    //   /**
-    //    * Returns the real roots of this polynomial.
-    //    *
-    //    * Depending on `C`, the `finder` argument may need to be passed "explicitly" via an implicit conversion. This is
-    //    * because some types (eg `BigDecimal`, `Rational`, etc) require an error bound, and so provide implicit conversions
-    //    * to `RootFinder`s from the error type. For instance, `BigDecimal` requires either a scale or MathContext. So, we'd
-    //    * call this method with `poly.roots(MathContext.DECIMAL128)`, which would return a `Roots[BigDecimal` whose roots are
-    //    * approximated to the precision specified in `DECIMAL128` and rounded appropriately.
-    //    *
-    //    * On the other hand, a type like `Double` doesn't require an error bound and so can be called without specifying the
-    //    * `RootFinder`.
-    //    *
-    //    * @param finder
-    //    *   a root finder to extract roots with
-    //    * @return
-    //    *   the real roots of this polynomial
-    //    */
-    //   def roots(implicit finder: RootFinder[C]): Roots[C] =
-    //     finder.findRoots(this)
-    // pub fn roots(self) -> Roots<C> {
-    //     todo!()
-    // }
-
-
-impl<C> Polynomial<C> where C: Field {
-
-    /// Makes the `self` polynomial be a monic polynomial, that is,
-    /// a polynomial which is scaled for the leading term's coefficient to be equal to 1.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
-    ///     p.monic();
-    ///     assert_eq!(p, dense![1./4., 2./4., 3./4., 1.]);  // (1/4) + (1/2)x + (3/4)x² + x³
-    /// 
-    pub fn monic(&mut self) {
-        match self {
-            Polynomial::Zero() => (),
-            Polynomial::Constant(_) => *self = Polynomial::new_raw_const(C::one()),
-            Polynomial::Dense(dc) => dc.monic(),
-            Polynomial::Sparse(sc) => sc.monic(),
-        }
-    }
-}
-
-impl<C> Polynomial<C> where C: Field + Clone {
-
-    /// Creates a monic polynomial of the `self` polynomial, that is,
-    /// a polynomial which is scaled for the leading term's coefficient to be equal to 1.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_integral(), dense![0., 1., 1., 1., 1.]);  // x + x² + x³ + x⁴
-    /// 
-    pub fn new_monic(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(_) => Polynomial::one(),
-            Polynomial::Dense(dc) => dc.new_monic(),
-            Polynomial::Sparse(sc) => sc.new_monic(),
-        }
-    }
-}
-
-impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone + Debug {
-
-    /// Integrates the `self` polynomial.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
-    ///     p.integrate();
-    ///     assert_eq!(p, dense![0., 1., 1., 1., 1.]);  // x + x² + x³ + x⁴
-    /// 
-    pub fn integrate(&mut self) {
-        match self {
-            Polynomial::Zero() => (),
-            Polynomial::Constant(cc) => *self = Polynomial::linear_monomial(cc.0.clone()),
-            Polynomial::Dense(dc) => dc.integrate(),
-            Polynomial::Sparse(sc) => sc.integrate(),
-        }
-    }
-
-    /// Creates the integral of the `self` polynomial.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(p.new_integral(), dense![0., 1., 1., 1., 1.]);  // x + x² + x³ + x⁴
-    /// 
-    pub fn new_integral(&self) -> Polynomial<C> {
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
-            Polynomial::Dense(dc) => dc.new_integral(),
-            Polynomial::Sparse(sc) => sc.new_integral(),
-        }
-    }
-
-    /// integrates the `self` polynomial n times.
-    ///
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let mut p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
-    ///     p.integrate_n(2);
-    ///     assert_eq!(
-    ///         p,
-    ///         dense![0., 0., 1./2., 1./3., 1./4., 1./5.]);  // (1/2)x² + (1/3)x³ + (1/4)x⁴ + (1/5)x⁵
-    /// 
-    pub fn integrate_n(&mut self, n: usize) {
-        if n == 0 { return; }
-        if n == 1 { 
-            self.integrate();
-            return;
-        }
-
-        match self {
-            Polynomial::Zero() => (),
-            Polynomial::Constant(cc) => {
-                let f: C = factorial(n);
-                *self = sparse![(n, cc.0.ref_div(f))]
-            },
-            Polynomial::Dense(dc) => dc.integrate_n(n),
-            Polynomial::Sparse(sc) => sc.integrate_n(n),
-        }
-    }
-
-    /// Creates the n-th integral of the `self` polynomial.
-    /// 
-    ///     # use comonjo_algebra::poly::Polynomial;
-    ///     # use comonjo_algebra::dense;
-    ///     let p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
-    ///     assert_eq!(
-    ///         p.new_nth_integral(2),
-    ///         dense![0., 0., 1./2., 1./3., 1./4., 1./5.]);  // (1/2)x² + (1/3)x³ + (1/4)x⁴ + (1/5)x⁵
-    /// 
-    pub fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
-        if n == 0 { return self.clone(); }
-        if n == 1 { return self.new_integral(); }
-
-        match self {
-            Polynomial::Zero() => Polynomial::Zero(),
-            Polynomial::Constant(cc) => {
-                let f: C = factorial(n);
-                sparse![(n, cc.0.clone() / f)]
-            },
-            Polynomial::Dense(dc) => dc.new_nth_integral(n),
-            Polynomial::Sparse(sc) => sc.new_nth_integral(n),
         }
     }
 }
@@ -2417,5 +1894,505 @@ impl<C> EuclideanRing for Polynomial<C> where C: Field + Clone {
 
     fn ref_div_rem(&self, other: &Self) -> (Self, Self) {
         self.div_rem_euclid(other)
+    }
+}
+
+//********** Methods with Semiring coefficients ******
+impl<C> Polynomial<C> where C: Semiring {
+
+    /// Returns the reciprocal polynomial 
+    /// (Reference: [Reciprocal polynomial](http://en.wikipedia.org/wiki/Reciprocal_polynomial)).
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     p.reciprocal();
+    ///     assert_eq!(p, dense![4, 3, 2, 1]);  // 4 + 3x + 2x² + x³
+    /// 
+    pub fn reciprocal(&mut self) {
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.reciprocal() { *self = p; },
+            Polynomial::Sparse(sc) => 
+                if let Some(p) = sc.reciprocal() { *self = p; },
+            _ => (),
+        }
+    }
+
+    /// Removes all zero roots from the `self` polynomial.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p = dense![0, 0, 1, 2, 3];  // x² + 2x³ +3x⁵
+    ///     p.remove_zero_roots();
+    ///     assert_eq!(p, dense![1, 2, 3]);  // 1 + 2x + 3x²
+    /// 
+    pub fn remove_zero_roots(&mut self) {
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.remove_zero_roots() { *self = p; },
+            Polynomial::Sparse(sc) =>
+                if let Some(p) = sc.remove_zero_roots() { *self = p; },
+            _ => (),
+        }
+    }
+
+    /// Removes the max order term from the `self` polynomial.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     p.reductum();
+    ///     assert_eq!(p, dense![1, 2, 3]);  // 1 + 2x + 3x²
+    /// 
+    pub fn reductum(&mut self) {
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(_) => *self = Polynomial::Zero(),
+            Polynomial::Dense(dc) =>
+                if let Some(p) = dc.reductum() { *self = p; },
+            Polynomial::Sparse(sc) =>
+                if let Some(p) = sc.reductum() { *self = p; },
+        }
+    }
+}
+
+impl<C> Polynomial<C> where C: Semiring + Clone {
+    
+    /// Creates a reciprocal polynomial of the `self` as a new instance.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_reciprocal(), dense![4, 3, 2, 1]);  // 4 + 3x + 2x² + x
+    /// 
+    pub fn new_reciprocal(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            c @ Polynomial::Constant(_)=> c.clone(),
+            Polynomial::Dense(dc) => dc.new_reciprocal(),
+            Polynomial::Sparse(sc) => sc.new_reciprocal(),
+        }
+    }
+
+    /// Returns a polynomial that zero roots are removed from the `self` polynomial, as a new instance.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![0, 0, 1, 2, 3];  // x² + 2x³ + 3x⁴
+    ///     assert_eq!(p.new_zero_roots_removed(), dense![1, 2, 3]);  // 1 + 2x + 3x²
+    /// 
+    pub fn new_zero_roots_removed(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_zero_roots_removed(),
+            Polynomial::Sparse(sc) => sc.new_zero_roots_removed(),
+            _ => self.clone(),
+        }
+    }
+
+    /// Creates a polynomial that the max-order term is removed from the `self` polynomial, as a new instance.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_reductum(), dense![1, 2, 3]);  // 1 + 2x + 3x²
+    /// 
+    pub fn new_reductum(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_reductum(),
+            Polynomial::Sparse(sc) => sc.new_reductum(),
+            _ => Polynomial::Zero(),
+        }
+    }
+
+    fn scale_by_left(self, k: &C) -> Polynomial<C> {
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self }
+        self.map_nonzero(|_, c| k.ref_mul(c))
+    }
+
+    fn ref_scale_by_left(&self, k: &C) -> Polynomial<C> {
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self.clone() }
+        self.map_nonzero(|_, c| k.ref_mul(c))
+    }
+}
+
+impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive {
+
+    /// Differentiates the `self` polynomial.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     p.differentiate();
+    ///     assert_eq!(p, dense![2, 6, 12]);  // 2 + 6x + 12x²
+    /// 
+    pub fn differentiate(&mut self) {
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.differentiate() { *self = p },
+            Polynomial::Sparse(sc) => 
+                if let Some(p) = sc.differentiate() { *self = p },
+            _ => *self = Polynomial::Zero(),
+        }
+    }
+
+    /// differentiates the `self` polynomial `n` times.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     p.differentiate_n(2);
+    ///     assert_eq!(p, dense![6, 24]);  // 6 + 24x
+    /// 
+    pub fn differentiate_n(&mut self, n: usize) {
+        if n == 0 { return; }
+        if n == 1 { 
+            self.differentiate();
+            return;
+        }
+
+        match self {
+            Polynomial::Dense(dc) => 
+                if let Some(p) = dc.differentiate_n(n) { *self = p; },
+            Polynomial::Sparse(sc) => 
+                if let Some(p) = sc.differentiate_n(n) { *self = p },
+            _ => *self = Polynomial::Zero(),
+        }
+    }
+}    
+
+impl<C> Polynomial<C> where C: Semiring + num::FromPrimitive + Clone {
+    
+    /// Creates the derivative of the `self` polynomial.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_derivative(), dense![2, 6, 12]);  // 2 + 6x + 12x²
+    /// 
+    pub fn new_derivative(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Dense(dc) => dc.new_derivative(),
+            Polynomial::Sparse(sc) => sc.new_derivative(),
+            _ => Polynomial::Zero(),
+        }
+    }
+    
+    /// Creates the n-th derivative of the `self` polynomial.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_nth_derivative(2), dense![6, 24]);  // 6 + 24x
+    /// 
+    pub fn new_nth_derivative(&self, n: usize) -> Polynomial<C> {
+        if n == 0 { return self.clone(); }
+        if n == 1 { return self.new_derivative(); }
+
+        match self {
+            Polynomial::Dense(dc) => dc.new_nth_derivative(n),
+            Polynomial::Sparse(sc) => sc.new_nth_derivative(n),
+            _ => Polynomial::Zero(),
+        }
+    }
+}
+
+impl<C> Polynomial<C> where C: Semiring + num::traits::Signed {
+
+    /// Returns the number of sign variations in the coefficients of the `self` polynomial.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![1, 0, 2, -3, -4, 0, 5, 6, -7];
+    ///     //                     ^          ^     ^
+    ///     assert_eq!(p.sign_vibrations(), 3);
+    /// 
+    pub fn sign_vibrations(&self) -> usize {
+        if self.is_constant() { return 0; }
+
+        let mut prev = C::zero().signum();
+        let mut has_prev = false;
+        let mut vibrations = 0;
+
+        for (_, c) in self.nonzero_coeffs() {
+            let current = c.signum();
+            if has_prev && prev != current {
+                vibrations += 1;
+            }
+
+            prev = current;
+            has_prev = true;
+        }
+
+        vibrations
+    }
+}
+
+//********** Methods with Ring Coefficients **********/
+impl<C> Polynomial<C> where C: Ring {
+
+    /// Flips the `self` polynomial, that is, changes the sign of the odd-order term's coefficients.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     p.flip();
+    ///     assert_eq!(p, dense![1, -2, 3, -4]);  // 1 - 2x + 3x² - 4x³
+    /// 
+    /// The `flip()` method returns the same result as `compose()` with `-x`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use comonjo_algebra::poly::Compose;
+    /// 
+    ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     let q = p.clone();
+    /// 
+    ///     p.flip();
+    ///     assert_eq!(p, q.compose(-Polynomial::x()));
+    /// 
+    pub fn flip(&mut self){
+        match self {
+            Polynomial::Dense(dc) => dc.flip(),
+            Polynomial::Sparse(sc) => sc.flip(),
+            _ => (),
+        }
+    }
+}
+
+impl<'a, C> Polynomial<C> where C: Ring + Clone {
+
+    /// Creates the flipped polynomial of the `self` polynomial,
+    /// that is, the polynomial whose odd-order terms' coefficients are changed.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_flipped(), dense![1, -2, 3, -4]);  // 1 - 2x + 3x² - 4x³
+    /// 
+    /// The `new_flipped()` method returns the same result as `compose()` with `-x`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use comonjo_algebra::poly::Compose;
+    /// 
+    ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_flipped(), p.compose(-Polynomial::x()));
+    /// 
+    pub fn new_flipped(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(_) => self.clone(),
+            Polynomial::Dense(dc) => dc.new_flipped(),
+            Polynomial::Sparse(sc) => sc.new_flipped(),
+        }
+    }
+}
+
+//********** Methods with Euclidean Ring Coefficients **********/
+impl<C> Polynomial<C> where C: Semiring + Clone {
+
+    /// Shifts the `self` polynomial by `h`, that is, substitutes `x + h` into `x`, and expands.
+    /// The coefficient type must be Euclidean ring (and num::Integer).
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p = dense![0, 0, 0, 1];  // x³
+    ///     p.shift(1);
+    ///     assert_eq!(p, dense![1, 3, 3, 1]);  // (x + 1)³ = 1 + 3x + 3x² + x³
+    /// 
+    /// The `shift()` method returns the same result as `compose()` with `x + h`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use comonjo_algebra::poly::Compose;
+    /// 
+    ///     let mut p = dense![0, 0, 0, 3];  // x³
+    ///     let q = p.clone();
+    /// 
+    ///     p.shift(1);
+    ///     assert_eq!(p, q.compose(Polynomial::x() + 1));
+    /// 
+    pub fn shift(&mut self, h: C) where Shift: PolynomialShifter<C> {
+        Shift::shift(self, h)
+    }
+
+    /// Creates a polynomial that the `self` is shifted by `h`, that is, `x + h` is substituted into `x`, and expanded.
+    /// The coefficient type must be Euclidean ring (and num::Integer).
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p = dense![0, 0, 0, 1];  // x³
+    ///     assert_eq!(p.new_shifted(1), dense![1, 3, 3, 1]);  // (x + 1)³ = 1 + 3x + 3x² + x³
+    /// 
+    /// The `new_shifted()` method returns the same result as `compose()` with `x + h`.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use comonjo_algebra::poly::Compose;
+    /// 
+    ///     let p = dense![0, 0, 0, 3];  // x³
+    ///     assert_eq!(p.new_shifted(1), p.compose(Polynomial::x() + 1));
+    /// 
+    pub fn new_shifted(&self, h: C) -> Polynomial<C> where Shift: PolynomialShifter<C> {
+        Shift::new_shifted(self, h)
+    }
+}
+
+//********** Methods with Field Coefficients **********/
+
+
+    //   /**
+    //    * Returns the real roots of this polynomial.
+    //    *
+    //    * Depending on `C`, the `finder` argument may need to be passed "explicitly" via an implicit conversion. This is
+    //    * because some types (eg `BigDecimal`, `Rational`, etc) require an error bound, and so provide implicit conversions
+    //    * to `RootFinder`s from the error type. For instance, `BigDecimal` requires either a scale or MathContext. So, we'd
+    //    * call this method with `poly.roots(MathContext.DECIMAL128)`, which would return a `Roots[BigDecimal` whose roots are
+    //    * approximated to the precision specified in `DECIMAL128` and rounded appropriately.
+    //    *
+    //    * On the other hand, a type like `Double` doesn't require an error bound and so can be called without specifying the
+    //    * `RootFinder`.
+    //    *
+    //    * @param finder
+    //    *   a root finder to extract roots with
+    //    * @return
+    //    *   the real roots of this polynomial
+    //    */
+    //   def roots(implicit finder: RootFinder[C]): Roots[C] =
+    //     finder.findRoots(this)
+    // pub fn roots(self) -> Roots<C> {
+    //     todo!()
+    // }
+
+
+impl<C> Polynomial<C> where C: Field {
+
+    /// Makes the `self` polynomial be a monic polynomial, that is,
+    /// a polynomial which is scaled for the leading term's coefficient to be equal to 1.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
+    ///     p.monic();
+    ///     assert_eq!(p, dense![1./4., 2./4., 3./4., 1.]);  // (1/4) + (1/2)x + (3/4)x² + x³
+    /// 
+    pub fn monic(&mut self) {
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(_) => *self = Polynomial::new_raw_const(C::one()),
+            Polynomial::Dense(dc) => dc.monic(),
+            Polynomial::Sparse(sc) => sc.monic(),
+        }
+    }
+}
+
+impl<C> Polynomial<C> where C: Field + Clone {
+
+    /// Creates a monic polynomial of the `self` polynomial, that is,
+    /// a polynomial which is scaled for the leading term's coefficient to be equal to 1.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_integral(), dense![0., 1., 1., 1., 1.]);  // x + x² + x³ + x⁴
+    /// 
+    pub fn new_monic(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(_) => Polynomial::one(),
+            Polynomial::Dense(dc) => dc.new_monic(),
+            Polynomial::Sparse(sc) => sc.new_monic(),
+        }
+    }
+}
+
+impl<C> Polynomial<C> where C: Field + num::FromPrimitive + Clone + Debug {
+
+    /// Integrates the `self` polynomial.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
+    ///     p.integrate();
+    ///     assert_eq!(p, dense![0., 1., 1., 1., 1.]);  // x + x² + x³ + x⁴
+    /// 
+    pub fn integrate(&mut self) {
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(cc) => *self = Polynomial::linear_monomial(cc.0.clone()),
+            Polynomial::Dense(dc) => dc.integrate(),
+            Polynomial::Sparse(sc) => sc.integrate(),
+        }
+    }
+
+    /// Creates the integral of the `self` polynomial.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(p.new_integral(), dense![0., 1., 1., 1., 1.]);  // x + x² + x³ + x⁴
+    /// 
+    pub fn new_integral(&self) -> Polynomial<C> {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::linear_monomial(cc.0.clone()),
+            Polynomial::Dense(dc) => dc.new_integral(),
+            Polynomial::Sparse(sc) => sc.new_integral(),
+        }
+    }
+
+    /// integrates the `self` polynomial n times.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let mut p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
+    ///     p.integrate_n(2);
+    ///     assert_eq!(
+    ///         p,
+    ///         dense![0., 0., 1./2., 1./3., 1./4., 1./5.]);  // (1/2)x² + (1/3)x³ + (1/4)x⁴ + (1/5)x⁵
+    /// 
+    pub fn integrate_n(&mut self, n: usize) {
+        if n == 0 { return; }
+        if n == 1 { 
+            self.integrate();
+            return;
+        }
+
+        match self {
+            Polynomial::Zero() => (),
+            Polynomial::Constant(cc) => {
+                let f: C = factorial(n);
+                *self = sparse![(n, cc.0.ref_div(f))]
+            },
+            Polynomial::Dense(dc) => dc.integrate_n(n),
+            Polynomial::Sparse(sc) => sc.integrate_n(n),
+        }
+    }
+
+    /// Creates the n-th integral of the `self` polynomial.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<f64> = dense![1., 2., 3., 4.];  // 1 + 2x + 3x² + 4x³
+    ///     assert_eq!(
+    ///         p.new_nth_integral(2),
+    ///         dense![0., 0., 1./2., 1./3., 1./4., 1./5.]);  // (1/2)x² + (1/3)x³ + (1/4)x⁴ + (1/5)x⁵
+    /// 
+    pub fn new_nth_integral(&self, n: usize) -> Polynomial<C> {
+        if n == 0 { return self.clone(); }
+        if n == 1 { return self.new_integral(); }
+
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => {
+                let f: C = factorial(n);
+                sparse![(n, cc.0.clone() / f)]
+            },
+            Polynomial::Dense(dc) => dc.new_nth_integral(n),
+            Polynomial::Sparse(sc) => sc.new_nth_integral(n),
+        }
     }
 }

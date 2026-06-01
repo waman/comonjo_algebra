@@ -56,6 +56,8 @@ fn pr3() -> PolyR64 { to_poly_r64(p3()) }
 /// 6x³ (= dense![[0, 0, 0, 6]])
 fn pr4() -> PolyR64 { to_poly_r64(p4()) }
 
+//********** Factory Methods ******
+
 // ⁰¹²³⁴⁵⁶⁷⁸⁹
 #[test]
 fn test_dense_macro(){
@@ -119,6 +121,7 @@ fn test_sparse_macro(){
 //     let p0: Polynomial<f64> = Polynomial::interpolate(&[(1., 1.)]);
 // }
 
+//********** Basic Methods ******
 #[test]
 fn test_degree_and_is_xxx_methods(){
 
@@ -290,7 +293,7 @@ fn test_eval_for_some_types(){
     }
 }
 
-
+//********** Clone related Methods **********/
 #[test]
 fn test_clone_methods(){  // clone(), dense_clone(), sparse_clone(), to_dense() and to_sparse()
 
@@ -391,6 +394,7 @@ fn test_clone_to_map(){
     }
 }
 
+//********** Display and Debug **********
 #[test]
 fn test_display(){
 
@@ -472,6 +476,7 @@ fn test_debug(){
     }
 }
 
+//********** Iterators **********
 #[test]
 fn test_coeffs_iter_methods(){
 
@@ -541,6 +546,98 @@ fn test_from_iterator(){
     assert_eq!(q, dense![1, 2, 3, 4, 5, 6]);
 }
 
+//********** map_nonzero() and try_map_nonzero() **********
+#[test]
+fn test_map_nonzero(){
+
+    fn test(x: Polynomial<i64>, exp: Polynomial<f64>){
+    
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<f64>){
+            assert_eq!(x.map_nonzero(|_, c| c.to_f64().unwrap()), *exp);
+            assert_eq!(x.clone().map_nonzero(|_, c| c.to_f64().unwrap()), *exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, &exp);
+        }
+    }
+
+    let table = [
+        (zero(), Polynomial::Zero()),
+        (one(),  Polynomial::constant(1.)),
+        (cst(5), Polynomial::constant(5.)),
+        (cst(-4), Polynomial::constant(-4.)),
+
+        (p0(), dense![1., 2., 3.]),
+        (p1(), dense![4., 5., 0., 6., 7.]),
+        (p2(), dense![4., 0., 0., 5., 0., 0., 0., 6.]),
+        (p3(), dense![1., 0., 0., 0., 2.]),
+        (p4(), dense![0., 0., 0., 6.]),
+        (p5(), dense![0., 5., 0., 0., 7.]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+
+#[test]
+fn test_try_map_nonzero(){
+
+    fn test_some(x: Polynomial<i64>, exp: Polynomial<f64>){
+    
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<f64>){
+            assert_eq!(x.try_map_nonzero(|_, c| c.to_f64()), Some(exp.clone()));
+            assert_eq!(x.clone().try_map_nonzero(|_, c| c.to_f64()), Some(exp.clone()));
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, &exp);
+        }
+    }
+
+    let table_some = [
+        (zero(), Polynomial::Zero()),
+        (one(),  Polynomial::constant(1.)),
+        (cst(5), Polynomial::constant(5.)),
+        (cst(-4), Polynomial::constant(-4.)),
+
+        (p0(), dense![1., 2., 3.]),
+        (p1(), dense![4., 5., 0., 6., 7.]),
+        (p2(), dense![4., 0., 0., 5., 0., 0., 0., 6.]),
+        (p3(), dense![1., 0., 0., 0., 2.]),
+        (p4(), dense![0., 0., 0., 6.]),
+        (p5(), dense![0., 5., 0., 0., 7.]),
+    ];
+
+    for entry in table_some {
+        test_some(entry.0, entry.1);
+    }
+
+    // test cases whose result is None
+    fn test_none(x: Polynomial<i64>){
+    
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>){
+            assert_eq!(x.try_map_nonzero(|_, c| c.to_i32()), None);
+            assert_eq!(x.clone().try_map_nonzero(|_, c| c.to_i32()), None);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_);
+        }
+    }
+
+    let table_none = [
+        Polynomial::constant(i64::MAX),
+        dense![0, 1, i64::MAX, 2],
+    ];
+
+    for entry in table_none {
+        test_none(entry);
+    }
+}
+
+//********** Eq, PartialEq, Zero and One **********
 #[test]
 fn test_eq(){
     let p_dense = dense![1, 0, 2, 4, 0, 0, 1];
@@ -552,6 +649,7 @@ fn test_eq(){
     assert_eq!(p_dense, p_sparse);
 }
 
+//********** Operator Overloads **********
 #[test]
 fn test_neg(){
 
@@ -688,7 +786,6 @@ fn test_add_c(){
         test(entry.0, entry.1, entry.2);
     }
 }
-
 
 #[test]
 fn test_sub(){
@@ -1416,39 +1513,37 @@ fn test_flip(){  // flip(), new_flipped()
 }
 
 #[test]
-fn test_shift_and_shift_f(){  // shift(), new_shifted(), shift_f(), new_shifted_f()
+fn test_shift(){  // shift(), new_shifted()
 
     fn test(x: Polynomial<i64>, h: i64, exp: Polynomial<i64>){
 
-        fn test_op<'a>(x: Polynomial<i64>, h: i64, exp: &'a Polynomial<i64>){
-            //***** shift(), new_shifted() *****
-            assert_eq!(x.new_shifted(h), *exp);
+        macro_rules! test_shift_op {
+            ( $name:ident, $t:ident ) => {
+                fn $name<'a, 'b>(x: &'a Polynomial<$t>, h: $t, exp: &'b Polynomial<$t>){
 
-            let mut y = x.clone();
-            y.shift(h);
-            assert_eq!(y, *exp);
+                    //***** shift(), new_shifted() *****
+                    assert_eq!(x.new_shifted(h), *exp);
 
-            // a shifted polynomial of p(x) by h equals p(x + h) 
-            assert_eq!(x.compose(Polynomial::x() + h), *exp);
+                    let mut y = x.clone();
+                    y.shift(h);
+                    assert_eq!(y, *exp);
 
-
-            //***** shift_f(), new_shifted_f() *****
-            let z: &Polynomial<f64> = &x.map_nonzero(|_, c|c.to_f64().unwrap());
-            let t: f64 = h.to_f64().unwrap();
-            let exp_f: &Polynomial<f64> = &exp.map_nonzero(|_, c|c.to_f64().unwrap());
-
-            assert_eq!(z.new_shifted_f(t), *exp_f);
-
-            let mut w = z.clone();
-            w.shift_f(t);
-            assert_eq!(w, *exp_f);
-
-            // a shifted polynomial of p(x) by t equals p(x + t) 
-            assert_eq!(z.compose(Polynomial::x() + t), *exp_f);
+                    // a shifted polynomial of p(x) by h equals p(x + h) 
+                    assert_eq!(x.compose(Polynomial::x() + h), *exp);
+                }
+            };
         }
 
+        test_shift_op!(test_shift_for_i64, i64);
+        test_shift_op!(test_shift_for_f64, f64);
+
         for x_ in get_impls(&x) {
-            test_op(x_, h, &exp);
+            test_shift_for_i64(&x_, h, &exp);
+
+            let x_f64: Polynomial<f64> = x_.map_nonzero(|_, c|c.to_f64().unwrap());
+            let h_f64: f64 = h.to_f64().unwrap();
+            let exp_f64: Polynomial<f64> = (&exp).map_nonzero(|_, c|c.to_f64().unwrap());
+            test_shift_for_f64(&x_f64, h_f64, &exp_f64);
         }
     }
 

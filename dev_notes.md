@@ -8,7 +8,7 @@ coming soon...
 ### 列挙型
 多項式を表す構造体としては、最高次係数までの（0を含む）すべての係数を保持する **Dense** （密）と、0でない係数のみを次数をキーとして保持する **Sparse** （疎）が有用です。　Spire では、これらに加えて定数を表す Constant を加えて列挙型としていますが、comonjo_algebra では、定数の中でも 0 を別にして
 - Zero （0次）
-- Constant （1次）
+- Constant （0次）
 - Dense （1次以上）
 - Sparse （1次以上）
 

@@ -119,25 +119,25 @@ impl<C> PowerCalculator<C> where C: Semiring {
     }
 }
 
-//***** For Integer (usize-pow) *****/
-macro_rules! eval_impl_for_pow_usize {
+//***** For Integer and Ratio (usize-pow) *****/
+macro_rules! eval_impl_for_usize_pow {
     ( $( $t:ident ),* ) => {
         $(
             impl PolynomialEvaluator<$t> for Eval {
 
                 fn eval(p: &Polynomial<$t>, x: $t) -> $t {
-                    eval_int(p, x)
+                    eval_with_usize_pow(p, x)
                 }
             }
         )*
     };
 }
 
-eval_impl_for_pow_usize!(usize, u8, u16, u32, u64, u128, BigUint,
+eval_impl_for_usize_pow!(usize, u8, u16, u32, u64, u128, BigUint,
                          isize, i8, i16, i32, i64, i128, BigInt,
                          Rational32, Rational64, BigRational);
 
-fn eval_int<C>(p: &Polynomial<C>, x: C) -> C where C: Semiring + Pow<usize, Output=C> + Clone {
+fn eval_with_usize_pow<C>(p: &Polynomial<C>, x: C) -> C where C: Semiring + Pow<usize, Output=C> + Clone {
     match p {
         Polynomial::Zero() => C::zero(),
         Polynomial::Constant(cc) => cc.0.clone(),
@@ -147,22 +147,22 @@ fn eval_int<C>(p: &Polynomial<C>, x: C) -> C where C: Semiring + Pow<usize, Outp
 }
 
 //***** For Float *****/
-macro_rules! eval_impl_for_f {
+macro_rules! eval_impl_for_fpow {
     ( $( $t:ident ),* ) => {
         $(
             impl PolynomialEvaluator<$t> for Eval {
 
                 fn eval(p: &Polynomial<$t>, x: $t) -> $t {
-                    eval_f(p, x)
+                    eval_with_fpow(p, x)
                 }
             }
         )*
     };
 }
 
-eval_impl_for_f!(f32, f64, Complex32, Complex64);
+eval_impl_for_fpow!(f32, f64, Complex32, Complex64);
 
-fn eval_f<C>(p: &Polynomial<C>, x: C) -> C where C: Field + Pow<C, Output=C> + FromPrimitive + Clone {
+fn eval_with_fpow<C>(p: &Polynomial<C>, x: C) -> C where C: Field + Pow<C, Output=C> + FromPrimitive + Clone {
     match p {
         Polynomial::Zero() => C::zero(),
         Polynomial::Constant(cc) => cc.0.clone(),
