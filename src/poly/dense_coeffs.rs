@@ -30,6 +30,15 @@ impl<C> DenseCoeffs<C> where C: Semiring {
     }
 
     pub(crate) fn map_nonzero<D, F>(self, f: F) -> Polynomial<D>
+            where D: Semiring, F: Fn(C) -> D {
+
+        let vec: Vec<D> = self.0.into_iter().enumerate().map(|(_, c)|
+            if c.is_zero() { D::zero() } else { f(c) }
+        ).collect();
+        Polynomial::from(vec)
+    }
+
+    pub(crate) fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D>
             where D: Semiring, F: Fn(usize, C) -> D {
 
         let vec: Vec<D> = self.0.into_iter().enumerate().map(|(i, c)|
@@ -39,6 +48,15 @@ impl<C> DenseCoeffs<C> where C: Semiring {
     }
 
     pub(crate) fn map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D>
+            where D: Semiring, F: Fn(&'a C) -> D {
+
+        let vec: Vec<D> = self.0.iter().enumerate().map(|(_, c)|
+            if c.is_zero() { D::zero() } else { f(c) }
+        ).collect();
+        Polynomial::from(vec)
+    }
+
+    pub(crate) fn map_nonzero_terms_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D>
             where D: Semiring, F: Fn(usize, &'a C) -> D {
 
         let vec: Vec<D> = self.0.iter().enumerate().map(|(i, c)|
@@ -48,6 +66,25 @@ impl<C> DenseCoeffs<C> where C: Semiring {
     }
 
     pub(crate) fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> 
+            where D: Semiring, F: Fn(C) -> Option<D> {
+
+        let mut vec: Vec<D> = Vec::with_capacity(self.degree() + 1);
+
+        for c in self.0.into_iter() {
+            if c.is_zero() {
+                vec.push(D::zero());
+            } else {
+                match f(c) {
+                    Some(d) => vec.push(d),
+                    None => return None,
+                }
+            }
+        }
+
+        Some(Polynomial::from(vec))
+    }
+
+    pub(crate) fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>> 
             where D: Semiring, F: Fn(usize, C) -> Option<D> {
 
         let mut vec: Vec<D> = Vec::with_capacity(self.degree() + 1);
@@ -67,6 +104,25 @@ impl<C> DenseCoeffs<C> where C: Semiring {
     }
 
     pub(crate) fn try_map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Option<Polynomial<D>> 
+            where D: Semiring, F: Fn(&'a C) -> Option<D> {
+                
+        let mut vec: Vec<D> = Vec::with_capacity(self.degree() + 1);
+
+        for c in self.0.iter() {
+            if c.is_zero() {
+                vec.push(D::zero());
+            } else {
+                match f(c) {
+                    Some(d) => vec.push(d),
+                    None => return None,
+                }
+            }
+        }
+
+        Some(Polynomial::from(vec))
+    }
+
+    pub(crate) fn try_map_nonzero_terms_ref<'a, D, F>(&'a self, f: F) -> Option<Polynomial<D>> 
             where D: Semiring, F: Fn(usize, &'a C) -> Option<D> {
                 
         let mut vec: Vec<D> = Vec::with_capacity(self.degree() + 1);

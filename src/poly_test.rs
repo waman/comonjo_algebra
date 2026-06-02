@@ -10,10 +10,10 @@ fn zero<C: Semiring>() -> Polynomial<C> { Polynomial::zero() }
 fn one<C: Semiring + Clone>() -> Polynomial<C> { Polynomial::one() }
 fn cst<C: Semiring>(v: C) -> Polynomial<C> { Polynomial::constant(v) }
 
-fn to_poly_r64(p: Polynomial<i64>) -> PolyR64 { p.map_nonzero(|_, c| ri(c)) }
-
 fn r(n: i64, d: i64) -> Rational64 { Rational64::new(n, d) }
 fn ri(n: i64) -> Rational64 { Rational64::new(n, 1) }
+
+fn to_poly_r64(p: Polynomial<i64>) -> PolyR64 { p.map_nonzero(ri) }
 
 fn get_impls<'a, C>(x: &'a Polynomial<C>) -> Vec<Polynomial<C>> where C: Semiring + Clone {
     if x.degree() == 0 {
@@ -279,7 +279,7 @@ fn test_eval_for_some_types(){
     }
 
     // BigInt
-    let p_bi: Polynomial<BigInt> = dense![1, 2, 3].map_nonzero(|_, c| BigInt::from(c));
+    let p_bi: Polynomial<BigInt> = dense![1, 2, 3].map_nonzero(BigInt::from);
 
     for p in get_impls(&p_bi) {
         assert_eq!(p.eval(BigInt::from(3)), BigInt::from(1 + 2*3 + 3*3*3));
@@ -553,8 +553,8 @@ fn test_map_nonzero(){
     fn test(x: Polynomial<i64>, exp: Polynomial<f64>){
     
         fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<f64>){
-            assert_eq!(x.map_nonzero(|_, c| c.to_f64().unwrap()), *exp);
-            assert_eq!(x.clone().map_nonzero(|_, c| c.to_f64().unwrap()), *exp);
+            assert_eq!(x.try_map_nonzero(ToPrimitive::to_f64).unwrap(), *exp);
+            assert_eq!(x.clone().try_map_nonzero(|c|(&c).to_f64()).unwrap(), *exp);
         }
 
         for x_ in get_impls(&x) {
@@ -587,8 +587,8 @@ fn test_try_map_nonzero(){
     fn test_some(x: Polynomial<i64>, exp: Polynomial<f64>){
     
         fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<f64>){
-            assert_eq!(x.try_map_nonzero(|_, c| c.to_f64()), Some(exp.clone()));
-            assert_eq!(x.clone().try_map_nonzero(|_, c| c.to_f64()), Some(exp.clone()));
+            assert_eq!(x.try_map_nonzero(ToPrimitive::to_f64), Some(exp.clone()));
+            assert_eq!(x.clone().try_map_nonzero(|c| (&c).to_f64()), Some(exp.clone()));
         }
 
         for x_ in get_impls(&x) {
@@ -618,8 +618,8 @@ fn test_try_map_nonzero(){
     fn test_none(x: Polynomial<i64>){
     
         fn test_op<'a, 'b>(x: &'a Polynomial<i64>){
-            assert_eq!(x.try_map_nonzero(|_, c| c.to_i32()), None);
-            assert_eq!(x.clone().try_map_nonzero(|_, c| c.to_i32()), None);
+            assert_eq!(x.try_map_nonzero(ToPrimitive::to_i32), None);
+            assert_eq!(x.clone().try_map_nonzero(|c| (&c).to_i32()), None);
         }
 
         for x_ in get_impls(&x) {
@@ -1540,9 +1540,9 @@ fn test_shift(){  // shift(), new_shifted()
         for x_ in get_impls(&x) {
             test_shift_for_i64(&x_, h, &exp);
 
-            let x_f64: Polynomial<f64> = x_.map_nonzero(|_, c|c.to_f64().unwrap());
+            let x_f64: Polynomial<f64> = (&x_).try_map_nonzero(ToPrimitive::to_f64).unwrap();
             let h_f64: f64 = h.to_f64().unwrap();
-            let exp_f64: Polynomial<f64> = (&exp).map_nonzero(|_, c|c.to_f64().unwrap());
+            let exp_f64: Polynomial<f64> = (&exp).try_map_nonzero(ToPrimitive::to_f64).unwrap();
             test_shift_for_f64(&x_f64, h_f64, &exp_f64);
         }
     }

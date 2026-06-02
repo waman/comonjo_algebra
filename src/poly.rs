@@ -792,6 +792,7 @@ impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
     }
 }
 
+
 pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring {
     
     type Coeff;
@@ -804,9 +805,15 @@ pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring {
     fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
 
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D>
+        where D: Semiring, F: Fn(Self::MapArgType) -> D;
+
+    fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D>
         where D: Semiring, F: Fn(usize, Self::MapArgType) -> D;
 
     fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>>
+        where D: Semiring, F: Fn(Self::MapArgType) -> Option<D>;
+
+    fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>>
         where D: Semiring, F: Fn(usize, Self::MapArgType) -> Option<D>;
 }
 
@@ -846,15 +853,38 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     ///     use crate::comonjo_algebra::poly::CoeffsIterator;
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.map_nonzero(|_, c| c * 2);
+    ///     let q = p.map_nonzero(|c| c * 2);
     ///     assert_eq!(q, dense![2, 0, 4, 0, 6]);
     /// 
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(C) -> D {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::constant(f(cc.0)),
+            Polynomial::Dense(dc) => dc.map_nonzero(f),
+            Polynomial::Sparse(sc) => sc.map_nonzero(f),
+        }
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
+    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    ///     use num::traits::ToPrimitive;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.map_nonzero_terms(|i, c| i.to_i64().unwrap() * c);
+    ///     assert_eq!(q, dense![0, 0, 4, 0, 12]);
+    /// 
+    fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
         match self {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(cc) => Polynomial::constant(f(0, cc.0)),
-            Polynomial::Dense(dc) => dc.map_nonzero(f),
-            Polynomial::Sparse(sc) => sc.map_nonzero(f),
+            Polynomial::Dense(dc) => dc.map_nonzero_terms(f),
+            Polynomial::Sparse(sc) => sc.map_nonzero_terms(f),
         }
     }
     
@@ -868,18 +898,44 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     ///     use num::traits::ToPrimitive;
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.try_map_nonzero(|_, c|c.to_f64());
+    ///     let q = p.try_map_nonzero(|c| c.to_f64());
     ///     assert_eq!(q.unwrap(), dense![1., 0., 2., 0., 3.]);
     /// 
-    fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, C) -> Option<D> {
+    fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(C) -> Option<D> {
+        match self {
+            Polynomial::Zero() => Some(Polynomial::Zero()),
+            Polynomial::Constant(cc) => match f(cc.0) {
+                Some(c) => Some(Polynomial::constant(c)),
+                _ => None,
+            },
+            Polynomial::Dense(dc) => dc.try_map_nonzero(f),
+            Polynomial::Sparse(sc) => sc.try_map_nonzero(f),
+        }
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
+    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    ///     use num::traits::ToPrimitive;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.try_map_nonzero_terms(|_, c| (&c).to_f64());
+    ///     assert_eq!(q, Some(dense![1., 0., 2., 0., 3.]));
+    /// 
+    fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, C) -> Option<D> {
         match self {
             Polynomial::Zero() => Some(Polynomial::Zero()),
             Polynomial::Constant(cc) => match f(0, cc.0) {
                 Some(c) => Some(Polynomial::constant(c)),
                 _ => None,
             },
-            Polynomial::Dense(dc) => dc.try_map_nonzero(f),
-            Polynomial::Sparse(sc) => sc.try_map_nonzero(f),
+            Polynomial::Dense(dc) => dc.try_map_nonzero_terms(f),
+            Polynomial::Sparse(sc) => sc.try_map_nonzero_terms(f),
         }
     }
 }
@@ -935,15 +991,38 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     ///     use crate::comonjo_algebra::poly::CoeffsIterator;
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.map_nonzero(|_, c| c * &2);
+    ///     let q = p.map_nonzero(|c| c * &2);
     ///     assert_eq!(q, dense![2, 0, 4, 0, 6]);
     /// 
-    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
+    fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(&'a C) -> D {
+        match self {
+            Polynomial::Zero() => Polynomial::Zero(),
+            Polynomial::Constant(cc) => Polynomial::constant(f(&cc.0)),
+            Polynomial::Dense(dc) => dc.map_nonzero_ref(f),
+            Polynomial::Sparse(sc) => sc.map_nonzero_ref(f),
+        }
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
+    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    ///     use num::traits::ToPrimitive;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.map_nonzero_terms(|i, c| i.to_i64().unwrap() * c);
+    ///     assert_eq!(q, dense![0, 0, 4, 0, 12]);
+    /// 
+    fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
         match self {
             Polynomial::Zero() => Polynomial::Zero(),
             Polynomial::Constant(cc) => Polynomial::constant(f(0, &cc.0)),
-            Polynomial::Dense(dc) => dc.map_nonzero_ref(f),
-            Polynomial::Sparse(sc) => sc.map_nonzero_ref(f),
+            Polynomial::Dense(dc) => dc.map_nonzero_terms_ref(f),
+            Polynomial::Sparse(sc) => sc.map_nonzero_terms_ref(f),
         }
     }
     
@@ -957,18 +1036,44 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     ///     use num::traits::ToPrimitive;
     /// 
     ///     let p: &Polynomial<i64> = &dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.try_map_nonzero(|_, c|c.to_f64());
+    ///     let q = p.try_map_nonzero(ToPrimitive::to_f64);
+    ///     assert_eq!(q, Some(dense![1., 0., 2., 0., 3.]));
+    /// 
+    fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(&'a C) -> Option<D> {
+        match self {
+            Polynomial::Zero() => Some(Polynomial::Zero()),
+            Polynomial::Constant(cc) => match f(&cc.0) {
+                Some(c) => Some(Polynomial::constant(c)),
+                _ => None,
+            },
+            Polynomial::Dense(dc) => dc.try_map_nonzero_ref(f),
+            Polynomial::Sparse(sc) => sc.try_map_nonzero_ref(f),
+        }
+    }
+    
+    /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
+    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// Note that the mapping is applied only to nonzero coefficients.
+    /// The returned `Polynomial` can have a different coefficient type.
+    /// 
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    ///     use num::traits::ToPrimitive;
+    /// 
+    ///     let p: &Polynomial<i64> = &dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
+    ///     let q = p.try_map_nonzero_terms(|_, c| c.to_f64());
     ///     assert_eq!(q.unwrap(), dense![1., 0., 2., 0., 3.]);
     /// 
-    fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, &'a C) -> Option<D> {
+    fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, &'a C) -> Option<D> {
         match self {
             Polynomial::Zero() => Some(Polynomial::Zero()),
             Polynomial::Constant(cc) => match f(0, &cc.0) {
                 Some(c) => Some(Polynomial::constant(c)),
                 _ => None,
             },
-            Polynomial::Dense(dc) => dc.try_map_nonzero_ref(f),
-            Polynomial::Sparse(sc) => sc.try_map_nonzero_ref(f),
+            Polynomial::Dense(dc) => dc.try_map_nonzero_terms_ref(f),
+            Polynomial::Sparse(sc) => sc.try_map_nonzero_terms_ref(f),
         }
     }
 }
@@ -1131,7 +1236,7 @@ impl<C> Neg for Polynomial<C> where C: Ring {
     type Output = Polynomial<C>;
 
     fn neg(self) -> Self::Output {
-        self.map_nonzero(|_, c| -c)
+        self.map_nonzero_terms(|_, c| -c)
     }
 }
 
@@ -1140,7 +1245,7 @@ impl<'a, C> Neg for &'a Polynomial<C> where C: Ring + Clone {
     type Output = Polynomial<C>;
 
     fn neg(self) -> Self::Output {
-        self.map_nonzero(|_, c| c.ref_neg())
+        self.map_nonzero_terms(|_, c| c.ref_neg())
     }
 }
 
@@ -1525,11 +1630,11 @@ impl<C> Mul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), rhs) => {
                 if lhs.0.is_one() { return rhs }
-                rhs.map_nonzero(|_, c| lhs.0.ref_mul(c))
+                rhs.map_nonzero_terms(|_, c| lhs.0.ref_mul(c))
             },
             (lhs, Polynomial::Constant(rhs)) => {
                 if rhs.0.is_one() { return lhs }
-                lhs.map_nonzero(|_, c| c * &rhs.0)
+                lhs.map_nonzero_terms(|_, c| c * &rhs.0)
             },
             (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(&lhs, &rhs),
             (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(&lhs, &rhs),
@@ -1547,11 +1652,11 @@ impl<'b, C> Mul<&'b Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), rhs) => {
                 if lhs.0.is_one() { return rhs.clone() }
-                rhs.map_nonzero(|_, c| lhs.0.ref_mul(c))
+                rhs.map_nonzero_terms(|_, c| lhs.0.ref_mul(c))
             },
             (lhs, Polynomial::Constant(rhs)) => {
                 if rhs.0.is_one() { return lhs }
-                lhs.map_nonzero(|_, c| c * &rhs.0)
+                lhs.map_nonzero_terms(|_, c| c * &rhs.0)
             },
             (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(&lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(&lhs, rhs),
@@ -1569,11 +1674,11 @@ impl<'a, C> Mul<Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), rhs) => {
                 if lhs.0.is_one() { return rhs }
-                rhs.map_nonzero(|_, c| lhs.0.ref_mul(c))
+                rhs.map_nonzero_terms(|_, c| lhs.0.ref_mul(c))
             },
             (lhs, Polynomial::Constant(rhs)) => {
                 if rhs.0.is_one() { return lhs.clone() }
-                lhs.map_nonzero(|_, c| c.ref_mul(&rhs.0))
+                lhs.map_nonzero_terms(|_, c| c.ref_mul(&rhs.0))
             },
             (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(lhs, &rhs),
             (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(lhs, &rhs),
@@ -1591,11 +1696,11 @@ impl<'a, 'b, C> Mul<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
             (Polynomial::Zero(), _) => Polynomial::Zero(),
             (Polynomial::Constant(lhs), rhs) => {
                 if lhs.0.is_one() { return rhs.clone() }
-                rhs.map_nonzero(|_, c| lhs.0.ref_mul(c))
+                rhs.map_nonzero_terms(|_, c| lhs.0.ref_mul(c))
             },
             (lhs, Polynomial::Constant(rhs)) => {
                 if rhs.0.is_one() { return lhs.clone() }
-                lhs.map_nonzero(|_, c| c.ref_mul(&rhs.0))
+                lhs.map_nonzero_terms(|_, c| c.ref_mul(&rhs.0))
             },
             (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::mul(lhs, rhs),
             (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::mul(lhs, rhs),
@@ -1616,7 +1721,7 @@ impl<'b, C> Mul<&'b C> for Polynomial<C> where C: Semiring + Clone {
     fn mul(self, k: &'b C) -> Self::Output {
         if k.is_zero() { return Polynomial::Zero() }
         if k.is_one() { return self }
-        self.map_nonzero(|_, c| c.ref_mul(k))
+        self.map_nonzero_terms(|_, c| c.ref_mul(k))
     }
 }
 
@@ -1632,7 +1737,7 @@ impl<'a, 'b, C> Mul<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
     fn mul(self, k: &'b C) -> Polynomial<C> {
         if k.is_zero() { return Polynomial::Zero() }
         if k.is_one() { return self.clone() }
-        self.map_nonzero(|_, c| c.ref_mul(k))
+        self.map_nonzero_terms(|_, c| c.ref_mul(k))
     }
 }
 
@@ -1677,7 +1782,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
         match (self, other) {
             (_, Polynomial::Zero()) => panic_to_divide_by_zero(),
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
-            (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero(|_, c| c / (&rhs.0)), Polynomial::Zero()),
+            (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero_terms(|_, c| c / (&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs),
             (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::div_rem(lhs.into(), rhs),  // lhs.into() -> Vec<C>
             (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::div_rem(lhs.into(), rhs),  // lhs.int() -> BTreeMap<usize, C>
@@ -1689,7 +1794,7 @@ impl<C> Polynomial<C> where C: Field + Clone {
         match (self, other) {
             (_, Polynomial::Zero()) => panic_to_divide_by_zero(),
             (Polynomial::Zero(), _) => (Polynomial::Zero(), Polynomial::Zero()),
-            (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero(|_, c| c.ref_div(&rhs.0)), Polynomial::Zero()),
+            (lhs, Polynomial::Constant(rhs)) => (lhs.map_nonzero_terms(|_, c| c.ref_div(&rhs.0)), Polynomial::Zero()),
             (lhs @ Polynomial::Constant(_), _) => (Polynomial::Zero(), lhs.clone()),
             (lhs @ Polynomial::Dense(_), rhs) => dense_coeffs::div_rem(lhs.clone_to_vec(), rhs),
             (lhs @ Polynomial::Sparse(_), rhs) => sparse_coeffs::div_rem(lhs.clone_to_map(), rhs),
@@ -1759,7 +1864,7 @@ impl<'b, C> Div<&'b C> for Polynomial<C> where C: Field + Clone {
     fn div(self, k: &'b C) -> Self::Output {
         if k.is_zero() { panic_to_divide_by_zero() }
         if k.is_one() { return self }
-        self.map_nonzero(|_, c| c.ref_div(k))
+        self.map_nonzero_terms(|_, c| c.ref_div(k))
     }
 }
 
@@ -1775,7 +1880,7 @@ impl<'a, 'b, C> Div<&'b C> for &'a Polynomial<C> where C: Field + Clone {
     fn div(self, k: &'b C) -> Polynomial<C> {
         if k.is_zero() { panic_to_divide_by_zero() }
         if k.is_one() { return self.clone() }
-        self.map_nonzero(|_, c| c.ref_div(k))
+        self.map_nonzero_terms(|_, c| c.ref_div(k))
     }
 }
 
@@ -2008,13 +2113,13 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     fn scale_by_left(self, k: &C) -> Polynomial<C> {
         if k.is_zero() { return Polynomial::Zero() }
         if k.is_one() { return self }
-        self.map_nonzero(|_, c| k.ref_mul(c))
+        self.map_nonzero_terms(|_, c| k.ref_mul(c))
     }
 
     fn ref_scale_by_left(&self, k: &C) -> Polynomial<C> {
         if k.is_zero() { return Polynomial::Zero() }
         if k.is_one() { return self.clone() }
-        self.map_nonzero(|_, c| k.ref_mul(c))
+        self.map_nonzero_terms(|_, c| k.ref_mul(c))
     }
 }
 

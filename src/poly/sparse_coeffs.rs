@@ -30,18 +30,45 @@ impl<C> SparseCoeffs<C> where C: Semiring {
     }
 
     pub(crate) fn map_nonzero<D, F>(self, f: F) -> Polynomial<D>
+            where D: Semiring, F: Fn(C) -> D {
+        let map: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(c))).collect();
+        Polynomial::from(map)
+    }
+
+    pub(crate) fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D>
             where D: Semiring, F: Fn(usize, C) -> D {
         let map: BTreeMap<usize, D> = self.0.into_iter().map(|(i, c)| (i, f(i, c))).collect();
         Polynomial::from(map)
     }
 
     pub(crate) fn map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D>
+            where D: Semiring, F: Fn(&'a C) -> D {
+        let map: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(c))).collect();
+        Polynomial::from(map)
+    }
+
+    pub(crate) fn map_nonzero_terms_ref<'a, D, F>(&'a self, f: F) -> Polynomial<D>
             where D: Semiring, F: Fn(usize, &'a C) -> D {
         let map: BTreeMap<usize, D> = self.0.iter().map(|(i, c)| (*i, f(*i, c))).collect();
         Polynomial::from(map)
     }
 
     pub(crate) fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>>
+            where D: Semiring, F: Fn(C) -> Option<D> {
+
+        let mut map: BTreeMap<usize, D> = BTreeMap::new();
+        
+        for (i, c) in self.0.into_iter() {
+            match f(c) {
+                Some(d) => map.insert(i, d),
+                None => return None,
+            };
+        }
+
+        Some(Polynomial::from(map))
+    }
+
+    pub(crate) fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>>
             where D: Semiring, F: Fn(usize, C) -> Option<D> {
 
         let mut map: BTreeMap<usize, D> = BTreeMap::new();
@@ -57,6 +84,21 @@ impl<C> SparseCoeffs<C> where C: Semiring {
     }
 
     pub(crate) fn try_map_nonzero_ref<'a, D, F>(&'a self, f: F) -> Option<Polynomial<D>>
+            where D: Semiring, F: Fn(&'a C) -> Option<D> {
+
+        let mut map: BTreeMap<usize, D> = BTreeMap::new();
+        
+        for (i, c) in self.0.iter() {
+            match f(c) {
+                Some(d) => map.insert(*i, d),
+                None => return None,
+            };
+        }
+
+        Some(Polynomial::from(map))
+    }
+
+    pub(crate) fn try_map_nonzero_terms_ref<'a, D, F>(&'a self, f: F) -> Option<Polynomial<D>>
             where D: Semiring, F: Fn(usize, &'a C) -> Option<D> {
 
         let mut map: BTreeMap<usize, D> = BTreeMap::new();
