@@ -399,8 +399,8 @@ pub(crate) fn add_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -449,8 +449,8 @@ pub(crate) fn add_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polyn
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -499,8 +499,8 @@ pub(crate) fn add_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polyn
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -549,8 +549,8 @@ pub(crate) fn add_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) 
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -600,8 +600,8 @@ pub(crate) fn sub_vv<C>(lhs: Polynomial<C>, rhs: Polynomial<C>) -> Polynomial<C>
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -650,8 +650,8 @@ pub(crate) fn sub_vr<'b, C>(lhs: Polynomial<C>, rhs: &'b Polynomial<C>) -> Polyn
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -700,8 +700,8 @@ pub(crate) fn sub_rv<'a, C>(lhs: &'a Polynomial<C>, rhs: Polynomial<C>) -> Polyn
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -750,8 +750,8 @@ pub(crate) fn sub_rr<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'a Polynomial<C>) 
 
     let mut map = BTreeMap::new();
 
-    let mut x_iter = lhs.nonzero_coeffs();
-    let mut y_iter = rhs.nonzero_coeffs();
+    let mut x_iter = lhs.nonzero_terms();
+    let mut y_iter = rhs.nonzero_terms();
 
     let mut x_next = x_iter.next();
     let mut y_next = y_iter.next();
@@ -800,8 +800,8 @@ pub(crate) fn mul<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> 
         where C: Semiring + Clone {
     let mut map: BTreeMap<usize, C> = BTreeMap::new();
 
-    for (i, x) in lhs.nonzero_coeffs() {
-        for (j, y) in rhs.nonzero_coeffs() {
+    for (i, x) in lhs.nonzero_terms() {
+        for (j, y) in rhs.nonzero_terms() {
             let k = i + j;
             let z = x.ref_mul(y);
             match map.get_mut(&k){
@@ -829,7 +829,7 @@ pub(crate) fn div_rem<C>(mut u: BTreeMap<usize, C>, rhs: &Polynomial<C>) -> (Pol
 
         let q0: C = c_last.ref_div(v0);
         let offset = i_last - d_rhs;  // the last of u is already removed
-        for (i, c_rhs) in rhs.nonzero_coeffs() {
+        for (i, c_rhs) in rhs.nonzero_terms() {
             if i == d_rhs { break; }
             let e = u.entry(offset + i).or_insert(C::zero());
             *e = e.ref_sub(c_rhs.ref_mul(&q0));

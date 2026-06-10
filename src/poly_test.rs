@@ -1,4 +1,4 @@
-use std::{collections::{BTreeMap, HashMap}, vec};
+use std::{collections::BTreeMap, vec};
 
 use num::{BigInt, One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
@@ -478,43 +478,62 @@ fn test_debug(){
 
 //********** Iterators **********
 #[test]
-fn test_coeffs_iter_methods(){
+fn test_several_iterator_methods(){
 
     fn test(x: Polynomial<i64>, exp: Vec<i64>){
     
-        fn test_op<'a>(p: Polynomial<i64>, exp: &'a Vec<i64>){
-            let exp_nonzero_coeffs: HashMap<usize, i64> = exp.clone().into_iter().enumerate().filter(|(_, c)|*c != 0).collect();
+        fn test_op<'a, 'b>(p: &'a Polynomial<i64>, exp: &'b Vec<(usize, i64)>){
+            // ex) p: 1 + 2x + 4x³, exp: vec![(0, 1), (1, 2), (2, 0), (3, 4)]
 
-            // into_iter() for Polynomial
-            let cs0: HashMap<usize, i64> = p.clone().into_iter().collect();
-            assert_eq!(cs0, exp_nonzero_coeffs);
+            //***** into_iter() and nonzero_terms()*****/
+            let exp0: Vec<(usize, &i64)> = exp.iter().filter(|(_, c)| !c.is_zero()).map(|(i, c)| (*i, c)).collect();
+            // vec![(0, &1), (1, &2), (3, &4)]
+            assert_eq!(p.into_iter().collect::<Vec<_>>(), exp0);
+            assert_eq!(p.nonzero_terms().collect::<Vec<_>>(), exp0);
+  
+            let exp1: Vec<(usize, i64)> = exp.clone().into_iter().filter(|(_, c)| !c.is_zero()).collect();
+            // vec![(0, 1), (1, 2), (3, 4)]
+            assert_eq!(p.clone().into_iter().collect::<Vec<_>>(), exp1);
+            assert_eq!(p.clone().nonzero_terms().collect::<Vec<_>>(), exp1);
 
-            // nonzero_coeffs() for Polynomial (= into_iter())
-            let cs1: HashMap<usize, i64> = p.clone().nonzero_coeffs().collect();
-            assert_eq!(cs1, exp_nonzero_coeffs);
+            //********** coeffs() **********/
+            let exp2_1: Vec<Option<&i64>> = exp.iter().map(|(_, c)| Some(c)).collect();
+            // vec![Some(&1), Some(&2), Some(&0), Some(&4)]
+            let exp2_2: Vec<Option<&i64>> = exp.iter().map(|(_, c)| if c.is_zero() { None } else { Some(c) }).collect();
+            // vec![Some(1), Some(2), None, Some(4)]
+            let sut2 = p.coeffs().collect::<Vec<_>>();
+            assert!(sut2 == exp2_1 || sut2 == exp2_2);
 
-            // coeffs() for Polynomial
-            let cs2: Vec<i64> = p.clone().coeffs().collect();
-            assert_eq!(cs2, *exp);
+            let exp3: Vec<i64> = exp.iter().map(|(_, c)| *c).collect();
+            // vec![1, 2, 0, 4]
+            assert_eq!(p.clone().coeffs().collect::<Vec<_>>(), exp3);
 
-            // into_iter() for &Polynomial
-            let cs3: HashMap<usize, i64> = (&p).into_iter().map(|(e, c)|(e, *c)).collect();
-            assert_eq!(cs3, exp_nonzero_coeffs);
+            //********** nonzero_coeffs() **********/
+            let exp4: Vec<&i64> = exp.iter().filter(|(_, c)| !c.is_zero()).map(|(_, c)| c).collect();
+            // vec![&1, &2, &4]
+            assert_eq!(p.nonzero_coeffs().collect::<Vec<_>>(), exp4);
 
-            // nonzero_coeffs() for &Polynomial (= into_iter())
-            let cs4: HashMap<usize, i64> = (&p).nonzero_coeffs().map(|(e, c)|(e, *c)).collect();
-            assert_eq!(cs4, exp_nonzero_coeffs);
+            let exp5: Vec<i64> = exp.iter().filter(|(_, c)| !c.is_zero()).map(|(_, c)| *c).collect();
+            // vec![1, 2, 4]
+            assert_eq!(p.clone().nonzero_coeffs().collect::<Vec<_>>(), exp5);
 
-            // coeffs() for &Polynomial
-            let cs5: Vec<i64> = (&p).coeffs().map(|c| match c {
-                Some(c) => *c,
-                _ => 0,
-            }).collect();
-            assert_eq!(cs5, *exp);
+            //********** terms() **********/
+            let exp6_1: Vec<(usize, Option<&i64>)> = exp.iter().map(|(i, c)| (*i, Some(c))).collect();
+            // vec![(0, Some(&1)), (1, Some(&2)), (2, Some(&0)), (3, Some(&4))]
+            let exp6_2: Vec<(usize, Option<&i64>)> = 
+                    exp.iter().map(|(i, c)| if c.is_zero() { (*i, None) } else { (*i, Some(c)) }).collect();
+            // vec![(0, Some(1)), (1, Some(2)), (2, None), (3, Some(4))]
+            let sut6 = p.terms().collect::<Vec<_>>();
+            assert!(sut6 == exp6_1 || sut6 == exp6_2);
+
+            let exp7: Vec<(usize, i64)> = exp.clone();
+            // vec![(0, 1), (1, 2), (2, 0), (3, 4)]
+            assert_eq!(p.clone().terms().collect::<Vec<_>>(), exp7);
         }
 
+        let exp_em: Vec<(usize, i64)> = exp.clone().into_iter().enumerate().collect();
         for x_ in get_impls(&x) {
-            test_op(x_, &exp);
+            test_op(&x_, &exp_em);
         }
     }
 
@@ -522,12 +541,12 @@ fn test_coeffs_iter_methods(){
         (Polynomial::zero(), vec![]),
         (Polynomial::one(), vec![1]),
         (cst(5), vec![5]),
-        (p0(), p0().into()),
-        (p1(), p1().into()),
-        (p2(), p2().into()),
-        (p3(), p3().into()),
-        (p4(), p4().into()),
-        (p5(), p5().into()),
+        (p0(), vec![1, 2, 3]),
+        (p1(), vec![4, 5, 0, 6, 7]),
+        (p2(), vec![4, 0, 0, 5, 0, 0, 0, 6]),
+        (p3(), vec![1, 0, 0, 0, 2]),
+        (p4(), vec![0, 0, 0, 6]),
+        (p5(), vec![0, 5, 0, 0, 7]),
     ];
 
     for entry in table {
@@ -546,15 +565,15 @@ fn test_from_iterator(){
     assert_eq!(q, dense![1, 2, 3, 4, 5, 6]);
 }
 
-//********** map_nonzero() and try_map_nonzero() **********
+//********** map_nonzero() like methods --- [try_]map_nonzero[_terms]() **********
 #[test]
 fn test_map_nonzero(){
 
-    fn test(x: Polynomial<i64>, exp: Polynomial<f64>){
+    fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
     
-        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<f64>){
-            assert_eq!(x.try_map_nonzero(ToPrimitive::to_f64).unwrap(), *exp);
-            assert_eq!(x.clone().try_map_nonzero(|c|(&c).to_f64()).unwrap(), *exp);
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<i64>){
+            assert_eq!(x.map_nonzero(|c| c * 2), *exp);
+            assert_eq!(x.clone().map_nonzero(|c| c * 2), *exp);
         }
 
         for x_ in get_impls(&x) {
@@ -564,16 +583,49 @@ fn test_map_nonzero(){
 
     let table = [
         (zero(), Polynomial::Zero()),
-        (one(),  Polynomial::constant(1.)),
-        (cst(5), Polynomial::constant(5.)),
-        (cst(-4), Polynomial::constant(-4.)),
+        (one(),  Polynomial::constant(2)),
+        (cst(5), Polynomial::constant(10)),
+        (cst(-4), Polynomial::constant(-8)),
 
-        (p0(), dense![1., 2., 3.]),
-        (p1(), dense![4., 5., 0., 6., 7.]),
-        (p2(), dense![4., 0., 0., 5., 0., 0., 0., 6.]),
-        (p3(), dense![1., 0., 0., 0., 2.]),
-        (p4(), dense![0., 0., 0., 6.]),
-        (p5(), dense![0., 5., 0., 0., 7.]),
+        (p0(), dense![2, 4, 6]),
+        (p1(), dense![8, 10, 0, 12, 14]),
+        (p2(), dense![8, 0, 0, 10, 0, 0, 0, 12]),
+        (p3(), dense![2, 0, 0, 0, 4]),
+        (p4(), dense![0, 0, 0, 12]),
+        (p5(), dense![0, 10, 0, 0, 14]),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1);
+    }
+}
+#[test]
+fn test_map_nonzero_terms(){
+
+    fn test(x: Polynomial<i64>, exp: Polynomial<i64>){
+    
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<i64>){
+            assert_eq!(x.map_nonzero_terms(|i, c| c.pow(i+2)), *exp);
+            assert_eq!(x.clone().map_nonzero_terms(|i, c| c.pow((i+2) as u32)), *exp);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, &exp);
+        }
+    }
+
+    let table = [
+        (zero(), Polynomial::Zero()),
+        (one(),  Polynomial::constant(1)),
+        (cst(5), Polynomial::constant(25)),
+        (cst(-4), Polynomial::constant(16)),
+
+        (p0(), dense![1, 2*2*2, 3*3*3*3]),
+        (p1(), dense![4*4, 5*5*5, 0, 6*6*6*6*6, 7*7*7*7*7*7]),
+        (p2(), dense![4*4, 0, 0, 5*5*5*5*5, 0, 0, 0, 6*6*6*6*6*6*6*6*6]),
+        (p3(), dense![1, 0, 0, 0, 2*2*2*2*2*2]),
+        (p4(), dense![0, 0, 0, 6*6*6*6*6]),
+        (p5(), dense![0, 5*5*5, 0, 0, 7*7*7*7*7*7]),
     ];
 
     for entry in table {
@@ -620,6 +672,62 @@ fn test_try_map_nonzero(){
         fn test_op<'a, 'b>(x: &'a Polynomial<i64>){
             assert_eq!(x.try_map_nonzero(ToPrimitive::to_i32), None);
             assert_eq!(x.clone().try_map_nonzero(|c| (&c).to_i32()), None);
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_);
+        }
+    }
+
+    let table_none = [
+        Polynomial::constant(i64::MAX),
+        dense![0, 1, i64::MAX, 2],
+    ];
+
+    for entry in table_none {
+        test_none(entry);
+    }
+}
+
+#[test]
+fn test_try_map_nonzero_terms(){
+
+    fn test_some(x: Polynomial<i64>, exp: Polynomial<f64>){
+    
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>, exp: &'b Polynomial<f64>){
+            assert_eq!(x.try_map_nonzero_terms(|i, c| c.pow(i+2).to_f64()), Some(exp.clone()));
+            assert_eq!(x.clone().try_map_nonzero_terms(|i, c| c.pow((i+2) as u32).to_f64()), Some(exp.clone()));
+        }
+
+        for x_ in get_impls(&x) {
+            test_op(&x_, &exp);
+        }
+    }
+
+    let table_some = [
+        (zero(), Polynomial::Zero()),
+        (one(),  Polynomial::constant(1.)),
+        (cst(5), Polynomial::constant(25.)),
+        (cst(-4), Polynomial::constant(16.)),
+
+        (p0(), dense![1., 2.*2.*2., 3.*3.*3.*3.]),
+        (p1(), dense![4.*4., 5.*5.*5., 0., 6.*6.*6.*6.*6., 7.*7.*7.*7.*7.*7.]),
+        (p2(), dense![4.*4., 0., 0., 5.*5.*5.*5.*5., 0., 0., 0., 6.*6.*6.*6.*6.*6.*6.*6.*6.]),
+        (p3(), dense![1., 0., 0., 0., 2.*2.*2.*2.*2.*2.]),
+        (p4(), dense![0., 0., 0., 6.*6.*6.*6.*6.]),
+        (p5(), dense![0., 5.*5.*5., 0., 0., 7.*7.*7.*7.*7.*7.]),
+    ];
+
+    for entry in table_some {
+        test_some(entry.0, entry.1);
+    }
+
+    // test cases whose result is None
+    fn test_none(x: Polynomial<i64>){
+    
+        fn test_op<'a, 'b>(x: &'a Polynomial<i64>){
+            assert_eq!(x.try_map_nonzero_terms(|i, c| (c - (i as i64)).to_i32()), None);
+            assert_eq!(x.clone().try_map_nonzero_terms(|i, c| (&c - (i as i64)).to_i32()), None);
         }
 
         for x_ in get_impls(&x) {

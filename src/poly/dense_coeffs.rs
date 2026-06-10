@@ -703,8 +703,8 @@ pub(crate) fn mul<'a, 'b, C>(lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> 
     let deg = lhs.degree() + rhs.degree();
     let mut v: Vec<C> = Vec::with_capacity(deg + 1);
 
-    for (i, x) in lhs.nonzero_coeffs() {
-        for (j, y) in rhs.nonzero_coeffs() {
+    for (i, x) in lhs.nonzero_terms() {
+        for (j, y) in rhs.nonzero_terms() {
             let k = i + j;
             let z = x.ref_mul(y);
             match v.get_mut(k) {
@@ -736,7 +736,7 @@ pub(crate) fn div_rem<C>(mut u: Vec<C>, rhs: &Polynomial<C>) -> (Polynomial<C>, 
         } else {
             let q0: C = u_last.ref_div(v0);
             let offset = u.len() - d_rhs;  // the last of u is already popped
-            for (i, c_rhs) in rhs.nonzero_coeffs() {
+            for (i, c_rhs) in rhs.nonzero_terms() {
                 if i == d_rhs { break; }
                 if let Some(c_lhs) = u.get_mut(offset + i) {
                     *c_lhs = c_lhs.ref_sub(c_rhs.ref_mul(&q0));

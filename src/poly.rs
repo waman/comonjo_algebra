@@ -7,7 +7,7 @@ pub mod shift;
 use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
-use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::{Eval, PolynomialEvaluator}, iter::{CoeffsIter, IntoCoeffsIter, IntoNonzeroCoeffsIter, NonzeroCoeffsIter}, shift::{PolynomialShifter, Shift}, sparse_coeffs::SparseCoeffs}};
+use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::*, iter::*, shift::{PolynomialShifter, Shift}, sparse_coeffs::SparseCoeffs}};
 
 /// Polynomial type.
 /// Refer to spire's [Polynomial](https://github.com/typelevel/spire/blob/main/core/src/main/scala/spire/math/Polynomial.scala).
@@ -624,7 +624,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
         match self {
             d @ Polynomial::Dense(_) => {
                 let mut map = BTreeMap::new();
-                for (i, c) in d.nonzero_coeffs() {
+                for (i, c) in d.nonzero_terms() {
                     map.insert(i, c.clone());  // note c is not zero
                 }
                 Polynomial::new_raw_sparse(map)
@@ -643,7 +643,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     
     /// Creates a `BTreeMap` whose values are cloned from `self`'s coefficients.
     pub fn clone_to_map(&self) -> BTreeMap<usize, C> {
-        self.nonzero_coeffs().map(|(i, c)| (i, c.clone())).collect()
+        self.nonzero_terms().map(|(i, c)| (i, c.clone())).collect()
     }
 }
  
@@ -720,7 +720,7 @@ impl<C> Display for Polynomial<C> where C: Semiring + Display {
             Polynomial::Zero() => f.write_str("(0)"),
             Polynomial::Constant(c) => f.write_fmt(format_args!("({})", c.0)),
             _ => {
-                let s: String = self.nonzero_coeffs().map(|(i, c)|term_to_string(i, c)).collect();
+                let s: String = self.nonzero_terms().map(|(i, c)|term_to_string(i, c)).collect();
                 let first_sign = if s.starts_with(" - ") { "-" } else { "" };
                 f.write_fmt(format_args!("{}{}", first_sign, &s[3..]))
             },
@@ -746,7 +746,7 @@ impl<C> Debug for Polynomial<C> where C: Semiring + Display {
 impl<C> IntoIterator for Polynomial<C> where C: Semiring {
 
     type Item = (usize, C);
-    type IntoIter = IntoNonzeroCoeffsIter<C>;
+    type IntoIter = IntoNonzeroTermsIter<C>;
 
     /// Creates an iterator that iterates the non-zero coefficients with its term's degree.
     /// Iteration order is in the ascendant of degree.
@@ -763,7 +763,7 @@ impl<C> IntoIterator for Polynomial<C> where C: Semiring {
     ///     assert_eq!(ite.next(), None);
     /// 
     fn into_iter(self) -> Self::IntoIter {
-        iter::into_nonzero_coeffs_iter(self)
+        iter::into_nonzero_terms_iter(self)
     }
 }
 
@@ -771,7 +771,7 @@ impl<C> IntoIterator for Polynomial<C> where C: Semiring {
 impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
 
     type Item = (usize, &'a C);
-    type IntoIter = NonzeroCoeffsIter<'a, C>;
+    type IntoIter = NonzeroTermsIter<'a, C>;
 
     /// Creates an iterator that iterates references of the non-zero coefficients with its term's degree.
     /// Iteration order is in the ascendant of degree.
@@ -788,7 +788,7 @@ impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
     ///     assert_eq!(ite.next(), None);
     /// 
     fn into_iter(self) -> Self::IntoIter {
-        iter::nonzero_coeffs_iter(self)
+        iter::nonzero_terms_iter(self)
     }
 }
 
@@ -796,34 +796,44 @@ impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
 pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring {
     
     type Coeff;
-    type IntoCoeffsIter: Iterator<Item=Self::Coeff>;
-    type MapArgType;
+    type CoeffItem;
+    type TCoeffsIter: Iterator<Item=Self::CoeffItem>;
+    type TNonzeroCoeffsIter: Iterator<Item=Self::Coeff>;
+    type TTermsIter: Iterator<Item=(usize, Self::CoeffItem)>;
 
-    fn coeffs(self) -> Self::IntoCoeffsIter;
+    fn coeffs(self) -> Self::TCoeffsIter;
+    fn nonzero_coeffs(self) -> Self::TNonzeroCoeffsIter;
 
+    fn terms(self) -> Self::TTermsIter;
+    
     #[inline]
-    fn nonzero_coeffs(self) -> Self::IntoIter { self.into_iter() }
+    fn nonzero_terms(self) -> Self::IntoIter { self.into_iter() }
 
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D>
-        where D: Semiring, F: Fn(Self::MapArgType) -> D;
+        where D: Semiring, F: Fn(Self::Coeff) -> D;
 
     fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D>
-        where D: Semiring, F: Fn(usize, Self::MapArgType) -> D;
+        where D: Semiring, F: Fn(usize, Self::Coeff) -> D;
 
     fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>>
-        where D: Semiring, F: Fn(Self::MapArgType) -> Option<D>;
+        where D: Semiring, F: Fn(Self::Coeff) -> Option<D>;
 
     fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>>
-        where D: Semiring, F: Fn(usize, Self::MapArgType) -> Option<D>;
+        where D: Semiring, F: Fn(usize, Self::Coeff) -> Option<D>;
 }
 
 impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     
     type Coeff = C;
-    type IntoCoeffsIter = IntoCoeffsIter<C>;
-    type MapArgType = C;
+    type CoeffItem = C;
+    type TCoeffsIter = IntoCoeffsIter<C>;
+    type TNonzeroCoeffsIter = IntoNonzeroCoeffsIter<C>;
+    type TTermsIter = IntoTermsIter<C>;
 
     /// Creates an iterator that iterates the coefficients including zeros.
+    /// Note that the degree of each term is not available, 
+    /// so if you want, you should use `CoeffsIterator::terms()` method. 
+    /// 
     /// Iteration order is in the ascendant of degree.
     /// The returned iterator implements `Iterator<Item=C>`.
     ///
@@ -840,8 +850,52 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     ///     assert_eq!(ite.next(), Some(4));
     ///     assert_eq!(ite.next(), None);
     /// 
-    fn coeffs(self) -> Self::IntoCoeffsIter {
+    fn coeffs(self) -> Self::TCoeffsIter {
         iter::into_coeffs_iter(self)
+    }
+
+    /// Creates an iterator that iterates the coefficients without zeros.
+    /// Note that the degree of each term is not available, 
+    /// so if you want, you should use `CoeffsIterator::nonzero_terms()` method. 
+    /// 
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=C>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.nonzero_coeffs();
+    ///     
+    ///     assert_eq!(ite.next(), Some(1));
+    ///     assert_eq!(ite.next(), Some(2));
+    ///     assert_eq!(ite.next(), Some(4));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn nonzero_coeffs(self) -> Self::TNonzeroCoeffsIter {
+        iter::into_nonzero_coeffs_iter(self)
+    }
+
+    /// Creates an iterator that iterates the coefficients with its term's degree.
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=(usize, C)>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: Polynomial<i64> = dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.terms();
+    ///     
+    ///     assert_eq!(ite.next(), Some((0, 1)));
+    ///     assert_eq!(ite.next(), Some((1, 2)));
+    ///     assert_eq!(ite.next(), Some((2, 0)));
+    ///     assert_eq!(ite.next(), Some((3, 4)));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn terms(self) -> Self::TTermsIter {
+        iter::into_terms_iter(self)
     }
     
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
@@ -866,7 +920,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     }
     
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
-    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
@@ -876,7 +930,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     ///     use num::traits::ToPrimitive;
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.map_nonzero_terms(|i, c| i.to_i64().unwrap() * c);
+    ///     let q = p.map_nonzero_terms(|i, c| (i as i64) * c);
     ///     assert_eq!(q, dense![0, 0, 4, 0, 12]);
     /// 
     fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, C) -> D {
@@ -899,7 +953,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
     ///     let q = p.try_map_nonzero(|c| c.to_f64());
-    ///     assert_eq!(q.unwrap(), dense![1., 0., 2., 0., 3.]);
+    ///     assert_eq!(q, Some(dense![1., 0., 2., 0., 3.]));
     /// 
     fn try_map_nonzero<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(C) -> Option<D> {
         match self {
@@ -914,7 +968,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     }
     
     /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
-    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
@@ -924,8 +978,8 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     ///     use num::traits::ToPrimitive;
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.try_map_nonzero_terms(|_, c| (&c).to_f64());
-    ///     assert_eq!(q, Some(dense![1., 0., 2., 0., 3.]));
+    ///     let q = p.try_map_nonzero_terms(|i, c| ((i as i64) * c).to_f64());
+    ///     assert_eq!(q, Some(dense![0., 0., 4., 0., 12.]));
     /// 
     fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, C) -> Option<D> {
         match self {
@@ -942,11 +996,16 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
 
 impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     
-    type Coeff = Option<&'a C>;
-    type IntoCoeffsIter = CoeffsIter<'a, C>;
-    type MapArgType = &'a C;
+    type Coeff = &'a C;
+    type CoeffItem = Option<&'a C>;
+    type TCoeffsIter = CoeffsIter<'a, C>;
+    type TNonzeroCoeffsIter = NonzeroCoeffsIter<'a, C>;
+    type TTermsIter = TermsIter<'a, C>;
 
     /// Creates an iterator that iterates references of the coefficients including zeros.
+    /// Note that the degree of each term is not available, 
+    /// so if you want, you should use `CoeffsIterator::terms()` method. 
+    /// 
     /// Iteration order is in the ascendant of degree.
     /// The returned iterator implements `Iterator<Item=Option<Option<&C>>>`.
     ///
@@ -963,7 +1022,7 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     ///     assert_eq!(ite.next(), Some(Some(&4)));
     ///     assert_eq!(ite.next(), None);
     /// 
-    /// If a coefficient is zero, the `next()` method may return `Some(None)`: 
+    /// If coefficient is zero, the `next()` method may return `Some(None)`: 
     ///
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::sparse;
@@ -978,8 +1037,67 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     ///     assert_eq!(ite.next(), Some(Some(&4)));
     ///     assert_eq!(ite.next(), None);
     /// 
-    fn coeffs(self) -> Self::IntoCoeffsIter {
+    fn coeffs(self) -> Self::TCoeffsIter {
         iter::coeffs_iter(self)
+    }
+
+    /// Creates an iterator that iterates references of the nonzero coefficients.
+    /// Note that the degree of each term is not available, 
+    /// so if you want, you should use `CoeffsIterator::nonzero_terms()` method. 
+    /// 
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=&C>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: &Polynomial<i64> = &dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.nonzero_coeffs();
+    ///     
+    ///     assert_eq!(ite.next(), Some(&1));
+    ///     assert_eq!(ite.next(), Some(&2));
+    ///     assert_eq!(ite.next(), Some(&4));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn nonzero_coeffs(self) -> Self::TNonzeroCoeffsIter {
+        iter::nonzero_coeffs_iter(self)
+    }
+
+    /// Creates an iterator that iterates references of the coefficients with its term's degree.
+    /// Iteration order is in the ascendant of degree.
+    /// The returned iterator implements `Iterator<Item=(usize, Option<&C>)>`.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: &Polynomial<i64> = &dense![1, 2, 0, 4];  // 1 + 2x + 4x³
+    ///     let mut ite = p.terms();
+    ///     
+    ///     assert_eq!(ite.next(), Some((0, Some(&1))));
+    ///     assert_eq!(ite.next(), Some((1, Some(&2))));
+    ///     assert_eq!(ite.next(), Some((2, Some(&0))));
+    ///     assert_eq!(ite.next(), Some((3, Some(&4))));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    /// If coefficient is zero, the `next()` method may return `Some((uint, None))`: 
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::sparse;
+    ///     use crate::comonjo_algebra::poly::CoeffsIterator;
+    /// 
+    ///     let p: &Polynomial<i64> = &sparse![(0, 1), (1, 2), (3, 4)];  // 1 + 2x + 4x³
+    ///     let mut ite = p.terms();
+    ///     
+    ///     assert_eq!(ite.next(), Some((0, Some(&1))));
+    ///     assert_eq!(ite.next(), Some((1, Some(&2))));
+    ///     assert_eq!(ite.next(), Some((2, None)));
+    ///     assert_eq!(ite.next(), Some((3, Some(&4))));
+    ///     assert_eq!(ite.next(), None);
+    /// 
+    fn terms(self) -> Self::TTermsIter {
+        iter::terms_iter(self)
     }
     
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
@@ -991,7 +1109,7 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     ///     use crate::comonjo_algebra::poly::CoeffsIterator;
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.map_nonzero(|c| c * &2);
+    ///     let q = p.map_nonzero(|c| c * 2);
     ///     assert_eq!(q, dense![2, 0, 4, 0, 6]);
     /// 
     fn map_nonzero<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(&'a C) -> D {
@@ -1004,17 +1122,16 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     }
     
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
-    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::dense;
     ///     use crate::comonjo_algebra::poly::CoeffsIterator;
-    ///     use num::traits::ToPrimitive;
     /// 
     ///     let p: Polynomial<i64> = dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.map_nonzero_terms(|i, c| i.to_i64().unwrap() * c);
+    ///     let q = p.map_nonzero_terms(|i, c| (i as i64) * c );
     ///     assert_eq!(q, dense![0, 0, 4, 0, 12]);
     /// 
     fn map_nonzero_terms<D, F>(self, f: F) -> Polynomial<D> where D: Semiring, F: Fn(usize, &'a C) -> D {
@@ -1052,7 +1169,7 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     }
     
     /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
-    /// The mapping function takes 2 arguments (the first is exponent of the term).
+    /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
@@ -1062,8 +1179,8 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     ///     use num::traits::ToPrimitive;
     /// 
     ///     let p: &Polynomial<i64> = &dense![1, 0, 2, 0, 3];  // 1 + 2x² + 3x⁴
-    ///     let q = p.try_map_nonzero_terms(|_, c| c.to_f64());
-    ///     assert_eq!(q.unwrap(), dense![1., 0., 2., 0., 3.]);
+    ///     let q = p.try_map_nonzero_terms(|i, c| ((i as i64) * c).to_f64());
+    ///     assert_eq!(q.unwrap(), dense![0., 0., 4., 0., 12.]);
     /// 
     fn try_map_nonzero_terms<D, F>(self, f: F) -> Option<Polynomial<D>> where D: Semiring, F: Fn(usize, &'a C) -> Option<D> {
         match self {
@@ -1194,7 +1311,7 @@ fn compose_polynomials<'a, 'b, C> (lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C
 
     let mut acc = Polynomial::Zero();
 
-    for (i, c) in lhs.nonzero_coeffs() {
+    for (i, c) in lhs.nonzero_terms() {
         let z = rhs.pow(i as u32).scale_by_left(c);
         acc = acc + z;
     }
@@ -2221,7 +2338,7 @@ impl<C> Polynomial<C> where C: Semiring + num::traits::Signed {
         let mut has_prev = false;
         let mut vibrations = 0;
 
-        for (_, c) in self.nonzero_coeffs() {
+        for c in self.nonzero_coeffs() {
             let current = c.signum();
             if has_prev && prev != current {
                 vibrations += 1;
