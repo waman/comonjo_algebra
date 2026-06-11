@@ -831,10 +831,10 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     type TTermsIter = IntoTermsIter<C>;
 
     /// Creates an iterator that iterates the coefficients including zeros.
+    /// Iteration order is in the ascendant of degree.
     /// Note that the degree of each term is not available, 
     /// so if you want, you should use `CoeffsIterator::terms()` method. 
     /// 
-    /// Iteration order is in the ascendant of degree.
     /// The returned iterator implements `Iterator<Item=C>`.
     ///
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -855,10 +855,10 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     }
 
     /// Creates an iterator that iterates the coefficients without zeros.
+    /// Iteration order is in the ascendant of degree.
     /// Note that the degree of each term is not available, 
     /// so if you want, you should use `CoeffsIterator::nonzero_terms()` method. 
     /// 
-    /// Iteration order is in the ascendant of degree.
     /// The returned iterator implements `Iterator<Item=C>`.
     ///
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -879,6 +879,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
 
     /// Creates an iterator that iterates the coefficients with its term's degree.
     /// Iteration order is in the ascendant of degree.
+    /// 
     /// The returned iterator implements `Iterator<Item=(usize, C)>`.
     ///
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -900,6 +901,9 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// And the degree of each term is not available, 
+    /// so if you want, you should use `CoeffsIterator::map_nonzero_terms()` method. 
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -922,6 +926,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
     /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -944,6 +949,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     
     /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -970,6 +976,7 @@ impl<C> CoeffsIterator<C> for Polynomial<C> where C: Semiring {
     /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
     /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -1003,10 +1010,10 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     type TTermsIter = TermsIter<'a, C>;
 
     /// Creates an iterator that iterates references of the coefficients including zeros.
+    /// Iteration order is in the ascendant of degree.
     /// Note that the degree of each term is not available, 
     /// so if you want, you should use `CoeffsIterator::terms()` method. 
     /// 
-    /// Iteration order is in the ascendant of degree.
     /// The returned iterator implements `Iterator<Item=Option<Option<&C>>>`.
     ///
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -1042,10 +1049,10 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     }
 
     /// Creates an iterator that iterates references of the nonzero coefficients.
+    /// Iteration order is in the ascendant of degree.
     /// Note that the degree of each term is not available, 
     /// so if you want, you should use `CoeffsIterator::nonzero_terms()` method. 
     /// 
-    /// Iteration order is in the ascendant of degree.
     /// The returned iterator implements `Iterator<Item=&C>`.
     ///
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -1066,6 +1073,7 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
 
     /// Creates an iterator that iterates references of the coefficients with its term's degree.
     /// Iteration order is in the ascendant of degree.
+    /// 
     /// The returned iterator implements `Iterator<Item=(usize, Option<&C>)>`.
     ///
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -1102,6 +1110,9 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// And the degree of each term is not available, 
+    /// so if you want, you should use `CoeffsIterator::map_nonzero_terms()` method. 
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -1124,6 +1135,7 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     /// Returns a `Polynomial` whose nonzero coefficients are mapped into another values.
     /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -1145,6 +1157,9 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     
     /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// And the degree of each term is not available, 
+    /// so if you want, you should use `CoeffsIterator::try_map_nonzero_terms()` method. 
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
@@ -1171,6 +1186,7 @@ impl<'a, C> CoeffsIterator<C> for &'a Polynomial<C> where C: Semiring {
     /// Returns a `Polynomial` whose nonzero coefficients is tried being mapped into another values.
     /// The mapping function takes 2 arguments, the degree and the coefficient of the term.
     /// Note that the mapping is applied only to nonzero coefficients.
+    /// 
     /// The returned `Polynomial` can have a different coefficient type.
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
