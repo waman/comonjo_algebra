@@ -361,40 +361,6 @@ impl<C> DenseCoeffs<C> where C: Semiring + Clone {
     }
 }
 
-// impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive + Clone {
-
-//     pub fn new_shifted_coeffs_f(&self, h: C) -> Vec<C> {
-//         let mut coeffs: Vec<C> = self.0.clone();
-        
-//         for (deg, c) in self.nonzero_coeffs_iter() {
-//             if deg == 0 { continue; }
-//             let mut i: C = C::one();
-//             let mut d: usize = deg;
-//             let mut m: C = C::one();
-//             let mut k: C = c.clone();
-//             while d > 0 {
-//                 m = m * C::from_usize(d).unwrap() / i.clone();
-//                 k = k * &h;
-//                 if let Some(coeff) = coeffs.get_mut(d-1) {
-//                     *coeff = coeff.ref_add(m.ref_mul(&k));
-//                 }
-//                 d = d - 1;
-//                 i = i + C::one();
-//             }
-//         }
-
-//         coeffs
-//     }
-
-//     pub(crate) fn shift_f(&mut self, h: C) {
-//         self.0 = self.new_shifted_coeffs_f(h);
-//     }
-
-//     pub(crate) fn new_shifted_f(&self, h: C) -> Polynomial<C> {
-//         Polynomial::new_raw_dense(self.new_shifted_coeffs_f(h))
-//     }
-// }
-
 impl<C> DenseCoeffs<C> where C: Field {
 
     pub(crate) fn monic(&mut self) {

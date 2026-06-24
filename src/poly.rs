@@ -4,7 +4,7 @@ pub(crate) mod iter;
 pub mod eval;
 pub mod shift;
 
-use std::{collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
+use std::{borrow::Borrow, collections::{BTreeMap, HashMap}, fmt::{Debug, Display}, ops::*};
 use num::{BigInt, BigRational, BigUint, One, Rational32, Rational64, Zero, complex::{Complex32, Complex64}, pow::Pow, traits::{ConstOne, ConstZero, Euclid}};
 use once_cell::sync::Lazy;
 use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::*, iter::*, shift::{PolynomialShifter, Shift}, sparse_coeffs::SparseCoeffs}};
@@ -60,21 +60,21 @@ use crate::{algebra::*, poly::{dense_coeffs::DenseCoeffs, eval::*, iter::*, shif
 ///     assert_eq!(ite1.next(), None);
 /// 
 /// To iterate coefficients including zero, import `CoeffsIterator` and
-/// use `coeffs()` methods:
+/// use `terms()` method:
 /// 
 ///     use comonjo_algebra::poly::Polynomial;
 ///     use comonjo_algebra::dense;
 ///     use comonjo_algebra::poly::CoeffsIterator;
 /// 
 ///     let p = dense![1, 2, 0, 3];  // 1 + 2x + 3x³
-///     let mut ite = p.coeffs();
-///     assert_eq!(ite.next(), Some(1));
-///     assert_eq!(ite.next(), Some(2));
-///     assert_eq!(ite.next(), Some(0));
-///     assert_eq!(ite.next(), Some(3));
+///     let mut ite = p.terms();
+///     assert_eq!(ite.next(), Some((0, 1)));
+///     assert_eq!(ite.next(), Some((1, 2)));
+///     assert_eq!(ite.next(), Some((2, 0)));
+///     assert_eq!(ite.next(), Some((3, 3)));
 ///     assert_eq!(ite.next(), None);
 /// 
-/// `CoeffsIterator::nonzero_coeffs()` methods are equivalent to `into_iter()`.
+/// `CoeffsIterator::nonzero_terms()` methods are equivalent to `into_iter()`.
 pub enum Polynomial<C> where C: Semiring {
 
     Zero(),
@@ -395,6 +395,43 @@ impl<C> Into<BTreeMap<usize, C>> for Polynomial<C> where C: Semiring {
     }
 }
 
+impl<C> Polynomial<C> where C: Field + Clone, Eval: PolynomialEvaluator<C> {
+
+    pub fn interpolate<T, Eval>(points: T) -> Polynomial<C> where T: IntoIterator<Item=(C, C)>, Eval: PolynomialEvaluator<C> {
+        let mut p = Polynomial::zero();
+        let point_iter = points.into_iter();
+        let mut xs = Vec::with_capacity(point_iter.size_hint().1.unwrap_or_default());
+
+        for (x, y) in point_iter {
+            let dif_prod = xs.iter().map(|x0| x.clone() - x0).fold(C::one(), |acc, x| acc * x);
+            let c: Polynomial<C> = Polynomial::constant((y - p.eval(x.clone())) / dif_prod);
+            let prod = xs.iter().fold(Polynomial::one(), |prod, x_n|{
+                prod * (Polynomial::<C>::x() - Polynomial::constant(x_n.clone()))
+            });
+            p = p + c * prod;
+            xs.push(x.clone());
+        }
+
+        p
+    }
+
+//   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
+//     def loop(p: Polynomial[C], xs: List[C], pts: List[(C, C)]): Polynomial[C] =
+//       pts match {
+//         case Nil =>
+//           p
+//         case (x, y) :: tail =>
+//           val c = Polynomial.constant((y - p(x)) / xs.map(x - _).qproduct)
+//           val prod = xs.foldLeft(Polynomial.one[C]) { (prod, xn) =>
+//             prod * (Polynomial.x[C] - constant(xn))
+//           }
+//           loop(p + c * prod, x :: xs, tail)
+//       }
+//     loop(Polynomial.zero[C], Nil, points.toList)
+//   }
+// }
+}
+
 //********** Basic Methods ******
 impl<C> Polynomial<C> where C: Semiring {
 
@@ -565,7 +602,31 @@ impl<C> Polynomial<C> where C: Semiring {
     }
 }
 
-impl<C> Polynomial<C> where C: Semiring {
+//********** Compose & Eval **********/
+impl<C> Polynomial<C> where C: Semiring + Clone {
+
+    /// Composes this polynomial with another.
+    pub fn compose<P>(&self, other: P) -> Polynomial<C> where P: Borrow<Polynomial<C>> {
+        match (self, other.borrow()) {
+            (Polynomial::Zero(), _) => Polynomial::Zero(),
+            (lhs @ Polynomial::Constant(_), _) => lhs.clone(),
+            (lhs, Polynomial::Zero()) => match lhs.nth(0) {
+                Some(c) => Polynomial::constant(c.clone()),
+                _ => Polynomial::Zero(),
+            },
+            (lhs, rhs) if rhs.is_x() => lhs.clone(),
+            (lhs, rhs) => {
+                let mut acc = Polynomial::Zero();
+
+                for (i, c) in lhs.nonzero_terms() {
+                    let z = rhs.pow(i as u32).scale_by_left(c);
+                    acc = acc + z;
+                }
+
+                acc
+            },
+        }
+    }
 
     /// Evaluates the `self` polynomial at `x`.
     ///
@@ -575,14 +636,48 @@ impl<C> Polynomial<C> where C: Semiring {
     ///     assert_eq!(p.eval(4), 1 + 2*4 + 3*4*4);
     ///     assert_eq!(p.eval(-5), 1 + 2*-5 + 3*-5*-5);
     /// 
-    pub fn eval(&self, x: C) -> C where Eval: PolynomialEvaluator<C> {
-        Eval::eval(self, x)
+    /// The argument can be a reference:
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<i64> = dense![1, 2, 3];  // 1 + 2x + 3x²
+    ///     assert_eq!(p.eval(&4), 1 + 2*4 + 3*4*4);
+    ///     assert_eq!(p.eval(&-5), 1 + 2*-5 + 3*-5*-5);
+    /// 
+    pub fn eval<P>(&self, x: P) -> C where P: Borrow<C>, Eval: PolynomialEvaluator<C> {
+        Eval::eval(self, x.borrow())
     }
-    
-    //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
-    //     this.map(f).apply(x){
-    
 }
+
+//********** Evaluation *********/
+// pub trait Evaluable<C, RHS> where C: Semiring + Clone {
+
+//     /// Composes this polynomial with another.
+//     fn eval(&self, other: RHS) -> C where Eval: PolynomialEvaluator<C> ;
+// }
+
+// impl<C> Evaluable<C, C> for Polynomial<C> where C: Semiring + Clone {
+
+//     fn eval(&self, x: C) -> C  where Eval: PolynomialEvaluator<C> { self.eval(&x) }
+// }
+
+// impl<'a, C> Evaluable<C, &'a C> for Polynomial<C> where C: Semiring + Clone {
+
+//     /// Evaluates the `self` polynomial at `x`.
+//     ///
+//     ///     # use comonjo_algebra::poly::Polynomial;
+//     ///     # use comonjo_algebra::dense;
+//     ///     let p: Polynomial<i64> = dense![1, 2, 3];  // 1 + 2x + 3x²
+//     ///     assert_eq!(p.eval(4), 1 + 2*4 + 3*4*4);
+//     ///     assert_eq!(p.eval(-5), 1 + 2*-5 + 3*-5*-5);
+//     /// 
+//     fn eval(&self, x: &'a C) -> C where Eval: PolynomialEvaluator<C> {
+//         Eval::eval(self, x)
+//     }
+    
+//     //   def evalWith[A: Semiring: Eq: ClassTag](x: A)(f: C => A): A =
+//     //     this.map(f).apply(x){
+// }
 
 //********** Clone related Methods **********/
 impl<C> Clone for Polynomial<C> where C: Semiring + Clone {
@@ -791,7 +886,6 @@ impl<'a, C> IntoIterator for &'a Polynomial<C> where C: Semiring {
         iter::nonzero_terms_iter(self)
     }
 }
-
 
 pub trait CoeffsIterator<C>: IntoIterator where Self: Sized, C: Semiring {
     
@@ -1319,47 +1413,6 @@ impl<C> One for Polynomial<C> where C: Semiring + Clone {
 impl<C> ConstOne for Polynomial<C> where C: Semiring + ConstOne + Clone {
 
     const ONE: Self = Polynomial::Constant(ConstCoeff(C::ONE));
-}
-
-//********** Compose **********/
-fn compose_polynomials<'a, 'b, C> (lhs: &'a Polynomial<C>, rhs: &'b Polynomial<C>) -> Polynomial<C>
-        where C: Semiring + Clone {
-
-    let mut acc = Polynomial::Zero();
-
-    for (i, c) in lhs.nonzero_terms() {
-        let z = rhs.pow(i as u32).scale_by_left(c);
-        acc = acc + z;
-    }
-
-    acc
-}
-
-pub trait Compose<C, RHS> where C: Semiring + Clone {
-
-    /// Composes this polynomial with another.
-    fn compose(self, other: RHS) -> Polynomial<C>;
-}
-
-impl<'a, C> Compose<C, Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
-
-    fn compose(self, y: Polynomial<C>) -> Polynomial<C> { self.compose(&y) }
-}
-
-impl<'a, 'b, C> Compose<C, &'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring + Clone {
-
-    fn compose(self, y: &'b Polynomial<C>) -> Polynomial<C> {
-        match (self, y) {
-            (Polynomial::Zero(), _) => Polynomial::Zero(),
-            (lhs @ Polynomial::Constant(_), _) => lhs.clone(),
-            (lhs, Polynomial::Zero()) => match lhs.nth(0) {
-                Some(c) => Polynomial::constant(c.clone()),
-                _ => Polynomial::Zero(),
-            },
-            (lhs, rhs) if rhs.is_x() => lhs.clone(),
-            (lhs, rhs) => compose_polynomials(lhs, rhs),
-        }
-    }
 }
 
 //********** Operator Overloads **********
@@ -2383,7 +2436,6 @@ impl<C> Polynomial<C> where C: Ring {
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
     /// 
     ///     let mut p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
     ///     let q = p.clone();
@@ -2414,7 +2466,6 @@ impl<'a, C> Polynomial<C> where C: Ring + Clone {
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
     /// 
     ///     let p = dense![1, 2, 3, 4];  // 1 + 2x + 3x² + 4x³
     ///     assert_eq!(p.new_flipped(), p.compose(-Polynomial::x()));
@@ -2445,7 +2496,6 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
     /// 
     ///     let mut p = dense![0, 0, 0, 3];  // x³
     ///     let q = p.clone();
@@ -2469,7 +2519,6 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     /// 
     ///     # use comonjo_algebra::poly::Polynomial;
     ///     # use comonjo_algebra::dense;
-    ///     use comonjo_algebra::poly::Compose;
     /// 
     ///     let p = dense![0, 0, 0, 3];  // x³
     ///     assert_eq!(p.new_shifted(1), p.compose(Polynomial::x() + 1));

@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, vec};
+use std::{collections::BTreeMap, ops::MulAssign, vec};
 
 use num::{BigInt, One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
-use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Compose, Polynomial}, sparse};
+use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Polynomial}, sparse};
 
 type PolyR64 = Polynomial<Rational64>;
 
@@ -85,7 +85,7 @@ fn test_dense_macro(){
     let cst_with_0 = dense![5, 0, 0];
     assert_eq!(cst_with_0, Polynomial::constant(5));
 
-    let p0_with_0 = dense![1, 2, 3];
+    let p0_with_0 = dense![1, 2, 3, 0, 0];
     assert_eq!(p0_with_0, p0);
 }
 
@@ -118,7 +118,8 @@ fn test_sparse_macro(){
 
 // #[test]
 // fn test_interpolate(){
-//     let p0: Polynomial<f64> = Polynomial::interpolate(&[(1., 1.)]);
+//     let p0: Polynomial<f64> = Polynomial::interpolate([(0., 0.), (1., 2.)]);
+//     assert_eq!(p0, dense![0., 2.])
 // }
 
 //********** Basic Methods ******
@@ -216,6 +217,7 @@ fn test_eval_i64(){
     fn test(p: Polynomial<i64>, x: i64, exp: i64){
     
         fn test_op(p: Polynomial<i64>, x: i64, exp: i64){
+            assert_eq!(p.eval(&x), exp);
             assert_eq!(p.eval(x), exp);
         }
 
@@ -599,6 +601,19 @@ fn test_map_nonzero(){
         test(entry.0, entry.1);
     }
 }
+
+trait UsizePower: Copy + One + MulAssign<Self> {
+    fn up(self, i: usize) -> Self {
+        let mut acc = Self::one();
+        for _ in 0..i {
+            acc *= self;
+        }
+        acc
+    }
+}
+
+impl UsizePower for i64 {}
+
 #[test]
 fn test_map_nonzero_terms(){
 
@@ -621,11 +636,11 @@ fn test_map_nonzero_terms(){
         (cst(-4), Polynomial::constant(16)),
 
         (p0(), dense![1, 2*2*2, 3*3*3*3]),
-        (p1(), dense![4*4, 5*5*5, 0, 6*6*6*6*6, 7*7*7*7*7*7]),
-        (p2(), dense![4*4, 0, 0, 5*5*5*5*5, 0, 0, 0, 6*6*6*6*6*6*6*6*6]),
-        (p3(), dense![1, 0, 0, 0, 2*2*2*2*2*2]),
-        (p4(), dense![0, 0, 0, 6*6*6*6*6]),
-        (p5(), dense![0, 5*5*5, 0, 0, 7*7*7*7*7*7]),
+        (p1(), dense![4.up(2), 5.up(3), 0, 6.up(5), 7.up(6)]),
+        (p2(), dense![4.up(2), 0, 0, 5.up(5), 0, 0, 0, 6.up(9)]),
+        (p3(), dense![1, 0, 0, 0, 2.up(6)]),
+        (p4(), dense![0, 0, 0, 6.up(5)]),
+        (p5(), dense![0, 5.up(3), 0, 0, 7.up(6)]),
     ];
 
     for entry in table {
@@ -689,6 +704,8 @@ fn test_try_map_nonzero(){
     }
 }
 
+impl UsizePower for f64 {}
+
 #[test]
 fn test_try_map_nonzero_terms(){
 
@@ -711,11 +728,11 @@ fn test_try_map_nonzero_terms(){
         (cst(-4), Polynomial::constant(16.)),
 
         (p0(), dense![1., 2.*2.*2., 3.*3.*3.*3.]),
-        (p1(), dense![4.*4., 5.*5.*5., 0., 6.*6.*6.*6.*6., 7.*7.*7.*7.*7.*7.]),
-        (p2(), dense![4.*4., 0., 0., 5.*5.*5.*5.*5., 0., 0., 0., 6.*6.*6.*6.*6.*6.*6.*6.*6.]),
-        (p3(), dense![1., 0., 0., 0., 2.*2.*2.*2.*2.*2.]),
-        (p4(), dense![0., 0., 0., 6.*6.*6.*6.*6.]),
-        (p5(), dense![0., 5.*5.*5., 0., 0., 7.*7.*7.*7.*7.*7.]),
+        (p1(), dense![4.0.up(2), 5.0.up(3), 0., 6.0.up(5), 7.0.up(6)]),
+        (p2(), dense![4.0.up(2), 0., 0., 5.0.up(5), 0., 0., 0., 6.0.up(9)]),
+        (p3(), dense![1., 0., 0., 0., 2.0.up(6)]),
+        (p4(), dense![0., 0., 0., 6.0.up(5)]),
+        (p5(), dense![0., 5.0.up(3), 0., 0., 7.0.up(6)]),
     ];
 
     for entry in table_some {

@@ -7,11 +7,11 @@ use crate::{algebra::{Field, Semiring}, poly::{Polynomial, dense_coeffs::DenseCo
 pub struct Eval;
 
 pub trait PolynomialEvaluator<C> where C: Semiring {
-    fn eval(p: &Polynomial<C>, x: C) -> C;
+    fn eval<'a>(p: &Polynomial<C>, x: &'a C) -> C;
 }
 
-fn eval_dense<C: Semiring>(dc: &DenseCoeffs<C>, x: C) -> C {
-    let x2: &C = &(x.ref_mul(&x));
+fn eval_dense<'a, C: Semiring>(dc: &DenseCoeffs<C>, x: &'a C) -> C {
+    let x2: &C = &(x.ref_mul(x));
     let mut sum0: C = C::zero();
     let mut sum1: C = C::zero();
 
@@ -29,7 +29,7 @@ fn eval_dense<C: Semiring>(dc: &DenseCoeffs<C>, x: C) -> C {
     }
 }
 
-fn eval_sparse<C>(coeffs: &SparseCoeffs<C>, x: C, pow: fn(C, usize) -> C) -> C 
+fn eval_sparse<'a, C>(coeffs: &SparseCoeffs<C>, x: &'a C, pow: fn(&'a C, usize) -> C) -> C 
         where C: Semiring + Clone {
 
     if coeffs.0.len() == 1 {
@@ -45,7 +45,7 @@ fn eval_sparse<C>(coeffs: &SparseCoeffs<C>, x: C, pow: fn(C, usize) -> C) -> C
     let mut prev_i = *last.0;
     let mut sum: C = last.1.clone();
 
-    let calc = &mut PowerCalculator::new(x);
+    let calc = &mut PowerCalculator::new(x.clone());
     let cache = &mut PowerCache::new();
 
     for (i, c) in ite {
@@ -78,7 +78,7 @@ struct PowerCalculator<C> where C: Semiring {
 
 impl<C> PowerCalculator<C> where C: Semiring {
 
-    fn new(x: C) -> PowerCalculator<C> {
+    fn new<'a>(x: C) -> PowerCalculator<C> {
         let x2 = x.ref_mul(&x);
         PowerCalculator { exp_bits: vec![x, x2] }
     }
@@ -125,7 +125,7 @@ macro_rules! eval_impl_for_usize_pow {
         $(
             impl PolynomialEvaluator<$t> for Eval {
 
-                fn eval(p: &Polynomial<$t>, x: $t) -> $t {
+                fn eval<'a>(p: &Polynomial<$t>, x: &'a $t) -> $t {
                     eval_with_usize_pow(p, x)
                 }
             }
@@ -137,12 +137,13 @@ eval_impl_for_usize_pow!(usize, u8, u16, u32, u64, u128, BigUint,
                          isize, i8, i16, i32, i64, i128, BigInt,
                          Rational32, Rational64, BigRational);
 
-fn eval_with_usize_pow<C>(p: &Polynomial<C>, x: C) -> C where C: Semiring + Pow<usize, Output=C> + Clone {
+fn eval_with_usize_pow<'a, C>(p: &Polynomial<C>, x: &'a C) -> C
+        where C: Semiring + Pow<usize, Output=C> + Clone {
     match p {
         Polynomial::Zero() => C::zero(),
         Polynomial::Constant(cc) => cc.0.clone(),
         Polynomial::Dense(dc) => eval_dense(dc, x),
-        Polynomial::Sparse(sc) => eval_sparse(sc, x, |x, i|{ x.pow(i) }),
+        Polynomial::Sparse(sc) => eval_sparse(sc, x, |x, i|{ x.clone().pow(i) }),
     }
 }
 
@@ -152,7 +153,7 @@ macro_rules! eval_impl_for_fpow {
         $(
             impl PolynomialEvaluator<$t> for Eval {
 
-                fn eval(p: &Polynomial<$t>, x: $t) -> $t {
+                fn eval<'a>(p: &Polynomial<$t>, x: &'a $t) -> $t {
                     eval_with_fpow(p, x)
                 }
             }
@@ -162,11 +163,11 @@ macro_rules! eval_impl_for_fpow {
 
 eval_impl_for_fpow!(f32, f64, Complex32, Complex64);
 
-fn eval_with_fpow<C>(p: &Polynomial<C>, x: C) -> C where C: Field + Pow<C, Output=C> + FromPrimitive + Clone {
+fn eval_with_fpow<'a, C>(p: &Polynomial<C>, x: &'a C) -> C where C: Field + Pow<C, Output=C> + FromPrimitive + Clone {
     match p {
         Polynomial::Zero() => C::zero(),
         Polynomial::Constant(cc) => cc.0.clone(),
         Polynomial::Dense(dc) => eval_dense(dc, x),
-        Polynomial::Sparse(sc) => eval_sparse(sc, x, |x, i|{ x.pow(C::from_usize(i).unwrap()) }),
+        Polynomial::Sparse(sc) => eval_sparse(sc, x, |x, i|{ x.clone().pow(C::from_usize(i).unwrap()) }),
     }
 }
