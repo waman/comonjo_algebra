@@ -606,6 +606,27 @@ impl<C> Polynomial<C> where C: Semiring {
 impl<C> Polynomial<C> where C: Semiring + Clone {
 
     /// Composes this polynomial with another.
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<i64> = dense![1, 2, 3];  // 1 + 2x + 3x²
+    ///     let q: Polynomial<i64> = dense![4, 5];  // 4 + 5x
+    /// 
+    ///     let p_q: Polynomial<i64> = dense![1 + 2*4 + 3*4*4, 2*5 + 3*2*4*5, 3*5*5];  // 1 + 2(4 + 5x) + 3(4 + 5x)²
+    ///     assert_eq!(p.compose(q), p_q);
+    /// 
+    ///     let q2: Polynomial<i64> = dense![4, 5];  // 4 + 5x
+    ///     let q_p: Polynomial<i64> = dense![4 + 5, 5*2, 5*3];  // 4 + 5(1 + 2x + 3x²)
+    ///     assert_eq!(q2.compose(p), q_p);
+    /// 
+    /// The argument can be a reference:
+    ///
+    ///     # use comonjo_algebra::poly::Polynomial;
+    ///     # use comonjo_algebra::dense;
+    ///     let p: Polynomial<i64> = dense![1, 2, 3];  // 1 + 2x + 3x²
+    ///     let q: Polynomial<i64> = dense![4, 5];  // 4 + 5x
+    ///     assert_eq!(p.compose(&q), dense![57, 130, 75]);
+    /// 
     pub fn compose<P>(&self, other: P) -> Polynomial<C> where P: Borrow<Polynomial<C>> {
         match (self, other.borrow()) {
             (Polynomial::Zero(), _) => Polynomial::Zero(),
