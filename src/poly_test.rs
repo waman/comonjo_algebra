@@ -1,8 +1,8 @@
-use std::{collections::BTreeMap, ops::MulAssign, vec};
+use std::{collections::BTreeMap, vec};
 
-use num::{BigInt, One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
+use num::{BigInt, Float, One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
-use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Polynomial}, sparse};
+use crate::{algebra::{Field, Semiring}, dense, poly::{CoeffsIterator, Polynomial}, sparse};
 
 type PolyR64 = Polynomial<Rational64>;
 
@@ -116,11 +116,35 @@ fn test_sparse_macro(){
     assert_eq!(p0_with_0, p0);
 }
 
-// #[test]
-// fn test_interpolate(){
-//     let p0: Polynomial<f64> = Polynomial::interpolate([(0., 0.), (1., 2.)]);
-//     assert_eq!(p0, dense![0., 2.])
-// }
+struct LagrangeInterpolation<const N: usize, C> where C: Field + Clone {
+    xs: [C; N],
+    ys: [C; N],
+}
+
+impl<const N: usize, C> LagrangeInterpolation<N, C> where C: Field + Clone {
+
+    pub fn interpolate(&self, t: C) -> C {
+        let mut sum: C = C::zero();
+
+        for (i, y) in self.ys.iter().enumerate() {
+            let mut prod: C = y.clone();
+            for (j, x) in self.xs.iter().enumerate() {
+                if j != i {
+                    prod -= (t.ref_sub(x)) / (self.xs[i].ref_sub(x));
+                }
+            }
+            sum += prod;
+        }
+
+        sum
+    }
+}
+
+#[test]
+fn test_interpolate(){
+    let p0: Polynomial<f64> = Polynomial::interpolate([(0., 0.), (1., 2.)]);
+    assert_eq!(p0, dense![0., 2.])
+}
 
 //********** Basic Methods ******
 #[test]
@@ -204,6 +228,85 @@ fn test_max_and_min_term(){
         (p3(), Some((0, &1)), Some((4, &2))),
         (p4(), Some((3, &6)), Some((3, &6))),
         (p5(), Some((1, &5)), Some((4, &7))),
+    ];
+
+    for entry in table {
+        test(entry.0, entry.1, entry.2);
+    }
+}
+
+#[test]
+fn test_compose(){
+
+    fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
+
+        fn test_op<'a, 'b, 'c>(x: &'a Polynomial<i64>, y: &'b Polynomial<i64>, exp: &'c Polynomial<i64>){
+            assert_eq!(x.compose(y), *exp);
+            assert_eq!(x.compose(y.clone()), *exp);
+            assert_eq!(x.clone().compose(y), *exp);
+            assert_eq!(x.clone().compose(y.clone()), *exp);
+        }
+
+        for x_ in get_impls(&x) {
+            for y_ in get_impls(&y) {
+                test_op(&x_, &y_, &exp);
+            }
+        }
+    }
+
+    let table = [
+        (zero(), zero(),           zero()),
+        (zero(), one(),            zero()),
+        (zero(), cst(3),           zero()),
+        (zero(), Polynomial::x(),  zero()),
+        (zero(), Polynomial::x2(), zero()),
+        (zero(), p0(),             zero()),
+        
+        (one(), zero(),           one()),
+        (one(), one(),            one()),
+        (one(), cst(3),           one()),
+        (one(), Polynomial::x(),  one()),
+        (one(), Polynomial::x2(), one()),
+        (one(), p0(),             one()),
+        
+        (cst(5), zero(),           cst(5)),
+        (cst(5), one(),            cst(5)),
+        (cst(5), cst(3),           cst(5)),
+        (cst(5), Polynomial::x(),  cst(5)),
+        (cst(5), Polynomial::x2(), cst(5)),
+        (cst(5), p0(),             cst(5)),
+
+        (Polynomial::x(), zero(),          zero()),
+        (Polynomial::x(), one(),           one()),
+        (Polynomial::x(), cst(3),          cst(3)),
+        (Polynomial::x(), Polynomial::x(), Polynomial::x()),
+        (Polynomial::x(), Polynomial::x2(), Polynomial::x2()),
+        (Polynomial::x(), p0(),            p0()),
+        (Polynomial::x(), p4(),            p4()),
+
+        (Polynomial::x2(), zero(),           zero()),
+        (Polynomial::x2(), one(),            one()),
+        (Polynomial::x2(), cst(3),           cst(9)),
+        (Polynomial::x2(), Polynomial::x(),  Polynomial::x2()),
+        (Polynomial::x2(), Polynomial::x2(), Polynomial::x4()),
+        (Polynomial::x2(), p0(),             p0().pow(2)),
+        (Polynomial::x2(), p4(),             p4().pow(2)),
+        
+        (p1(), zero(),           cst(4)),
+        (p1(), one(),            cst(4 + 5 + 6 + 7)),
+        (p1(), cst(3),           cst(4 + 5 * 3 + 6 * 3*3*3 + 7 * 3*3*3*3)),
+        (p1(), Polynomial::x(),  p1()),
+        (p1(), Polynomial::x2(), dense![4, 0, 5, 0, 0, 0, 6, 0, 7]),
+        (p1(), p0(),             4 + 5 * p0() + 6 * p0().pow(3) + 7 * p0().pow(4)),
+        (p1(), p4(),             4 + 5 * p4() + 6 * p4().pow(3) + 7 * p4().pow(4)),
+
+        (p4(), zero(),           zero()),
+        (p4(), one(),            cst(6)),
+        (p4(), cst(3),           cst(162)),
+        (p4(), Polynomial::x(),  p4()),
+        (p4(), Polynomial::x2(), 6_i64 * Polynomial::x().pow(6)),
+        (p4(), p0(),             6_i64 * p0().pow(3)),
+        (p4(), p4(),             6_i64 * p4().pow(3)),
     ];
 
     for entry in table {
@@ -602,18 +705,6 @@ fn test_map_nonzero(){
     }
 }
 
-trait UsizePower: Copy + One + MulAssign<Self> {
-    fn up(self, i: usize) -> Self {
-        let mut acc = Self::one();
-        for _ in 0..i {
-            acc *= self;
-        }
-        acc
-    }
-}
-
-impl UsizePower for i64 {}
-
 #[test]
 fn test_map_nonzero_terms(){
 
@@ -636,11 +727,11 @@ fn test_map_nonzero_terms(){
         (cst(-4), Polynomial::constant(16)),
 
         (p0(), dense![1, 2*2*2, 3*3*3*3]),
-        (p1(), dense![4.up(2), 5.up(3), 0, 6.up(5), 7.up(6)]),
-        (p2(), dense![4.up(2), 0, 0, 5.up(5), 0, 0, 0, 6.up(9)]),
-        (p3(), dense![1, 0, 0, 0, 2.up(6)]),
-        (p4(), dense![0, 0, 0, 6.up(5)]),
-        (p5(), dense![0, 5.up(3), 0, 0, 7.up(6)]),
+        (p1(), dense![4_i64.pow(2), 5_i64.pow(3), 0, 6_i64.pow(5), 7_i64.pow(6)]),
+        (p2(), dense![4_i64.pow(2), 0, 0, 5_i64.pow(5), 0, 0, 0, 6_i64.pow(9)]),
+        (p3(), dense![1, 0, 0, 0, 2_i64.pow(6)]),
+        (p4(), dense![0, 0, 0, 6_i64.pow(5)]),
+        (p5(), dense![0, 5_i64.pow(3), 0, 0, 7_i64.pow(6)]),
     ];
 
     for entry in table {
@@ -704,8 +795,6 @@ fn test_try_map_nonzero(){
     }
 }
 
-impl UsizePower for f64 {}
-
 #[test]
 fn test_try_map_nonzero_terms(){
 
@@ -728,11 +817,11 @@ fn test_try_map_nonzero_terms(){
         (cst(-4), Polynomial::constant(16.)),
 
         (p0(), dense![1., 2.*2.*2., 3.*3.*3.*3.]),
-        (p1(), dense![4.0.up(2), 5.0.up(3), 0., 6.0.up(5), 7.0.up(6)]),
-        (p2(), dense![4.0.up(2), 0., 0., 5.0.up(5), 0., 0., 0., 6.0.up(9)]),
-        (p3(), dense![1., 0., 0., 0., 2.0.up(6)]),
-        (p4(), dense![0., 0., 0., 6.0.up(5)]),
-        (p5(), dense![0., 5.0.up(3), 0., 0., 7.0.up(6)]),
+        (p1(), dense![4.0.powi(2), 5.0.powi(3), 0., 6.0.powi(5), 7.0.powi(6)]),
+        (p2(), dense![4.0.powi(2), 0., 0., 5.0.powi(5), 0., 0., 0., 6.0.powi(9)]),
+        (p3(), dense![1., 0., 0., 0., 2.0.powi(6)]),
+        (p4(), dense![0., 0., 0., 6.0.powi(5)]),
+        (p5(), dense![0., 5.0.powi(3), 0., 0., 7.0.powi(6)]),
     ];
 
     for entry in table_some {
@@ -1291,85 +1380,6 @@ fn test_pow(){
         (p2(), 1, p2()),
         (p2(), 2, p2() * p2()),
         (p2(), 5, p2() * p2() * p2() * p2() * p2()),
-    ];
-
-    for entry in table {
-        test(entry.0, entry.1, entry.2);
-    }
-}
-
-#[test]
-fn test_compose(){
-
-    fn test(x: Polynomial<i64>, y: Polynomial<i64>, exp: Polynomial<i64>){
-
-        fn test_op<'a, 'b, 'c>(x: &'a Polynomial<i64>, y: &'b Polynomial<i64>, exp: &'c Polynomial<i64>){
-            assert_eq!(x.compose(y), *exp);
-            assert_eq!(x.compose(y.clone()), *exp);
-            assert_eq!(x.clone().compose(y), *exp);
-            assert_eq!(x.clone().compose(y.clone()), *exp);
-        }
-
-        for x_ in get_impls(&x) {
-            for y_ in get_impls(&y) {
-                test_op(&x_, &y_, &exp);
-            }
-        }
-    }
-
-    let table = [
-        (zero(), zero(),           zero()),
-        (zero(), one(),            zero()),
-        (zero(), cst(3),           zero()),
-        (zero(), Polynomial::x(),  zero()),
-        (zero(), Polynomial::x2(), zero()),
-        (zero(), p0(),             zero()),
-        
-        (one(), zero(),           one()),
-        (one(), one(),            one()),
-        (one(), cst(3),           one()),
-        (one(), Polynomial::x(),  one()),
-        (one(), Polynomial::x2(), one()),
-        (one(), p0(),             one()),
-        
-        (cst(5), zero(),           cst(5)),
-        (cst(5), one(),            cst(5)),
-        (cst(5), cst(3),           cst(5)),
-        (cst(5), Polynomial::x(),  cst(5)),
-        (cst(5), Polynomial::x2(), cst(5)),
-        (cst(5), p0(),             cst(5)),
-
-        (Polynomial::x(), zero(),          zero()),
-        (Polynomial::x(), one(),           one()),
-        (Polynomial::x(), cst(3),          cst(3)),
-        (Polynomial::x(), Polynomial::x(), Polynomial::x()),
-        (Polynomial::x(), Polynomial::x2(), Polynomial::x2()),
-        (Polynomial::x(), p0(),            p0()),
-        (Polynomial::x(), p4(),            p4()),
-
-        (Polynomial::x2(), zero(),           zero()),
-        (Polynomial::x2(), one(),            one()),
-        (Polynomial::x2(), cst(3),           cst(9)),
-        (Polynomial::x2(), Polynomial::x(),  Polynomial::x2()),
-        (Polynomial::x2(), Polynomial::x2(), Polynomial::x4()),
-        (Polynomial::x2(), p0(),             p0().pow(2)),
-        (Polynomial::x2(), p4(),             p4().pow(2)),
-        
-        (p1(), zero(),           cst(4)),
-        (p1(), one(),            cst(4 + 5 + 6 + 7)),
-        (p1(), cst(3),           cst(4 + 5 * 3 + 6 * 3*3*3 + 7 * 3*3*3*3)),
-        (p1(), Polynomial::x(),  p1()),
-        (p1(), Polynomial::x2(), dense![4, 0, 5, 0, 0, 0, 6, 0, 7]),
-        (p1(), p0(),             4 + 5 * p0() + 6 * p0().pow(3) + 7 * p0().pow(4)),
-        (p1(), p4(),             4 + 5 * p4() + 6 * p4().pow(3) + 7 * p4().pow(4)),
-
-        (p4(), zero(),           zero()),
-        (p4(), one(),            cst(6)),
-        (p4(), cst(3),           cst(162)),
-        (p4(), Polynomial::x(),  p4()),
-        (p4(), Polynomial::x2(), 6_i64 * Polynomial::x().pow(6)),
-        (p4(), p0(),             6_i64 * p0().pow(3)),
-        (p4(), p4(),             6_i64 * p4().pow(3)),
     ];
 
     for entry in table {

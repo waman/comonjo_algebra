@@ -307,7 +307,7 @@ pub(crate) fn factorial<C>(n: usize) -> C where C: Semiring + num::FromPrimitive
 
     let mut result = C::one();
     for i in 2..=n {
-        result = result * C::from_usize(i).unwrap();
+        result *= C::from_usize(i).unwrap();
     }
     result
 }
@@ -395,20 +395,20 @@ impl<C> Into<BTreeMap<usize, C>> for Polynomial<C> where C: Semiring {
     }
 }
 
-impl<C> Polynomial<C> where C: Field + Clone, Eval: PolynomialEvaluator<C> {
+impl<C> Polynomial<C> where C: Field + Clone {
 
-    pub fn interpolate<T, Eval>(points: T) -> Polynomial<C> where T: IntoIterator<Item=(C, C)>, Eval: PolynomialEvaluator<C> {
+    pub fn interpolate<T>(points: T) -> Polynomial<C> where T: IntoIterator<Item=(C, C)>, Eval: PolynomialEvaluator<C> {
         let mut p = Polynomial::zero();
         let point_iter = points.into_iter();
         let mut xs = Vec::with_capacity(point_iter.size_hint().1.unwrap_or_default());
 
         for (x, y) in point_iter {
-            let dif_prod = xs.iter().map(|x0| x.clone() - x0).fold(C::one(), |acc, x| acc * x);
-            let c: Polynomial<C> = Polynomial::constant((y - p.eval(x.clone())) / dif_prod);
-            let prod = xs.iter().fold(Polynomial::one(), |prod, x_n|{
-                prod * (Polynomial::<C>::x() - Polynomial::constant(x_n.clone()))
+            let dif_prod = xs.iter().map(|x_i| x.clone() - x_i).fold(C::one(), |acc, x_i| acc * x_i);
+            let c = (y - p.eval(&x)) / dif_prod;
+            let prod = xs.iter().fold(Polynomial::one(), |prod, x_i|{
+                prod * (Polynomial::new_raw_dense(vec![x_i.clone(), C::one()]))
             });
-            p = p + c * prod;
+            p += prod.scale_by_left(&c);
             xs.push(x.clone());
         }
 
@@ -612,11 +612,13 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
     ///     let p: Polynomial<i64> = dense![1, 2, 3];  // 1 + 2x + 3x²
     ///     let q: Polynomial<i64> = dense![4, 5];  // 4 + 5x
     /// 
-    ///     let p_q: Polynomial<i64> = dense![1 + 2*4 + 3*4*4, 2*5 + 3*2*4*5, 3*5*5];  // 1 + 2(4 + 5x) + 3(4 + 5x)²
+    ///     let p_q: Polynomial<i64> = dense![1 + 2*4 + 3*4*4, 2*5 + 3*2*4*5, 3*5*5];
+    ///     // 1 + 2(4 + 5x) + 3(4 + 5x)²
     ///     assert_eq!(p.compose(q), p_q);
     /// 
     ///     let q2: Polynomial<i64> = dense![4, 5];  // 4 + 5x
-    ///     let q_p: Polynomial<i64> = dense![4 + 5, 5*2, 5*3];  // 4 + 5(1 + 2x + 3x²)
+    ///     let q_p: Polynomial<i64> = dense![4 + 5, 5*2, 5*3];
+    ///     // 4 + 5(1 + 2x + 3x²)
     ///     assert_eq!(q2.compose(p), q_p);
     /// 
     /// The argument can be a reference:
@@ -641,7 +643,7 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
 
                 for (i, c) in lhs.nonzero_terms() {
                     let z = rhs.pow(i as u32).scale_by_left(c);
-                    acc = acc + z;
+                    acc += z;
                 }
 
                 acc
@@ -1651,6 +1653,20 @@ macro_rules! impl_add_to_const {
 impl_add_to_const!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
         BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
+//***** AddAssign
+impl<C> AddAssign<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+
+    fn add_assign(&mut self, rhs: Polynomial<C>) {
+        *self = &*self + rhs;
+    }
+}
+
+impl<'a, C> AddAssign<&'a Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+
+    fn add_assign(&mut self, rhs: &'a Polynomial<C>) {
+        *self = &*self + rhs;
+    }
+}
 
 //********** Sub **********/
 impl<C> Sub for Polynomial<C> where C: Ring {
@@ -1826,6 +1842,21 @@ macro_rules! impl_sub_from_const {
 impl_sub_from_const!(isize, i8, i16, i32, i64, i128, f32, f64, 
         BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
+//***** SubAssign
+impl<C> SubAssign<Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
+
+    fn sub_assign(&mut self, rhs: Polynomial<C>) {
+        *self = &*self - rhs;
+    }
+}
+
+impl<'a, C> SubAssign<&'a Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
+
+    fn sub_assign(&mut self, rhs: &'a Polynomial<C>) {
+        *self = &*self - rhs;
+    }
+}
+
 //********** Mul **********/
 impl<C> Mul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
@@ -1977,6 +2008,21 @@ macro_rules! impl_mul_to_const {
 impl_mul_to_const!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
         BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
 
+//***** MulAssign
+impl<C> MulAssign<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+
+    fn mul_assign(&mut self, rhs: Polynomial<C>) {
+        *self = &*self * rhs;
+    }
+}
+
+impl<'a, C> MulAssign<&'a Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
+
+    fn mul_assign(&mut self, rhs: &'a Polynomial<C>) {
+        *self = &*self * rhs;
+    }
+}
+
 //********** Div & Rem **********/
 fn panic_to_divide_by_zero<E>() -> E { panic!("Can't divide by zero!") }
 
@@ -2091,6 +2137,35 @@ impl<'a, 'b, C> Div<&'b C> for &'a Polynomial<C> where C: Field + Clone {
     }
 }
 
+//***** DivAssign & RemAssign
+impl<C> DivAssign<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+
+    fn div_assign(&mut self, rhs: Polynomial<C>) {
+        *self = &*self / rhs;
+    }
+}
+
+impl<'a, C> DivAssign<&'a Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+
+    fn div_assign(&mut self, rhs: &'a Polynomial<C>) {
+        *self = &*self / rhs;
+    }
+}
+
+impl<C> RemAssign<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+
+    fn rem_assign(&mut self, rhs: Polynomial<C>) {
+        *self = &*self % rhs;
+    }
+}
+
+impl<'a, C> RemAssign<&'a Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+
+    fn rem_assign(&mut self, rhs: &'a Polynomial<C>) {
+        *self = &*self % rhs;
+    }
+}
+
 //********* Pow **********/
 fn calc_pow<C>(base: &Polynomial<C>, p: u32, extra: &Polynomial<C>) -> Polynomial<C> where C: Semiring + Clone {
     if p == 1 {
@@ -2129,7 +2204,7 @@ impl<'a, C> Pow<u32> for &'a Polynomial<C> where C: Semiring + Clone{
     }
 }
 
-//********** Implementation of Algebra *********/
+//********** Algebra Implementations *********/
 impl<C> RefAdd<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
     #[inline]
     fn ref_add(&self, other: Polynomial<C>) -> Polynomial<C> { self + other }

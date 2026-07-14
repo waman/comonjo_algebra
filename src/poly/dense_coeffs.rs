@@ -340,12 +340,12 @@ impl<C> DenseCoeffs<C> where C: Semiring + Clone {
             while d > 0 {
                 m = mul_div(m, d, i.clone());
                 // m = mul_div_uint(m, d, i.clone());  // (m * d) / i;
-                k = k * &h;
+                k *= &h;
                 if let Some(coeff) = coeffs.get_mut(d-1) {
                     *coeff = coeff.ref_add(m.ref_mul(&k));
                 }
-                d = d - 1;
-                i = i + C::one();
+                d -= 1;
+                i += C::one();
             }
         }
         
@@ -405,7 +405,7 @@ impl<C> DenseCoeffs<C> where C: Field + num::FromPrimitive {
         vec.push(self.0.get(0).unwrap().ref_div(&k));
 
         for i in 1..=d {
-            k = k * C::from_usize(n+i).unwrap() / C::from_usize(i).unwrap();
+            k *= C::from_usize(n+i).unwrap() / C::from_usize(i).unwrap();
             vec.push(self.0.get(i).unwrap().ref_div(&k));
         }
 

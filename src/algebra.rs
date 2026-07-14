@@ -1,4 +1,4 @@
-use std::ops::{Add, Div, Mul, Neg, Rem, Sub};
+use std::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Rem, RemAssign, Sub, SubAssign};
 
 use num::{traits::{One, Zero, Euclid}, BigInt, BigRational, BigUint, Complex, Rational32, Rational64};
 
@@ -28,12 +28,15 @@ pub trait RefRem<Rhs> {
 
 pub trait Semigroup:
         Mul<Self, Output=Self> +
+        MulAssign<Self> +
         for<'b> Mul<&'b Self, Output=Self> +
+        for<'b> MulAssign<&'b Self> +
         RefMul<Self> + 
         for<'b> RefMul<&'b Self> where Self: Sized {}
 
 macro_rules! impl_ref_traits {
     ( $t:ident, $ref_type:tt, $ref_op:ident, $op:ident ) => {
+        
         impl $ref_type<$t> for $t {
             #[inline]
             fn $ref_op(&self, other: Self) -> Self { self.$op(other) }
@@ -66,7 +69,9 @@ macro_rules! impl_monoid {
 
 pub trait Group: Monoid +
         Div<Self, Output=Self> +
+        DivAssign<Self> +
         for<'b> Div<&'b Self, Output=Self> +
+        for<'b> DivAssign<&'b Self> +
         RefDiv<Self> + 
         for<'b> RefDiv<&'b Self> where Self: Sized {}
 
@@ -82,7 +87,9 @@ pub trait Group: Monoid +
 
 pub trait AdditiveSemigroup: 
         Add<Self, Output=Self> +
+        AddAssign<Self> +
         for<'b> Add<&'b Self, Output=Self> +
+        for<'b> AddAssign<&'b Self> +
         RefAdd<Self> + 
         for<'b> RefAdd<&'b Self> where Self: Sized {}
 
@@ -107,7 +114,9 @@ macro_rules! impl_additive_monoid {
 pub trait AdditiveGroup: AdditiveMonoid + 
         Neg<Output=Self> +
         Sub<Self, Output=Self> +
+        SubAssign<Self> +
         for<'b> Sub<&'b Self, Output=Self> +
+        for<'b> SubAssign<&'b Self> +
         RefSub<Self> + 
         for<'b> RefSub<&'b Self> where Self: Sized {
     fn ref_neg(&self) -> Self;
@@ -168,12 +177,16 @@ macro_rules! impl_ring {
 
 pub trait EuclideanRing: Ring + 
         Div<Self, Output=Self> +
+        DivAssign<Self> +
         for<'b> Div<&'b Self, Output=Self> +
+        for<'b> DivAssign<&'b Self> +
         RefDiv<Self> + 
         for<'b> RefDiv<&'b Self> +
 
         Rem<Self, Output=Self> +
+        RemAssign<Self> +
         for<'b> Rem<&'b Self, Output=Self> +
+        for<'b> RemAssign<&'b Self> +
         RefRem<Self> + 
         for<'b> RefRem<&'b Self> where Self: Sized {
 

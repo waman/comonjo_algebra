@@ -225,7 +225,7 @@ impl<C> SparseCoeffs<C> where C: Semiring + num::FromPrimitive {
             if i < n { continue; }
 
             let mut f: C = C::one();
-            for j in (i-n+1)..=i { f = f * C::from_usize(j).unwrap(); }
+            for j in (i-n+1)..=i { f *= C::from_usize(j).unwrap(); }
             map.insert(i-n, f.ref_mul(c));
         }
 
@@ -315,11 +315,11 @@ impl<C> SparseCoeffs<C> where C: Semiring + Clone {
             let mut k: C = c.clone();
             while d > 0 {
                 m = mul_div(m, d, i.clone());  // m * d / i
-                k = k * &h;
+                k *= &h;
                 let dif = m.ref_mul(&k);
                 coeffs.entry(d-1).and_modify(|v| *v = v.ref_add(&dif)).or_insert(dif);
-                d = d - 1;
-                i = i + C::one();
+                d -= 1;
+                i += C::one();
             }
         }
         
@@ -375,7 +375,7 @@ impl<C> SparseCoeffs<C> where C: Field + num::FromPrimitive {
         self.0.iter().map(|(i, c)| {
             let j = *i + n;
             let mut f: C = C::one();
-            for k in (i+1)..=j { f = f * C::from_usize(k).unwrap(); }
+            for k in (i+1)..=j { f *= C::from_usize(k).unwrap(); }
             (j, c.ref_div(f))
         }).collect()
     }
