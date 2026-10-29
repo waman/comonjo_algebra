@@ -395,42 +395,42 @@ impl<C> Into<BTreeMap<usize, C>> for Polynomial<C> where C: Semiring {
     }
 }
 
-impl<C> Polynomial<C> where C: Field + Clone {
+// impl<C> Polynomial<C> where C: Field + Clone {
 
-    pub fn interpolate<T>(points: T) -> Polynomial<C> where T: IntoIterator<Item=(C, C)>, Eval: PolynomialEvaluator<C> {
-        let mut p = Polynomial::zero();
-        let point_iter = points.into_iter();
-        let mut xs = Vec::with_capacity(point_iter.size_hint().1.unwrap_or_default());
+//     pub fn interpolate<T>(points: T) -> Polynomial<C> where T: IntoIterator<Item=(C, C)>, Eval: PolynomialEvaluator<C> {
+//         let mut p = Polynomial::zero();
+//         let point_iter = points.into_iter();
+//         let mut xs = Vec::with_capacity(point_iter.size_hint().1.unwrap_or_default());
 
-        for (x, y) in point_iter {
-            let dif_prod = xs.iter().map(|x_i| x.clone() - x_i).fold(C::one(), |acc, x_i| acc * x_i);
-            let c = (y - p.eval(&x)) / dif_prod;
-            let prod = xs.iter().fold(Polynomial::one(), |prod, x_i|{
-                prod * (Polynomial::new_raw_dense(vec![x_i.clone(), C::one()]))
-            });
-            p += prod.scale_by_left(&c);
-            xs.push(x.clone());
-        }
+//         for (x, y) in point_iter {
+//             let dif_prod = xs.iter().map(|x_i| x.clone() - x_i).fold(C::one(), |acc, x_i| acc * x_i);
+//             let c = (y - p.eval(&x)) / dif_prod;
+//             let prod = xs.iter().fold(Polynomial::one(), |prod, x_i|{
+//                 prod * (Polynomial::new_raw_dense(vec![x_i.clone(), C::one()]))
+//             });
+//             p += prod.scale_by_left(&c);
+//             xs.push(x.clone());
+//         }
 
-        p
-    }
+//         p
+//     }
 
-//   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
-//     def loop(p: Polynomial[C], xs: List[C], pts: List[(C, C)]): Polynomial[C] =
-//       pts match {
-//         case Nil =>
-//           p
-//         case (x, y) :: tail =>
-//           val c = Polynomial.constant((y - p(x)) / xs.map(x - _).qproduct)
-//           val prod = xs.foldLeft(Polynomial.one[C]) { (prod, xn) =>
-//             prod * (Polynomial.x[C] - constant(xn))
-//           }
-//           loop(p + c * prod, x :: xs, tail)
-//       }
-//     loop(Polynomial.zero[C], Nil, points.toList)
-//   }
+// //   def interpolate[C: Field: Eq: ClassTag](points: (C, C)*): Polynomial[C] = {
+// //     def loop(p: Polynomial[C], xs: List[C], pts: List[(C, C)]): Polynomial[C] =
+// //       pts match {
+// //         case Nil =>
+// //           p
+// //         case (x, y) :: tail =>
+// //           val c = Polynomial.constant((y - p(x)) / xs.map(x - _).qproduct)
+// //           val prod = xs.foldLeft(Polynomial.one[C]) { (prod, xn) =>
+// //             prod * (Polynomial.x[C] - constant(xn))
+// //           }
+// //           loop(p + c * prod, x :: xs, tail)
+// //       }
+// //     loop(Polynomial.zero[C], Nil, points.toList)
+// //   }
+// // }
 // }
-}
 
 //********** Basic Methods ******
 impl<C> Polynomial<C> where C: Semiring {
@@ -1603,71 +1603,6 @@ impl<'a, 'b, C> Add<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
     }
 }
 
-//***** Add constant
-impl<C> Add<C> for Polynomial<C> where C: Semiring {
-    type Output = Polynomial<C>;
-    fn add(self, rhs: C) -> Self::Output { self + Polynomial::constant(rhs) }
-}
-
-impl<'b, C> Add<&'b C> for Polynomial<C> where C: Semiring + Clone {
-    type Output = Polynomial<C>;
-    fn add(self, rhs: &'b C) -> Self::Output { self + Polynomial::constant(rhs.clone()) }
-}
-
-impl<'a, C> Add<C> for &'a Polynomial<C> where C: Semiring + Clone {
-    type Output = Polynomial<C>;
-    fn add(self, rhs: C) -> Self::Output { self + Polynomial::constant(rhs) }
-}
-
-impl<'a, 'b, C> Add<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
-    type Output = Polynomial<C>;
-    fn add(self, rhs: &'b C) -> Polynomial<C> { self + Polynomial::constant(rhs.clone())  }
-}
-
-macro_rules! impl_add_to_const {
-    ( $( $t:ident ),* ) => {
-        $(
-            impl Add<Polynomial<$t>> for $t {
-                type Output = Polynomial<$t>;
-                fn add(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self) + rhs }
-            }
-
-            impl<'b> Add<&'b Polynomial<$t>> for $t {
-                type Output = Polynomial<$t>;
-                fn add(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self) + rhs }
-            }
-
-            impl<'a> Add<Polynomial<$t>> for &'a $t {
-                type Output = Polynomial<$t>;
-                fn add(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) + rhs }
-            }
-
-            impl<'a, 'b> Add<&'b Polynomial<$t>> for &'a $t {
-                type Output = Polynomial<$t>;
-                fn add(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) + rhs }
-            }
-        )*
-    };
-}
-
-impl_add_to_const!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
-        BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
-
-//***** AddAssign
-impl<C> AddAssign<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-
-    fn add_assign(&mut self, rhs: Polynomial<C>) {
-        *self = &*self + rhs;
-    }
-}
-
-impl<'a, C> AddAssign<&'a Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-
-    fn add_assign(&mut self, rhs: &'a Polynomial<C>) {
-        *self = &*self + rhs;
-    }
-}
-
 //********** Sub **********/
 impl<C> Sub for Polynomial<C> where C: Ring {
 
@@ -1791,72 +1726,6 @@ impl<'a, 'b, C> Sub<&'b Polynomial<C>> for &'a Polynomial<C> where C: Ring + Clo
     }
 }
 
-
-//***** Sub constant
-impl<C> Sub<C> for Polynomial<C> where C: Ring {
-    type Output = Polynomial<C>;
-    fn sub(self, rhs: C) -> Self::Output { self - Polynomial::constant(rhs) }
-}
-
-impl<'b, C> Sub<&'b C> for Polynomial<C> where C: Ring + Clone {
-    type Output = Polynomial<C>;
-    fn sub(self, rhs: &'b C) -> Self::Output { self - Polynomial::constant(rhs.clone()) }
-}
-
-impl<'a, C> Sub<C> for &'a Polynomial<C> where C: Ring + Clone {
-    type Output = Polynomial<C>;
-    fn sub(self, rhs: C) -> Self::Output { self - Polynomial::constant(rhs) }
-}
-
-impl<'a, 'b, C> Sub<&'b C> for &'a Polynomial<C> where C: Ring + Clone {
-    type Output = Polynomial<C>;
-    fn sub(self, rhs: &'b C) -> Polynomial<C> { self - Polynomial::constant(rhs.clone())  }
-}
-
-macro_rules! impl_sub_from_const {
-    ( $( $t:ident ),* ) => {
-        $(
-            impl Sub<Polynomial<$t>> for $t {
-                type Output = Polynomial<$t>;
-                fn sub(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self) - rhs }
-            }
-
-            impl<'b> Sub<&'b Polynomial<$t>> for $t {
-                type Output = Polynomial<$t>;
-                fn sub(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self) - rhs }
-            }
-
-            impl<'a> Sub<Polynomial<$t>> for &'a $t {
-                type Output = Polynomial<$t>;
-                fn sub(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) - rhs }
-            }
-
-            impl<'a, 'b> Sub<&'b Polynomial<$t>> for &'a $t {
-                type Output = Polynomial<$t>;
-                fn sub(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) - rhs }
-            }
-        )*
-    };
-}
-
-impl_sub_from_const!(isize, i8, i16, i32, i64, i128, f32, f64, 
-        BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
-
-//***** SubAssign
-impl<C> SubAssign<Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
-
-    fn sub_assign(&mut self, rhs: Polynomial<C>) {
-        *self = &*self - rhs;
-    }
-}
-
-impl<'a, C> SubAssign<&'a Polynomial<C>> for Polynomial<C> where C: Ring + Clone {
-
-    fn sub_assign(&mut self, rhs: &'a Polynomial<C>) {
-        *self = &*self - rhs;
-    }
-}
-
 //********** Mul **********/
 impl<C> Mul<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
 
@@ -1946,83 +1815,6 @@ impl<'a, 'b, C> Mul<&'b Polynomial<C>> for &'a Polynomial<C> where C: Semiring +
     }
 }
 
-//***** Multiply by constant
-impl<C> Mul<C> for Polynomial<C> where C: Semiring + Clone {
-    type Output = Polynomial<C>;
-    fn mul(self, k: C) -> Self::Output { self * &k }
-}
-
-impl<'b, C> Mul<&'b C> for Polynomial<C> where C: Semiring + Clone {
-
-    type Output = Polynomial<C>;
-
-    fn mul(self, k: &'b C) -> Self::Output {
-        if k.is_zero() { return Polynomial::Zero() }
-        if k.is_one() { return self }
-        self.map_nonzero_terms(|_, c| c.ref_mul(k))
-    }
-}
-
-impl<'a, C> Mul<C> for &'a Polynomial<C> where C: Semiring + Clone {
-    type Output = Polynomial<C>;
-    fn mul(self, k: C) -> Self::Output { self * &k }
-}
-
-impl<'a, 'b, C> Mul<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
-
-    type Output = Polynomial<C>;
-    
-    fn mul(self, k: &'b C) -> Polynomial<C> {
-        if k.is_zero() { return Polynomial::Zero() }
-        if k.is_one() { return self.clone() }
-        self.map_nonzero_terms(|_, c| c.ref_mul(k))
-    }
-}
-
-macro_rules! impl_mul_to_const {
-    ( $( $t:ident ),* ) => {
-        $(
-            impl Mul<Polynomial<$t>> for $t {
-                type Output = Polynomial<$t>;
-                fn mul(self, rhs: Polynomial<$t>) -> Self::Output { rhs.scale_by_left(&self) }
-            }
-
-            impl<'b> Mul<&'b Polynomial<$t>> for $t {
-                type Output = Polynomial<$t>;
-                fn mul(self, rhs: &'b Polynomial<$t>) -> Self::Output { rhs.ref_scale_by_left(&self) }
-            }
-
-            impl<'a> Mul<Polynomial<$t>> for &'a $t {
-                type Output = Polynomial<$t>;
-                fn mul(self, rhs: Polynomial<$t>) -> Self::Output { rhs.scale_by_left(self) }
-            }
-
-            impl<'a, 'b> Mul<&'b Polynomial<$t>> for &'a $t {
-                type Output = Polynomial<$t>;
-                fn mul(self, rhs: &'b Polynomial<$t>) -> Self::Output { rhs.ref_scale_by_left(self) }
-            }
-        )*
-    };
-}
-
-impl_mul_to_const!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
-        BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
-
-//***** MulAssign
-impl<C> MulAssign<Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-
-    fn mul_assign(&mut self, rhs: Polynomial<C>) {
-        *self = &*self * rhs;
-    }
-}
-
-impl<'a, C> MulAssign<&'a Polynomial<C>> for Polynomial<C> where C: Semiring + Clone {
-
-    fn mul_assign(&mut self, rhs: &'a Polynomial<C>) {
-        *self = &*self * rhs;
-    }
-}
-
 //********** Div & Rem **********/
 fn panic_to_divide_by_zero<E>() -> E { panic!("Can't divide by zero!") }
 
@@ -2104,6 +1896,169 @@ impl<'a, 'b, C> Rem<&'b Polynomial<C>> for &'a Polynomial<C> where C: Field + Cl
     fn rem(self, other: &'b Polynomial<C>) -> Self::Output { self.div_rem_ref(other).1 }
 }
 
+//********** Operations with Constant **********/
+//***** Add constant
+impl<C> Add<C> for Polynomial<C> where C: Semiring {
+    type Output = Polynomial<C>;
+    fn add(self, rhs: C) -> Self::Output { self + Polynomial::constant(rhs) }
+}
+
+impl<'b, C> Add<&'b C> for Polynomial<C> where C: Semiring + Clone {
+    type Output = Polynomial<C>;
+    fn add(self, rhs: &'b C) -> Self::Output { self + Polynomial::constant(rhs.clone()) }
+}
+
+impl<'a, C> Add<C> for &'a Polynomial<C> where C: Semiring + Clone {
+    type Output = Polynomial<C>;
+    fn add(self, rhs: C) -> Self::Output { self + Polynomial::constant(rhs) }
+}
+
+impl<'a, 'b, C> Add<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
+    type Output = Polynomial<C>;
+    fn add(self, rhs: &'b C) -> Polynomial<C> { self + Polynomial::constant(rhs.clone())  }
+}
+
+//***** Sub constant
+impl<C> Sub<C> for Polynomial<C> where C: Ring {
+    type Output = Polynomial<C>;
+    fn sub(self, rhs: C) -> Self::Output { self - Polynomial::constant(rhs) }
+}
+
+impl<'b, C> Sub<&'b C> for Polynomial<C> where C: Ring + Clone {
+    type Output = Polynomial<C>;
+    fn sub(self, rhs: &'b C) -> Self::Output { self - Polynomial::constant(rhs.clone()) }
+}
+
+impl<'a, C> Sub<C> for &'a Polynomial<C> where C: Ring + Clone {
+    type Output = Polynomial<C>;
+    fn sub(self, rhs: C) -> Self::Output { self - Polynomial::constant(rhs) }
+}
+
+impl<'a, 'b, C> Sub<&'b C> for &'a Polynomial<C> where C: Ring + Clone {
+    type Output = Polynomial<C>;
+    fn sub(self, rhs: &'b C) -> Polynomial<C> { self - Polynomial::constant(rhs.clone())  }
+}
+
+macro_rules! impl_add_to_const {
+    ( $( $t:ident ),* ) => {
+        $(
+            impl Add<Polynomial<$t>> for $t {
+                type Output = Polynomial<$t>;
+                fn add(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self) + rhs }
+            }
+
+            impl<'b> Add<&'b Polynomial<$t>> for $t {
+                type Output = Polynomial<$t>;
+                fn add(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self) + rhs }
+            }
+
+            impl<'a> Add<Polynomial<$t>> for &'a $t {
+                type Output = Polynomial<$t>;
+                fn add(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) + rhs }
+            }
+
+            impl<'a, 'b> Add<&'b Polynomial<$t>> for &'a $t {
+                type Output = Polynomial<$t>;
+                fn add(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) + rhs }
+            }
+        )*
+    };
+}
+
+impl_add_to_const!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
+        BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
+
+macro_rules! impl_sub_from_const {
+    ( $( $t:ident ),* ) => {
+        $(
+            impl Sub<Polynomial<$t>> for $t {
+                type Output = Polynomial<$t>;
+                fn sub(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self) - rhs }
+            }
+
+            impl<'b> Sub<&'b Polynomial<$t>> for $t {
+                type Output = Polynomial<$t>;
+                fn sub(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self) - rhs }
+            }
+
+            impl<'a> Sub<Polynomial<$t>> for &'a $t {
+                type Output = Polynomial<$t>;
+                fn sub(self, rhs: Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) - rhs }
+            }
+
+            impl<'a, 'b> Sub<&'b Polynomial<$t>> for &'a $t {
+                type Output = Polynomial<$t>;
+                fn sub(self, rhs: &'b Polynomial<$t>) -> Self::Output { Polynomial::constant(self.clone()) - rhs }
+            }
+        )*
+    };
+}
+
+impl_sub_from_const!(isize, i8, i16, i32, i64, i128, f32, f64, 
+        BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
+
+//***** Multiply by constant
+impl<C> Mul<C> for Polynomial<C> where C: Semiring + Clone {
+    type Output = Polynomial<C>;
+    fn mul(self, k: C) -> Self::Output { self * &k }
+}
+
+impl<'b, C> Mul<&'b C> for Polynomial<C> where C: Semiring + Clone {
+
+    type Output = Polynomial<C>;
+
+    fn mul(self, k: &'b C) -> Self::Output {
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self }
+        self.map_nonzero_terms(|_, c| c.ref_mul(k))
+    }
+}
+
+impl<'a, C> Mul<C> for &'a Polynomial<C> where C: Semiring + Clone {
+    type Output = Polynomial<C>;
+    fn mul(self, k: C) -> Self::Output { self * &k }
+}
+
+impl<'a, 'b, C> Mul<&'b C> for &'a Polynomial<C> where C: Semiring + Clone {
+
+    type Output = Polynomial<C>;
+    
+    fn mul(self, k: &'b C) -> Polynomial<C> {
+        if k.is_zero() { return Polynomial::Zero() }
+        if k.is_one() { return self.clone() }
+        self.map_nonzero_terms(|_, c| c.ref_mul(k))
+    }
+}
+
+macro_rules! impl_mul_to_const {
+    ( $( $t:ident ),* ) => {
+        $(
+            impl Mul<Polynomial<$t>> for $t {
+                type Output = Polynomial<$t>;
+                fn mul(self, rhs: Polynomial<$t>) -> Self::Output { rhs.scale_by_left(&self) }
+            }
+
+            impl<'b> Mul<&'b Polynomial<$t>> for $t {
+                type Output = Polynomial<$t>;
+                fn mul(self, rhs: &'b Polynomial<$t>) -> Self::Output { rhs.ref_scale_by_left(&self) }
+            }
+
+            impl<'a> Mul<Polynomial<$t>> for &'a $t {
+                type Output = Polynomial<$t>;
+                fn mul(self, rhs: Polynomial<$t>) -> Self::Output { rhs.scale_by_left(self) }
+            }
+
+            impl<'a, 'b> Mul<&'b Polynomial<$t>> for &'a $t {
+                type Output = Polynomial<$t>;
+                fn mul(self, rhs: &'b Polynomial<$t>) -> Self::Output { rhs.ref_scale_by_left(self) }
+            }
+        )*
+    };
+}
+
+impl_mul_to_const!(usize, u8, u16, u32, u64, u128, isize, i8, i16, i32, i64, i128, f32, f64,
+        BigUint, BigInt, Rational32, Rational64, BigRational, Complex32, Complex64);
+
 //***** Divide by constant
 impl<C> Div<C> for Polynomial<C> where C: Field + Clone {
     type Output = Polynomial<C>;
@@ -2137,36 +2092,33 @@ impl<'a, 'b, C> Div<&'b C> for &'a Polynomial<C> where C: Field + Clone {
     }
 }
 
-//***** DivAssign & RemAssign
-impl<C> DivAssign<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+//********** Assign Ops **********/
+macro_rules! impl_assign_op {
+    ( $assign_type:ident, $assign_op:ident, $op: ident, $al_type: ident ) => {
 
-    fn div_assign(&mut self, rhs: Polynomial<C>) {
-        *self = &*self / rhs;
+        impl<C> $assign_type<Polynomial<C>> for Polynomial<C> where C: $al_type + Clone {
+
+            fn $assign_op(&mut self, rhs: Polynomial<C>) {
+                *self = (&*self).$op(rhs);
+            }
+        }
+
+        impl<'a, C> $assign_type<&'a Polynomial<C>> for Polynomial<C> where C: $al_type + Clone {
+
+            fn $assign_op(&mut self, rhs: &'a Polynomial<C>) {
+                *self = (&*self).$op(rhs);
+            }
+        }
     }
 }
 
-impl<'a, C> DivAssign<&'a Polynomial<C>> for Polynomial<C> where C: Field + Clone {
+impl_assign_op!(AddAssign, add_assign, add, Semiring);
+impl_assign_op!(SubAssign, sub_assign, sub, Ring);
+impl_assign_op!(MulAssign, mul_assign, mul, Semiring);
+impl_assign_op!(DivAssign, div_assign, div, Field);
+impl_assign_op!(RemAssign, rem_assign, rem, Field);
 
-    fn div_assign(&mut self, rhs: &'a Polynomial<C>) {
-        *self = &*self / rhs;
-    }
-}
-
-impl<C> RemAssign<Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-
-    fn rem_assign(&mut self, rhs: Polynomial<C>) {
-        *self = &*self % rhs;
-    }
-}
-
-impl<'a, C> RemAssign<&'a Polynomial<C>> for Polynomial<C> where C: Field + Clone {
-
-    fn rem_assign(&mut self, rhs: &'a Polynomial<C>) {
-        *self = &*self % rhs;
-    }
-}
-
-//********* Pow **********/
+//********** Pow **********/
 fn calc_pow<C>(base: &Polynomial<C>, p: u32, extra: &Polynomial<C>) -> Polynomial<C> where C: Semiring + Clone {
     if p == 1 {
         base * extra
@@ -2625,7 +2577,6 @@ impl<C> Polynomial<C> where C: Semiring + Clone {
 }
 
 //********** Methods with Field Coefficients **********/
-
 
     //   /**
     //    * Returns the real roots of this polynomial.

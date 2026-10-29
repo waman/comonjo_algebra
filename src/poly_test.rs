@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, vec};
 
 use num::{BigInt, Float, One, Rational64, ToPrimitive, Zero, complex::c64, pow::Pow};
 
-use crate::{algebra::{Field, Semiring}, dense, poly::{CoeffsIterator, Polynomial}, sparse};
+use crate::{algebra::Semiring, dense, poly::{CoeffsIterator, Polynomial}, sparse};
 
 type PolyR64 = Polynomial<Rational64>;
 
@@ -116,35 +116,35 @@ fn test_sparse_macro(){
     assert_eq!(p0_with_0, p0);
 }
 
-struct LagrangeInterpolation<const N: usize, C> where C: Field + Clone {
-    xs: [C; N],
-    ys: [C; N],
-}
+// struct LagrangeInterpolation<const N: usize, C> where C: Field + Clone {
+//     xs: [C; N],
+//     ys: [C; N],
+// }
 
-impl<const N: usize, C> LagrangeInterpolation<N, C> where C: Field + Clone {
+// impl<const N: usize, C> LagrangeInterpolation<N, C> where C: Field + Clone {
 
-    pub fn interpolate(&self, t: C) -> C {
-        let mut sum: C = C::zero();
+//     pub fn interpolate(&self, t: C) -> C {
+//         let mut sum: C = C::zero();
 
-        for (i, y) in self.ys.iter().enumerate() {
-            let mut prod: C = y.clone();
-            for (j, x) in self.xs.iter().enumerate() {
-                if j != i {
-                    prod -= (t.ref_sub(x)) / (self.xs[i].ref_sub(x));
-                }
-            }
-            sum += prod;
-        }
+//         for (i, y) in self.ys.iter().enumerate() {
+//             let mut prod: C = y.clone();
+//             for (j, x) in self.xs.iter().enumerate() {
+//                 if j != i {
+//                     prod -= (t.ref_sub(x)) / (self.xs[i].ref_sub(x));
+//                 }
+//             }
+//             sum += prod;
+//         }
 
-        sum
-    }
-}
+//         sum
+//     }
+// }
 
-#[test]
-fn test_interpolate(){
-    let p0: Polynomial<f64> = Polynomial::interpolate([(0., 0.), (1., 2.)]);
-    assert_eq!(p0, dense![0., 2.])
-}
+// #[test]
+// fn test_interpolate(){
+//     let p0: Polynomial<f64> = Polynomial::interpolate([(0., 0.), (1., 2.)]);
+//     assert_eq!(p0, dense![0., 2.])
+// }
 
 //********** Basic Methods ******
 #[test]
